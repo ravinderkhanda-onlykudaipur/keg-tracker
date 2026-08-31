@@ -61,6 +61,12 @@ let keg = null;
 // This is the single place that drives "different roles fill different
 // fields" from the original requirement. Add a role/action and its fields
 // here; the form renders itself from this table.
+//
+// Fields marked `geo: true` get a "Use my current location" button next
+// to them (see useMyLocation() below), which fills the field with the
+// device's actual GPS coordinates via the browser's Geolocation API.
+// Still a plain text field underneath, so it can be corrected/typed
+// manually too (e.g. if GPS is unavailable or inaccurate indoors).
 const ROLE_ACTIONS = {
   washer: {
     action: 'wash', label: 'Log wash',
@@ -85,14 +91,14 @@ const ROLE_ACTIONS = {
     dispatched_from_filled: {
       action: 'dispatch', label: 'Log dispatch',
       fields: [
-        { name: 'pickup_location', label: 'Pickup location', type: 'text' },
+        { name: 'pickup_location', label: 'Pickup location', type: 'text', geo: true },
         { name: 'location', label: 'Delivery destination', type: 'text' },
       ],
     },
     delivered_from_dispatched: {
       action: 'deliver', label: 'Log delivery',
       fields: [
-        { name: 'location', label: 'Delivery location (confirm)', type: 'text' },
+        { name: 'location', label: 'Delivery location (confirm)', type: 'text', geo: true },
         { name: 'customer_signature', label: 'Customer name (signature)', type: 'text' },
       ],
     },
@@ -106,13 +112,13 @@ const ROLE_ACTIONS = {
     receive_from_empty_at_customer: {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
-        { name: 'location', label: 'Storage zone', type: 'text' },
+        { name: 'location', label: 'Storage zone', type: 'text', geo: true },
       ],
     },
     general_move: {
       action: 'warehouse_move', label: 'Log location / status',
       fields: [
-        { name: 'location', label: 'Zone / location', type: 'text' },
+        { name: 'location', label: 'Zone / location', type: 'text', geo: true },
       ],
     },
   },
@@ -259,11 +265,38 @@ function renderForm() {
       <label>${f.label}</label>
       ${f.type === 'select'
         ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
-        : `<input id="f_${f.name}" type="${f.type}">`}
+        : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
+      ${f.geo ? `<button type="button" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
+      <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
     `).join('')}
     <button onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
     <div id="submitMsg"></div>
   `;
+}
+
+function useMyLocation(fieldName) {
+  const msg = document.getElementById(`geoMsg_${fieldName}`);
+  if (!('geolocation' in navigator)) {
+    msg.textContent = 'GPS not available on this device/browser.';
+    return;
+  }
+  msg.textContent = 'Getting location...';
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      document.getElementById(`f_${fieldName}`).value =
+        `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+      msg.textContent = '';
+    },
+    (err) => {
+      // Common cases: user denied the permission prompt, or GPS timed out
+      // (e.g. deep indoors). Field stays editable either way.
+      msg.textContent = err.code === err.PERMISSION_DENIED
+        ? 'Location permission denied - type it manually instead.'
+        : 'Could not get location - type it manually instead.';
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
 }
 
 async function submitEvent(action) {
