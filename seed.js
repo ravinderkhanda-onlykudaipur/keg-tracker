@@ -3,10 +3,11 @@
 // keg sitting at "empty_returned" ready to be washed.
 //
 // Exported as seedIfEmpty() so server.js can auto-run it on startup when
-// the database is empty. Can still be run directly too: `node seed.js`.
+// the database is empty. Can still be run directly too: `node seed.js`
+// (needs DATABASE_URL set in the environment either way).
 
 const bcrypt = require('bcryptjs');
-const db = require('./db');
+const { pool } = require('./db');
 
 const DEMO_PASSWORD = 'demo1234';
 
@@ -30,27 +31,33 @@ const customers = [
 ];
 
 async function seedIfEmpty() {
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM users').get();
+  const { rows } = await pool.query('SELECT COUNT(*) AS count FROM users');
+  const count = Number(rows[0].count); // COUNT(*) comes back as a string (bigint) - cast it
   if (count > 0) {
     console.log(`Database already has ${count} user(s) - skipping seed.`);
     return;
   }
 
-  const insertUser = db.prepare(`
-    INSERT OR IGNORE INTO users (id, name, role, password_hash) VALUES (?, ?, ?, ?)
-  `);
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
-  users.forEach((u) => insertUser.run(u.id, u.name, u.role, hash));
+  for (const u of users) {
+    await pool.query(`
+      INSERT INTO users (id, name, role, password_hash) VALUES ($1, $2, $3, $4)
+      ON CONFLICT (id) DO NOTHING
+    `, [u.id, u.name, u.role, hash]);
+  }
 
-  const insertCustomer = db.prepare(`
-    INSERT OR IGNORE INTO customers (id, name, address) VALUES (?, ?, ?)
-  `);
-  customers.forEach((c) => insertCustomer.run(c.id, c.name, c.address));
+  for (const c of customers) {
+    await pool.query(`
+      INSERT INTO customers (id, name, address) VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO NOTHING
+    `, [c.id, c.name, c.address]);
+  }
 
-  db.prepare(`
-    INSERT OR IGNORE INTO kegs (id, size_liters, material, status, current_location)
+  await pool.query(`
+    INSERT INTO kegs (id, size_liters, material, status, current_location)
     VALUES ('DEMO-KEG-1', 50, 'stainless', 'empty_returned', 'warehouse')
-  `).run();
+    ON CONFLICT (id) DO NOTHING
+  `);
 
   console.log(`Seeded demo users (password "${DEMO_PASSWORD}" for all), ${customers.length} demo customers, and keg DEMO-KEG-1`);
   console.log(users.map((u) => `  ${u.role.padEnd(10)} -> ${u.id}`).join('\n'));
@@ -59,5 +66,7 @@ async function seedIfEmpty() {
 module.exports = { seedIfEmpty };
 
 if (require.main === module) {
-  seedIfEmpty();
+  seedIfEmpty()
+    .then(() => process.exit(0))
+    .catch((err) => { console.error(err); process.exit(1); });
 }

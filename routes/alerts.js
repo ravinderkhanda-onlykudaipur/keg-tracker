@@ -6,14 +6,14 @@
 // shows the full, unfiltered breakdown.
 
 const express = require('express');
-const db = require('../db');
+const { pool } = require('../db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { getOverdueKegs } = require('../lib/alerts');
 
 const router = express.Router();
 
-router.get('/', requireAuth, (req, res) => {
-  res.json(getOverdueKegs(db));
+router.get('/', requireAuth, async (req, res) => {
+  res.json(await getOverdueKegs(pool));
 });
 
 module.exports = router;

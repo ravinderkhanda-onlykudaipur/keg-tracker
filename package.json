@@ -8,13 +8,14 @@
     "dev": "node server.js"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "bcryptjs": "^2.4.3",
     "qrcode": "^1.5.4",
-    "nanoid": "^3.3.7"
+    "nanoid": "^3.3.7",
+    "pg": "^8.13.0"
   }
 }

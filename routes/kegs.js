@@ -2,7 +2,7 @@
 const express = require('express');
 const QRCode = require('qrcode');
 const { nanoid } = require('nanoid');
-const db = require('../db');
+const { pool } = require('../db');
 const { requireRole } = require('../middleware/requireAuth');
 
 const router = express.Router();
@@ -10,28 +10,29 @@ const router = express.Router();
 // Only admins can create kegs now - previously any logged-in role could,
 // which didn't match "admin can make changes, manager/everyone else can
 // only view."
-router.post('/', requireRole('admin'), (req, res) => {
+router.post('/', requireRole('admin'), async (req, res) => {
   const { size_liters, material } = req.body;
   const id = 'KEG-' + nanoid(8).toUpperCase();
 
-  db.prepare(`
+  await pool.query(`
     INSERT INTO kegs (id, size_liters, material, status, current_location)
-    VALUES (?, ?, ?, 'empty_returned', 'warehouse')
-  `).run(id, size_liters || null, material || null);
+    VALUES ($1, $2, $3, 'empty_returned', 'warehouse')
+  `, [id, size_liters || null, material || null]);
 
   res.status(201).json({ id });
 });
 
-router.get('/:id', (req, res) => {
-  const keg = db.prepare('SELECT * FROM kegs WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [req.params.id]);
+  const keg = kegRows[0];
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
 
-  const events = db.prepare(`
+  const { rows: events } = await pool.query(`
     SELECT e.id, e.action_type, e.role, e.details, e.created_at, u.name AS user_name
     FROM events e JOIN users u ON u.id = e.user_id
-    WHERE e.keg_id = ?
+    WHERE e.keg_id = $1
     ORDER BY e.created_at ASC
-  `).all(req.params.id);
+  `, [req.params.id]);
 
   res.json({
     ...keg,
@@ -41,10 +42,10 @@ router.get('/:id', (req, res) => {
 
 router.get('/:id/qrcode.png', async (req, res) => {
   try {
-    const keg = db.prepare('SELECT id FROM kegs WHERE id = ?').get(req.params.id);
-    if (!keg) return res.status(404).json({ error: 'Keg not found' });
+    const { rows } = await pool.query('SELECT id FROM kegs WHERE id = $1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Keg not found' });
 
-    const scanUrl = `${req.protocol}://${req.get('host')}/scan.html?keg=${keg.id}`;
+    const scanUrl = `${req.protocol}://${req.get('host')}/scan.html?keg=${rows[0].id}`;
     res.type('png');
     QRCode.toFileStream(res, scanUrl, { width: 400, margin: 2 });
   } catch (err) {
@@ -53,20 +54,28 @@ router.get('/:id/qrcode.png', async (req, res) => {
   }
 });
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { status, q } = req.query;
-  let sql = 'SELECT * FROM kegs WHERE 1=1';
+  const conditions = [];
   const params = [];
+
   if (status) {
-    sql += ' AND status = ?';
     params.push(status);
+    conditions.push(`status = $${params.length}`);
   }
   if (q) {
-    sql += ' AND id LIKE ?';
     params.push(`%${q}%`);
+    // ILIKE for case-insensitive matching, same behavior SQLite's LIKE
+    // gave us by default for ASCII text.
+    conditions.push(`id ILIKE $${params.length}`);
   }
-  sql += ' ORDER BY created_at DESC LIMIT 200';
-  res.json(db.prepare(sql).all(...params));
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const { rows } = await pool.query(
+    `SELECT * FROM kegs ${where} ORDER BY created_at DESC LIMIT 200`,
+    params
+  );
+  res.json(rows);
 });
 
 module.exports = router;

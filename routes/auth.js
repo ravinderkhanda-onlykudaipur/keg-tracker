@@ -7,7 +7,7 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const db = require('../db');
+const { pool } = require('../db');
 const { checkAndRegisterDevice } = require('../lib/deviceAuth');
 
 const router = express.Router();
@@ -27,7 +27,10 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'userId and password are required' });
     }
 
-    const user = db.prepare('SELECT id, name, role, password_hash FROM users WHERE id = ?').get(userId);
+    const { rows } = await pool.query(
+      'SELECT id, name, role, password_hash FROM users WHERE id = $1', [userId]
+    );
+    const user = rows[0];
     if (!user) return res.status(401).json({ error: 'Invalid user or password' });
 
     const ok = await bcrypt.compare(password, user.password_hash);
@@ -37,7 +40,7 @@ router.post('/login', async (req, res) => {
     // random unauthenticated request can't probe which roles are
     // device-gated or spam pending-approval log entries just by
     // guessing usernames.
-    const deviceCheck = checkAndRegisterDevice(db, user.role, deviceId, user.id);
+    const deviceCheck = await checkAndRegisterDevice(pool, user.role, deviceId, user.id);
     if (!deviceCheck.allowed) {
       return res.status(403).json({
         error: deviceCheck.pending
@@ -65,9 +68,9 @@ router.get('/me', (req, res) => {
   res.json(req.session.user || null);
 });
 
-router.get('/users', (req, res) => {
-  const users = db.prepare('SELECT id, name, role FROM users ORDER BY role').all();
-  res.json(users);
+router.get('/users', async (req, res) => {
+  const { rows } = await pool.query('SELECT id, name, role FROM users ORDER BY role');
+  res.json(rows);
 });
 
 module.exports = router;

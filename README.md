@@ -8,9 +8,11 @@ discussed earlier. Deployed live at Render.
 
 ## What's here
 
-- `server.js` — Express app entry point; auto-seeds demo data on boot
-- `db.js` — SQLite setup and schema (Keg, User, Event/Log tables), using
-  Node's built-in `node:sqlite` module (no native compilation needed)
+- `server.js` — Express app entry point; runs `db.init()` then
+  auto-seeds demo data on boot
+- `db.js` — PostgreSQL connection pool + schema (Keg, User, Event/Log,
+  Customer, Device tables), using the `pg` package - see "Deploying"
+  below for how to get a free database (Neon)
 - `lib/stateMachine.js` — the rules for which role can move a keg from
   which status to which status (this is what stops a keg being dispatched
   before it's ever filled - dispatch and destination-assignment now
@@ -97,12 +99,20 @@ so this is a real but soft signal, not a hard security guarantee.
 
 ## Run it locally
 
-You'll need [Node.js](https://nodejs.org) 22.5+ (for `node:sqlite`).
+You'll need [Node.js](https://nodejs.org) 18+ and a Postgres database.
+The free option we use is [Neon](https://neon.tech) — permanent free
+tier, no credit card. Sign up, create a project, and copy its connection
+string (shown right on the dashboard, looks like
+`postgresql://user:pass@ep-xxxxx.region.aws.neon.tech/dbname?sslmode=require`).
 
 ```bash
 npm install
-npm start          # auto-seeds demo users + DEMO-KEG-1 on first run
+DATABASE_URL="<your Neon connection string>" npm start
 ```
+
+On startup the app creates its tables (if they don't exist) and
+auto-seeds 6 demo users, 3 demo customers, and a demo keg (if the
+`users` table is empty).
 
 Then open **http://localhost:3000** — that's the admin page. Log in as
 **"Alex Admin"** (password `demo1234`) to create kegs, or **"Mona
@@ -189,36 +199,45 @@ warehouse's zone/storage fields, tap "Use my location" to auto-fill real
 GPS coordinates (requires HTTPS and location permission — works on the
 Render deployment, not on plain `http://localhost`).
 
-## Deploying (currently: Render, free tier)
+## Deploying (currently: Render, free tier, + Neon Postgres)
 
-1. Push this repo to GitHub.
-2. Create a Render Web Service connected to the `main` branch.
+1. **Database:** create a free Neon (neon.tech) project, copy its
+   connection string.
+2. Push this repo to GitHub.
+3. Create a Render Web Service connected to the `main` branch.
    Build command: `npm install`. Start command: `npm start`.
-3. Set one environment variable in Render's dashboard:
+4. Set two environment variables in Render's dashboard:
+   - `DATABASE_URL` → the Neon connection string
    - `SESSION_SECRET` → a fixed random value
      (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
-     — without this, everyone gets logged out on every redeploy.
-4. Push to `main` → Render auto-deploys.
+     — without this, everyone gets logged out on every redeploy (see the
+     note below on why this alone isn't the full picture, though).
+5. Push to `main` → Render auto-deploys.
 
-**Known limitation:** Render's free tier has no persistent disk, so the
-SQLite file resets on every redeploy — kegs/events/history created since
-the last deploy will be wiped, and demo data re-seeds fresh. Fine for a
-demo; a real database (Postgres) would fix this, but that's a deliberate
-choice to defer for now (see gap list below) rather than something
-broken.
+**What moving to Postgres actually fixed:** previously (SQLite on
+Render's local disk), kegs/events/customers/device approvals — all of
+it — reset on every redeploy, since Render's free tier wipes local disk
+on every restart. Now that data lives in Neon, independent of the app's
+own deploys, it persists properly. This was worth doing specifically
+because of how much real functionality had accumulated by this point
+(customers, alerts, reports, device approvals) — none of which was
+actually sticking around before this.
 
-**About `SESSION_SECRET` and staying logged in — corrected note:** setting
-this environment variable is still the right thing to do (it keeps the
-cookie-signing secret stable and unguessable), but on its own it does
-**not** stop people from being logged out on redeploy/restart/sleep-wake.
-That's because session *data* (who's actually logged in) lives in
-Express's default in-memory store, which is wiped by the exact same
-ephemeral-disk-and-process reset that wipes the SQLite file — completely
-independent of whether the secret is stable. A real fix needs an
-external, persistent session store (e.g. a free-tier Redis service like
-Upstash), which is infrastructure on the same order as the Postgres move
-already deferred below. Until then: expect to need to log back in after
-Render's 15-minute idle sleep, not just after a `git push`.
+**About `SESSION_SECRET` and staying logged in — still an open item:**
+setting this environment variable is still the right thing to do (it
+keeps the cookie-signing secret stable and unguessable), but on its own
+it does **not** stop people from being logged out on
+redeploy/restart/sleep-wake. That's because session *data* (who's
+actually logged in) lives in Express's default in-memory store, which
+still resets whenever the Node process restarts — completely
+independent of the database now being Postgres, and independent of
+whether the secret is stable. This needs its own separate fix (an
+external session store, e.g. a free-tier Redis service) — see the gap
+list below, still not done. Until then: expect to need to log back in
+after Render's 15-minute idle sleep, not just after a `git push`. This
+is now the **last** major "data doesn't stick around" gap — actual keg
+data is safe in Postgres; only the "who's currently logged in" state
+still resets.
 
 Also: the free web service sleeps after 15 minutes of no traffic (first
 visit after that takes ~1 minute to wake up).
@@ -313,14 +332,26 @@ Roughly in priority order:
     end to end against a real database, plus that this still leaves
     every status owned by exactly one role (now 7 statuses, still zero
     gaps or overlaps).
-13. **Move off SQLite to a real hosted database** (e.g. Postgres via
-    Neon's free tier), so data survives redeploys. Deliberately not done
-    yet — see "Deploying" above for the current tradeoff.
+13. ~~**Move off SQLite to a real hosted database.**~~ Done — moved to
+    Postgres via Neon's free tier. Every query across the whole app
+    (auth, kegs, events, customers, alerts, reports, device approvals)
+    converted from SQLite's synchronous API to Postgres's async one.
+    Caught and fixed three real bugs in the process, worth knowing:
+    (1) `COUNT(*)` comes back as a string in Postgres (a bigint), not a
+    number - fixed everywhere it's used; (2) a `GROUP BY` query needed
+    verifying against Postgres's stricter rules (confirmed correct via
+    functional dependency on the primary key); (3) the IST timestamp
+    formatter in `scan.html` was hardcoded for SQLite's old
+    space-separated text format - Postgres serializes timestamps as full
+    ISO strings instead, which would have silently broken date display
+    ("Invalid Date") without a fix - now handles both formats, tested
+    against each. See "Deploying" above for the current setup.
 14. **Persistent session storage** (e.g. a free Redis service), so logins
     survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
-    not done yet — see the corrected note under "Deploying" above; this
-    needs external storage, not just the local-disk fixes used elsewhere,
-    since Render's free tier wipes local disk on every restart too.
+    not done yet — see the note under "Deploying" above; this needs
+    external storage, and is now the **last** major "state doesn't stick
+    around" gap, since actual keg/event/customer data is safe in
+    Postgres.
 15. ~~**Alerts.**~~ Done — see the "Alerts" section above. Computed live
     on request (`lib/alerts.js`), not a scheduled/cached job, which is
     fine at this scale but worth revisiting if the kegs/events tables

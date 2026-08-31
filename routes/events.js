@@ -12,19 +12,20 @@
 // can no longer be called pretending to be a different user.
 
 const express = require('express');
-const db = require('../db');
+const { pool, withTransaction } = require('../db');
 const { validateTransition } = require('../lib/stateMachine');
 const { requireAuth } = require('../middleware/requireAuth');
 const { checkCooldown } = require('../lib/cooldown');
 
 const router = express.Router();
 
-router.post('/:kegId/events', requireAuth, (req, res) => {
+router.post('/:kegId/events', requireAuth, async (req, res) => {
   const { kegId } = req.params;
   const { actionType, details } = req.body;
   const user = req.user; // trusted, from session - not from req.body
 
-  const keg = db.prepare('SELECT * FROM kegs WHERE id = ?').get(kegId);
+  const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
+  const keg = kegRows[0];
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
 
   const result = validateTransition(actionType, user.role, keg.status, details);
@@ -34,10 +35,9 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
 
   // A minimum time gap before certain actions can repeat on this keg -
   // see lib/cooldown.js for why (e.g. a keg can't realistically be
-  // "empty at customer" moments after being delivered full; Warehouse's
-  // location log shouldn't be spammable in an unbounded loop). Duration
+  // "empty at customer" moments after being delivered full). Duration
   // is set via ACTION_COOLDOWN_MS - short for testing, longer for real use.
-  const cooldown = checkCooldown(db, kegId, actionType);
+  const cooldown = await checkCooldown(pool, kegId, actionType);
   if (cooldown.blocked) {
     return res.status(429).json({ error: cooldown.error }); // 429 Too Many Requests
   }
@@ -57,7 +57,8 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
     if (!customerId) {
       return res.status(400).json({ error: 'A delivery destination (customer) is required.' });
     }
-    const customer = db.prepare('SELECT id, name FROM customers WHERE id = ?').get(customerId);
+    const { rows: custRows } = await pool.query('SELECT id, name FROM customers WHERE id = $1', [customerId]);
+    const customer = custRows[0];
     if (!customer) {
       return res.status(400).json({ error: 'Selected customer was not found.' });
     }
@@ -65,35 +66,31 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
     resolvedCustomerId = customer.id;
   }
 
-  const insertEvent = db.prepare(`
-    INSERT INTO events (keg_id, user_id, role, action_type, details)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+  const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
 
-  const updateKeg = db.prepare(`
-    UPDATE kegs SET status = ?, current_location = ?, destination = ?, customer_id = ? WHERE id = ?
-  `);
+  // 'assign_destination' updates keg.destination + customer_id together;
+  // every other action updates keg.current_location as before. Kept as
+  // separate columns since they mean different things - "where the keg
+  // physically is right now" vs "which customer it's assigned to".
+  const nextLocation = actionType === 'assign_destination'
+    ? keg.current_location
+    : (details?.location || keg.current_location);
+  const nextDestination = actionType === 'assign_destination' ? resolvedDestination : keg.destination;
+  const nextCustomerId = actionType === 'assign_destination' ? resolvedCustomerId : keg.customer_id;
 
-  const tx = () => {
-    insertEvent.run(kegId, user.id, user.role, actionType, JSON.stringify(details || {}));
-    const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
+  await withTransaction(async (client) => {
+    await client.query(`
+      INSERT INTO events (keg_id, user_id, role, action_type, details)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [kegId, user.id, user.role, actionType, JSON.stringify(details || {})]);
 
-    // 'assign_destination' updates keg.destination + customer_id together;
-    // every other action updates keg.current_location as before. Kept as
-    // separate columns since they mean different things - "where the keg
-    // physically is right now" vs "which customer it's assigned to".
-    const nextLocation = actionType === 'assign_destination'
-      ? keg.current_location
-      : (details?.location || keg.current_location);
-    const nextDestination = actionType === 'assign_destination' ? resolvedDestination : keg.destination;
-    const nextCustomerId = actionType === 'assign_destination' ? resolvedCustomerId : keg.customer_id;
+    await client.query(`
+      UPDATE kegs SET status = $1, current_location = $2, destination = $3, customer_id = $4 WHERE id = $5
+    `, [nextStatus, nextLocation, nextDestination, nextCustomerId, kegId]);
+  });
 
-    updateKeg.run(nextStatus, nextLocation, nextDestination, nextCustomerId, kegId);
-  };
-  db.withTransaction(tx);
-
-  const updated = db.prepare('SELECT * FROM kegs WHERE id = ?').get(kegId);
-  res.status(201).json(updated);
+  const { rows: updatedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
+  res.status(201).json(updatedRows[0]);
 });
 
 module.exports = router;

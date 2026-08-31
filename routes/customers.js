@@ -8,16 +8,17 @@
 
 const express = require('express');
 const { nanoid } = require('nanoid');
-const db = require('../db');
+const { pool } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/requireAuth');
 
 const router = express.Router();
 
-router.get('/', requireAuth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM customers ORDER BY name').all());
+router.get('/', requireAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM customers ORDER BY name');
+  res.json(rows);
 });
 
-router.post('/', requireRole('admin', 'warehouse'), (req, res) => {
+router.post('/', requireRole('admin', 'warehouse'), async (req, res) => {
   const { name, address } = req.body || {};
   if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Customer name is required.' });
@@ -27,7 +28,7 @@ router.post('/', requireRole('admin', 'warehouse'), (req, res) => {
   const trimmedName = name.trim();
   const trimmedAddress = typeof address === 'string' && address.trim() ? address.trim() : null;
 
-  db.prepare('INSERT INTO customers (id, name, address) VALUES (?, ?, ?)').run(id, trimmedName, trimmedAddress);
+  await pool.query('INSERT INTO customers (id, name, address) VALUES ($1, $2, $3)', [id, trimmedName, trimmedAddress]);
 
   res.status(201).json({ id, name: trimmedName, address: trimmedAddress });
 });

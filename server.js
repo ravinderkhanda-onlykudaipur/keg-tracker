@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 
+const db = require('./db');
 const { getSessionSecret } = require('./lib/sessionSecret');
 const { seedIfEmpty } = require('./seed');
 const { attachUser } = require('./middleware/requireAuth');
@@ -61,10 +62,13 @@ app.use('/api/devices', deviceRoutes);
 
 const PORT = process.env.PORT || 3000;
 
-// Auto-seed demo data if the database is empty - handles hosts like
-// Render's free tier where the disk resets on every redeploy, so there's
-// no reliable way to manually run `node seed.js` against the live instance.
-seedIfEmpty()
+// Create tables if they don't exist yet (idempotent - safe on every boot),
+// then auto-seed demo data if the database is empty. Auto-seeding matters
+// even with a real persistent Postgres database: it means a brand-new
+// Neon database gets populated automatically on first deploy, with no
+// manual `node seed.js` step needed against the live instance.
+db.init()
+  .then(() => seedIfEmpty())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Keg tracker running at http://localhost:${PORT}`);
@@ -72,6 +76,6 @@ seedIfEmpty()
     });
   })
   .catch((err) => {
-    console.error('Failed to seed database on startup:', err);
+    console.error('Failed to start up (database init/seed):', err);
     process.exit(1);
   });

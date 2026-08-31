@@ -592,11 +592,17 @@ async function submitEvent(action) {
 // itself). This converts one of those for display in Indian Standard
 // Time - storage stays UTC (the correct practice), only the display
 // layer converts.
-function formatIST(utcString) {
-  if (!utcString) return '';
-  const isoUtc = utcString.replace(' ', 'T') + 'Z'; // mark it explicitly UTC so Date parses it correctly
-  const date = new Date(isoUtc);
-  if (isNaN(date.getTime())) return utcString; // fall back to the raw value if parsing ever fails
+function formatIST(dateVal) {
+  if (!dateVal) return '';
+  // Postgres serializes timestamps as full ISO strings (e.g.
+  // "2026-08-31T20:15:32.123Z") - parseable directly with new Date().
+  // This also tolerates the older SQLite-style "YYYY-MM-DD HH:MM:SS"
+  // (no 'T', no timezone marker) just in case, treating it as UTC the
+  // same way the original version did.
+  const str = String(dateVal);
+  const isoStr = str.includes('T') ? str : str.replace(' ', 'T') + 'Z';
+  const date = new Date(isoStr);
+  if (isNaN(date.getTime())) return str; // fall back to the raw value if parsing ever fails
   return date.toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: '2-digit', month: 'short', year: 'numeric',
