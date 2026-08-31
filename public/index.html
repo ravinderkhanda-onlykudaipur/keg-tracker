@@ -18,6 +18,13 @@
   .alert-item:last-child { border-bottom: none; }
   .alert-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #fde2e2; color: #8f1d1d; font-weight: 600; }
   .role-note { background: #f0f0f0; color: #555; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+  .bar-row { display: flex; align-items: center; margin: 6px 0; font-size: 13px; }
+  .bar-label { width: 140px; flex-shrink: 0; text-transform: capitalize; }
+  .bar-track { flex: 1; background: #f0f0f0; border-radius: 4px; height: 18px; overflow: hidden; margin: 0 8px; }
+  .bar-fill { background: #0f6e56; height: 100%; border-radius: 4px; }
+  .bar-value { width: 64px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .card h4 { margin: 16px 0 4px; font-size: 14px; }
+  .card h4:first-child { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -49,6 +56,11 @@
     <div class="card">
       <h3>Alerts</h3>
       <div id="alertsList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+    </div>
+
+    <div class="card" id="reportsCard" style="display:none">
+      <h3>Reports</h3>
+      <div id="reportsContent"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
     </div>
 
     <div class="card">
@@ -115,6 +127,13 @@ function showMain(user) {
     document.getElementById('readOnlyNote').style.display = 'block';
   }
 
+  // Reports are Admin/Manager oversight data - the backend already
+  // rejects the request for any other role, so just skip trying for them.
+  if (user.role === 'admin' || user.role === 'manager') {
+    document.getElementById('reportsCard').style.display = 'block';
+    loadReports();
+  }
+
   loadKegs();
   loadAlerts();
 }
@@ -169,6 +188,57 @@ async function loadAlerts() {
       <br><span class="muted" style="color:#777">waiting on: ${a.role}</span>
     </div>
   `).join('');
+}
+
+// rows: [{ label, value, displayValue }] - renders a simple horizontal
+// bar chart with plain CSS, no charting library needed.
+function renderBarChart(rows) {
+  if (!rows.length) return '';
+  const max = Math.max(...rows.map(r => r.value), 1);
+  return rows.map(r => `
+    <div class="bar-row">
+      <div class="bar-label">${r.label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, Math.round((r.value / max) * 100))}%"></div></div>
+      <div class="bar-value">${r.displayValue}</div>
+    </div>
+  `).join('');
+}
+
+async function loadReports() {
+  const res = await fetch('/api/reports', { credentials: 'include' });
+  const el = document.getElementById('reportsContent');
+  if (!res.ok) {
+    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load reports.</p>';
+    return;
+  }
+  const r = await res.json();
+  let html = '';
+
+  html += '<h4>Current inventory</h4>';
+  html += r.inventory.length
+    ? renderBarChart(r.inventory.map(i => ({ label: i.status.replace(/_/g,' '), value: i.count, displayValue: i.count })))
+    : '<p class="muted" style="color:#777;font-size:13px">No kegs yet.</p>';
+
+  html += '<h4>Average time per stage</h4>';
+  const stageEntries = Object.entries(r.stageDurations);
+  html += stageEntries.length
+    ? renderBarChart(stageEntries.map(([status, s]) => ({ label: status.replace(/_/g,' '), value: s.avgHours, displayValue: s.avgHours + 'h' })))
+    : '<p class="muted" style="color:#777;font-size:13px">Not enough completed stages yet.</p>';
+
+  html += '<h4>Full-cycle turnover time</h4>';
+  html += r.turnover
+    ? `<p style="font-size:13px">Average <b>${r.turnover.avgHours}h</b> from ${r.turnover.count} completed cycle${r.turnover.count > 1 ? 's' : ''} (range ${r.turnover.minHours}h&ndash;${r.turnover.maxHours}h)</p>`
+    : '<p class="muted" style="color:#777;font-size:13px">No completed full cycles yet (a keg needs to be washed twice to measure one).</p>';
+
+  html += '<h4>Fills</h4>';
+  html += `<p style="font-size:13px">${r.fillStats.totalFills} fill${r.fillStats.totalFills === 1 ? '' : 's'} logged &middot; ${r.fillStats.totalLiters}L total</p>`;
+  const productEntries = Object.entries(r.fillStats.productCounts);
+  if (productEntries.length) html += renderBarChart(productEntries.map(([product, count]) => ({ label: product, value: count, displayValue: count })));
+
+  html += '<h4>Wash inspection results</h4>';
+  html += `<p style="font-size:13px">${r.washStats.total} wash${r.washStats.total === 1 ? '' : 'es'} &middot; ${r.washStats.pass} pass, ${r.washStats.fail} fail (${r.washStats.failRatePercent}% fail rate)</p>`;
+
+  el.innerHTML = html;
 }
 
 init();

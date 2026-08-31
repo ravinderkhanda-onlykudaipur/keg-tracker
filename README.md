@@ -22,6 +22,8 @@ discussed earlier. Deployed live at Render.
 - `lib/alerts.js` — flags kegs stuck too long in a status (not washed,
   not dispatched, not delivered in time, etc.) — see the gap list below
   for the full list of rules and how to tune each threshold
+- `lib/reports.js` — turnover time, per-stage duration, and fill/wash
+  stats, computed live from the events/kegs tables (see "Reports" below)
 - `lib/sessionSecret.js` — persists the session-signing secret across
   local restarts; on Render, `SESSION_SECRET` is set as an environment
   variable instead (see "Deploying"), since Render's free tier has no
@@ -32,8 +34,10 @@ discussed earlier. Deployed live at Render.
   also where the "destination can't be left blank" and cooldown rules live
 - `routes/alerts.js` — the overdue-kegs API, used by both the admin
   dashboard and the in-app banner on the scan page
+- `routes/reports.js` — the reports API (Admin/Manager only)
 - `public/index.html` — admin page: log in, create kegs (Admin only),
-  view QR codes, browse all kegs, see the full alerts dashboard
+  view QR codes, browse all kegs, see the full alerts and reports
+  dashboards (Admin/Manager)
 - `public/scan.html` — the mobile page a worker sees after scanning a QR
   code; the form fields change based on their role and the keg's status;
   also shows a banner if other kegs are overdue for that person's role
@@ -115,6 +119,28 @@ Two places surface this:
 
 No push notifications or SMS/email yet — see the gap list below for what
 that would take.
+
+## Reports
+
+`lib/reports.js` computes turnover time and utilization stats live from
+the events/kegs tables — no separate reporting table needed, since the
+full audit trail already has everything. Restricted to Admin and
+Manager (`routes/reports.js`), same as the rest of the oversight-level
+admin page.
+
+- **Current inventory** — how many kegs sit in each status right now
+- **Average time per stage** — how long kegs typically spend in each
+  status before moving on (based on completed stays only; a keg's
+  current, still-ongoing stay is deliberately excluded here since
+  that's what Alerts already covers)
+- **Full-cycle turnover time** — average time between consecutive
+  washes on the same keg, i.e. one full trip through the whole pipeline
+- **Fill stats** — total fills, total liters (fixed at 20L/fill), and a
+  breakdown by product name
+- **Wash inspection results** — pass/fail counts and fail rate
+
+Shown as simple horizontal bar charts on the admin page, built with
+plain CSS (no charting library dependency).
 
 **Trying GPS location:** on the driver's pickup field, and the
 warehouse's zone/storage fields, tap "Use my location" to auto-fill real
@@ -268,8 +294,12 @@ Roughly in priority order:
     request/response objects that admin passes through, manager and
     every operational role get a 403, and an unauthenticated request
     gets a 401.
-17. **Reporting dashboards.** The data model supports turnover-time and
-    utilization queries; there's no chart UI yet.
+17. ~~**Reporting dashboards.**~~ Done — see the "Reports" section below.
+    Computed live on request (`lib/reports.js`), same tradeoff noted for
+    Alerts above. Simple bar charts via plain CSS - no charting library
+    dependency. Tested against a hand-built scenario with known,
+    controlled durations to confirm every number (stage averages,
+    turnover time, fill/wash stats) matches exactly.
 18. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 

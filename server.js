@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const kegRoutes = require('./routes/kegs');
 const eventRoutes = require('./routes/events');
 const alertRoutes = require('./routes/alerts');
+const reportRoutes = require('./routes/reports');
 
 const app = express();
 app.use(express.json());
@@ -52,6 +53,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/kegs', kegRoutes);
 app.use('/api/kegs', eventRoutes); // adds POST /api/kegs/:kegId/events
 app.use('/api/alerts', alertRoutes);
+app.use('/api/reports', reportRoutes);
 
 const PORT = process.env.PORT || 3000;
 
