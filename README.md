@@ -181,19 +181,36 @@ Roughly in priority order:
     (`empty_at_customer`). Every other status correctly shows the "not
     your turn" warning instead. Verified this leaves all 6 statuses each
     owned by exactly one role, with zero gaps or overlaps.
-12. **Move off SQLite to a real hosted database** (e.g. Postgres via
+12. ~~**A failed wash inspection had no real consequence.**~~ Done — a
+    failed inspection now routes the keg to a new `needs_repair` status
+    instead of `washed` (`lib/stateMachine.js`'s `wash` rule, now a
+    function of the submitted `inspection` value rather than a fixed
+    status). A `needs_repair` keg can't be filled — `fill` only accepts
+    `washed` — until Warehouse runs the new `mark_repaired` action,
+    which sends it back to `empty_returned` for a full wash + inspection
+    cycle again, not straight to `washed`. Verified the whole
+    fail → blocked-from-filling → repaired → re-washed → fillable cycle
+    end to end against a real database, plus that this still leaves
+    every status owned by exactly one role (now 7 statuses, still zero
+    gaps or overlaps).
+13. **Move off SQLite to a real hosted database** (e.g. Postgres via
     Neon's free tier), so data survives redeploys. Deliberately not done
     yet — see "Deploying" above for the current tradeoff.
-13. **Persistent session storage** (e.g. a free Redis service), so logins
+14. **Persistent session storage** (e.g. a free Redis service), so logins
     survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
     not done yet — see the corrected note under "Deploying" above; this
     needs external storage, not just the local-disk fixes used elsewhere,
     since Render's free tier wipes local disk on every restart too.
-13. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
-    state too long — that needs a scheduled job querying `events`/`kegs`.
-14. **Reporting dashboards.** The data model supports turnover-time and
+15. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
+    state too long (e.g. not washed within 2 days, not dispatched within
+    5 days of filling, not delivered within 12 hours of dispatch) — needs
+    a scheduled job querying `events`/`kegs`, plus a way to surface it
+    (an in-app banner for the relevant role, and/or an admin dashboard
+    are the two free, no-new-infrastructure options; real push
+    notifications or SMS/email would need external services).
+16. **Reporting dashboards.** The data model supports turnover-time and
     utilization queries; there's no chart UI yet.
-15. **Custom domain + always-on hosting**, once the free tier's sleep
+17. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)
@@ -238,5 +255,11 @@ in a single step: Warehouse runs `assign_destination`, which both sets
 the keg's destination and moves its status to `dispatched` at the same
 time - there's no separate driver-initiated dispatch action. The driver's
 first involvement is `deliver` (confirming delivery location + customer
-signature) once the keg is already dispatched. See `lib/stateMachine.js`
+signature) once the keg is already dispatched.
+
+There's a branch off this main cycle: a **failed wash inspection** sends
+the keg to `needs_repair` instead of `washed` (also owned by Warehouse),
+which blocks it from being filled until `mark_repaired` sends it back to
+`empty_returned` for a full wash + inspection cycle again. See
+`lib/stateMachine.js` for the exact role/transition rules.
 for the exact role/transition rules.

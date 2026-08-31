@@ -112,7 +112,7 @@ const ROLE_ACTIONS = {
     },
   },
   warehouse: {
-    // Warehouse has two possible actions depending on the keg's status.
+    // Warehouse has three possible actions depending on the keg's status.
     // Assigning a destination also dispatches the keg in one step - see
     // lib/stateMachine.js's assign_destination rule. There's no separate
     // generic "log location" step anymore (removed - see getActionConfig()
@@ -131,6 +131,16 @@ const ROLE_ACTIONS = {
         { name: 'location', label: 'Storage zone', type: 'text', geo: true },
       ],
     },
+    mark_repaired: {
+      // A failed wash inspection routes the keg here instead of
+      // 'washed' (see lib/stateMachine.js) - this is what lets someone
+      // confirm it's actually fixed before it re-enters the normal
+      // cycle, rather than a failed inspection having no consequence.
+      action: 'mark_repaired', label: 'Mark keg repaired - ready for wash',
+      fields: [
+        { name: 'notes', label: 'Repair notes (optional)', type: 'text' },
+      ],
+    },
   },
 };
 
@@ -144,6 +154,7 @@ const STATUS_EXPECTED_ROLE = {
   dispatched: 'driver',
   delivered: 'driver',
   empty_at_customer: 'warehouse',
+  needs_repair: 'warehouse',
 };
 
 async function init() {
@@ -282,16 +293,17 @@ function getActionConfig() {
   }
 
   if (currentUser.role === 'warehouse') {
-    // Warehouse has exactly two active jobs, each tied to one specific
+    // Warehouse has exactly three active jobs, each tied to one specific
     // status - assigning a destination (which also dispatches, see
-    // lib/stateMachine.js), and receiving an empty keg back. Every other
-    // status belongs to a different role, so nothing more is offered
-    // here - this used to fall through to a generic "log location"
-    // step, which had no natural stopping point and re-appeared right
-    // after receiving an empty keg (redundant, since that already asks
-    // for a storage zone).
+    // lib/stateMachine.js), receiving an empty keg back, and resolving a
+    // keg that failed wash inspection. Every other status belongs to a
+    // different role, so nothing more is offered here - this used to
+    // fall through to a generic "log location" step, which had no
+    // natural stopping point and re-appeared right after receiving an
+    // empty keg (redundant, since that already asks for a storage zone).
     if (keg.status === 'filled') return cfg.assign_destination;
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
+    if (keg.status === 'needs_repair') return cfg.mark_repaired;
     return null;
   }
 

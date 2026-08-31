@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS kegs (
   size_liters REAL,
   material TEXT,
   status TEXT NOT NULL DEFAULT 'empty_returned'
-    CHECK (status IN ('empty_returned','washed','filled','dispatched','delivered','empty_at_customer')),
+    CHECK (status IN ('empty_returned','washed','filled','dispatched','delivered','empty_at_customer','needs_repair')),
   current_location TEXT,
   destination TEXT, -- where Warehouse has assigned this keg to be delivered; set before a driver can dispatch it
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

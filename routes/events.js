@@ -27,7 +27,7 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
   const keg = db.prepare('SELECT * FROM kegs WHERE id = ?').get(kegId);
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
 
-  const result = validateTransition(actionType, user.role, keg.status);
+  const result = validateTransition(actionType, user.role, keg.status, details);
   if (!result.ok) {
     return res.status(409).json({ error: result.error }); // 409 Conflict: illegal state transition
   }
