@@ -162,21 +162,29 @@ Roughly in priority order:
    by you right now") instead of a plain gray note, and it names which
    role the keg is actually waiting on (`STATUS_EXPECTED_ROLE` lookup).
 10. ~~**Cooldown between certain actions on the same keg.**~~ Done —
-    `lib/cooldown.js`. Two real problems this fixes: (1) a driver could
-    log delivery and immediately mark the same keg empty in one sitting,
-    even though "empty" is really a separate, later real-world moment;
-    (2) Warehouse's "Log location / status" had no natural stopping
-    point and could be submitted in an unbounded loop. Both now require
-    a minimum time gap since the relevant prior event, enforced
-    server-side (429 response with a clear "time remaining" message).
-    Duration is set via the `ACTION_COOLDOWN_MS` environment variable —
-    defaults to 1 day (`86400000`) if unset; set it to something short
-    like `60000` (1 minute) on Render for testing, and back to a day (or
-    remove it) for real use. No code change needed to adjust it.
-11. **Move off SQLite to a real hosted database** (e.g. Postgres via
+    `lib/cooldown.js`. A driver could log delivery and immediately mark
+    the same keg empty in one sitting, even though "empty" is really a
+    separate, later real-world moment. Requires a minimum time gap since
+    the prior `deliver` event, enforced server-side (429 response with a
+    clear "time remaining" message). Duration is set via the
+    `ACTION_COOLDOWN_MS` environment variable — defaults to 1 day
+    (`86400000`) if unset; set it to something short like `60000` (1
+    minute) on Render for testing, and back to a day (or remove it) for
+    real use. No code change needed to adjust it.
+11. ~~**Removed the generic "Log location/status" step for Warehouse
+    entirely.**~~ Done — this used to be offered as a catch-all for
+    several statuses, but had no natural stopping point (nothing to move
+    it forward) and was redundant right after receiving an empty keg
+    (which already asks for a storage zone). Warehouse now has exactly
+    two jobs, each tied to one specific status: assign a destination
+    (`filled`, which also dispatches) and receive an empty keg
+    (`empty_at_customer`). Every other status correctly shows the "not
+    your turn" warning instead. Verified this leaves all 6 statuses each
+    owned by exactly one role, with zero gaps or overlaps.
+12. **Move off SQLite to a real hosted database** (e.g. Postgres via
     Neon's free tier), so data survives redeploys. Deliberately not done
     yet — see "Deploying" above for the current tradeoff.
-12. **Persistent session storage** (e.g. a free Redis service), so logins
+13. **Persistent session storage** (e.g. a free Redis service), so logins
     survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
     not done yet — see the corrected note under "Deploying" above; this
     needs external storage, not just the local-disk fixes used elsewhere,
@@ -222,11 +230,13 @@ A full code review turned up a few real bugs, now fixed:
 | Event | keg_id, user_id, role, action_type, details (JSON text), created_at |
 
 Status flow: `empty_returned → washed → filled → dispatched → delivered →
-empty_at_customer → empty_returned` (cycle repeats). The `filled →
-dispatched` transition happens in a single step: Warehouse runs
-`assign_destination`, which both sets the keg's destination and moves its
-status to `dispatched` at the same time - there's no separate
-driver-initiated dispatch action. The driver's first involvement is
-`deliver` (confirming delivery location + customer signature) once the
-keg is already dispatched. See `lib/stateMachine.js` for the exact
-role/transition rules.
+empty_at_customer → empty_returned` (cycle repeats), with each status
+owned by exactly one role: Washer (`empty_returned`), Filler (`washed`),
+Warehouse (`filled`), Driver (`dispatched` and `delivered`), Warehouse
+again (`empty_at_customer`). The `filled → dispatched` transition happens
+in a single step: Warehouse runs `assign_destination`, which both sets
+the keg's destination and moves its status to `dispatched` at the same
+time - there's no separate driver-initiated dispatch action. The driver's
+first involvement is `deliver` (confirming delivery location + customer
+signature) once the keg is already dispatched. See `lib/stateMachine.js`
+for the exact role/transition rules.

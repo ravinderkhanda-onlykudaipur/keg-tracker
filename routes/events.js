@@ -64,7 +64,7 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
 
   const tx = () => {
     insertEvent.run(kegId, user.id, user.role, actionType, JSON.stringify(details || {}));
-    const nextStatus = result.nextStatus || keg.status; // warehouse_move: status unchanged
+    const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
 
     // 'assign_destination' updates keg.destination; every other action
     // updates keg.current_location as before. Kept as two separate

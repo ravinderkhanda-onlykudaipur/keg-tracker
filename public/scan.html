@@ -112,9 +112,13 @@ const ROLE_ACTIONS = {
     },
   },
   warehouse: {
-    // Warehouse has three possible actions depending on the keg's status.
+    // Warehouse has two possible actions depending on the keg's status.
     // Assigning a destination also dispatches the keg in one step - see
-    // lib/stateMachine.js's assign_destination rule.
+    // lib/stateMachine.js's assign_destination rule. There's no separate
+    // generic "log location" step anymore (removed - see getActionConfig()
+    // below for why): it was redundant right after receiving an empty
+    // keg (which already asks for a storage zone) and had no natural
+    // stopping point, so it kept re-appearing.
     assign_destination: {
       action: 'assign_destination', label: 'Assign destination & dispatch',
       fields: [
@@ -125,12 +129,6 @@ const ROLE_ACTIONS = {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
         { name: 'location', label: 'Storage zone', type: 'text', geo: true },
-      ],
-    },
-    general_move: {
-      action: 'warehouse_move', label: 'Log location / status',
-      fields: [
-        { name: 'location', label: 'Zone / location', type: 'text', geo: true },
       ],
     },
   },
@@ -284,18 +282,16 @@ function getActionConfig() {
   }
 
   if (currentUser.role === 'warehouse') {
-    // Assigning a destination also dispatches the keg in one step, so
-    // there's no separate "waiting" state here anymore - as soon as
-    // Warehouse submits this, the keg moves to 'dispatched' and this
-    // form won't come up again for it.
+    // Warehouse has exactly two active jobs, each tied to one specific
+    // status - assigning a destination (which also dispatches, see
+    // lib/stateMachine.js), and receiving an empty keg back. Every other
+    // status belongs to a different role, so nothing more is offered
+    // here - this used to fall through to a generic "log location"
+    // step, which had no natural stopping point and re-appeared right
+    // after receiving an empty keg (redundant, since that already asks
+    // for a storage zone).
     if (keg.status === 'filled') return cfg.assign_destination;
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
-    // General location/status logging only applies to the statuses
-    // lib/stateMachine.js's warehouse_move rule actually allows - a keg
-    // that's currently 'dispatched' (out with the driver) isn't one of
-    // them, so Warehouse gets the "nothing to do" warning for it instead
-    // of a form that would just get rejected on submit.
-    if (['washed', 'delivered', 'empty_returned'].includes(keg.status)) return cfg.general_move;
     return null;
   }
 
