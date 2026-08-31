@@ -17,9 +17,17 @@
   .success { color: #3b6d11; font-size: 14px; margin-top: 8px; }
   .history-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
   .history-item b { text-transform: capitalize; }
+  .offline-banner { background: #fff3cd; color: #7a5c00; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+  .pending-banner { background: #e1f0ff; color: #0a4b8c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+  .pending-banner button { width: auto; display: inline-block; margin: 6px 6px 0 0; padding: 6px 12px; font-size: 13px; }
 </style>
 </head>
 <body>
+
+  <div id="offlineBanner" class="offline-banner" style="display:none">
+    &#128246; No connection &mdash; you can still log an action below; it'll be saved on this device and sent automatically once you're back online.
+  </div>
+  <div id="pendingBanner" class="pending-banner" style="display:none"></div>
 
   <div id="loginBlock" class="card">
     <h2>Who are you?</h2>
@@ -43,6 +51,7 @@
     </div>
   </div>
 
+<script src="/offline-queue.js"></script>
 <script>
 const kegId = new URLSearchParams(location.search).get('keg');
 let currentUser = null;
@@ -112,8 +121,19 @@ const ROLE_ACTIONS = {
 async function init() {
   // If a session cookie is already valid (e.g. page refresh), skip the
   // login screen entirely.
-  const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-  const me = await meRes.json();
+  let me = null;
+  try {
+    const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+    me = await meRes.json();
+  } catch (err) {
+    // No connectivity and nothing cached yet on this device - the very
+    // first visit has to happen online (to log in and cache the shell +
+    // this keg at least once). After that, offline works.
+    document.getElementById('loginBlock').innerHTML =
+      '<p class="error">No connection, and this device hasn\'t logged in here before. Connect once to log in - after that this page works offline.</p>';
+    return;
+  }
+
   if (me) {
     currentUser = me;
     showApp();
@@ -155,16 +175,43 @@ function showApp() {
 }
 
 async function loadKeg() {
-  const res = await fetch(`/api/kegs/${kegId}`);
+  let res;
+  try {
+    res = await fetch(`/api/kegs/${kegId}`);
+  } catch (err) {
+    // No connectivity at all - fall back to the last-known data for this
+    // keg, if we have any (i.e. this device has scanned it before).
+    const cached = OfflineQueue.getCachedKeg(kegId);
+    if (cached) {
+      keg = cached;
+      renderOfflineFallback();
+      return;
+    }
+    document.getElementById('formCard').innerHTML =
+      `<p class="error">No connection, and this keg hasn't been loaded on this device before, so there's nothing cached to show.</p>`;
+    return;
+  }
+
   if (!res.ok) {
     document.getElementById('formCard').innerHTML = `<p class="error">Keg ${kegId} not found.</p>`;
     return;
   }
   keg = await res.json();
+  OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
   document.getElementById('kegTitle').textContent = keg.id;
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
   renderForm();
   renderHistory();
+  updatePendingBanner();
+}
+
+function renderOfflineFallback() {
+  document.getElementById('kegTitle').textContent = keg.id;
+  document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
+  renderForm();
+  document.getElementById('history').innerHTML =
+    '<p class="muted">History unavailable while offline.</p>';
+  updatePendingBanner();
 }
 
 function getActionConfig() {
@@ -189,8 +236,19 @@ function getActionConfig() {
 }
 
 function renderForm() {
-  const cfg = getActionConfig();
   const card = document.getElementById('formCard');
+
+  const pending = OfflineQueue.pendingFor(kegId);
+  if (pending) {
+    card.innerHTML = `
+      <h3 style="margin-top:0">Action queued</h3>
+      <p class="muted">A "${pending.actionType.replace(/_/g,' ')}" is saved on this device, waiting to sync.
+      It'll send automatically once you're back online, or tap "Sync now" above.</p>
+    `;
+    return;
+  }
+
+  const cfg = getActionConfig();
   if (!cfg) {
     card.innerHTML = `<p class="muted">No action available for role "${currentUser.role}" while keg is "${keg.status.replace(/_/g,' ')}".</p>`;
     return;
@@ -213,11 +271,28 @@ async function submitEvent(action) {
   const details = {};
   cfg.fields.forEach(f => { details[f.name] = document.getElementById(`f_${f.name}`).value; });
 
-  const res = await fetch(`/api/kegs/${kegId}/events`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // session cookie identifies the user - no userId sent
-    body: JSON.stringify({ actionType: action, details }),
-  });
+  let res;
+  try {
+    res = await fetch(`/api/kegs/${kegId}/events`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // session cookie identifies the user - no userId sent
+      body: JSON.stringify({ actionType: action, details }),
+    });
+  } catch (err) {
+    // Network failure (not a server rejection) - save it locally instead
+    // of losing the work. It'll send automatically once back online.
+    if (!OfflineQueue.canQueueFor(kegId)) {
+      document.getElementById('submitMsg').className = 'error';
+      document.getElementById('submitMsg').textContent =
+        'There is already a queued action for this keg on this device - sync that one before adding another.';
+      return;
+    }
+    OfflineQueue.enqueue({ kegId, actionType: action, details });
+    renderForm(); // now shows the "queued" state instead of the form
+    updatePendingBanner();
+    return;
+  }
+
   const data = await res.json();
   const msg = document.getElementById('submitMsg');
   if (!res.ok) {
@@ -242,6 +317,53 @@ async function renderHistory() {
   `).join('');
 }
 
+// ---- Offline / sync UI -----------------------------------------------
+
+function updatePendingBanner() {
+  const banner = document.getElementById('pendingBanner');
+  const n = OfflineQueue.count();
+  if (n === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'block';
+  banner.innerHTML = `
+    ${n} action${n > 1 ? 's' : ''} saved on this device, waiting to sync.
+    <br><button onclick="trySync()">Sync now</button>
+  `;
+}
+
+function updateOfflineBanner() {
+  document.getElementById('offlineBanner').style.display = navigator.onLine ? 'none' : 'block';
+}
+
+async function trySync() {
+  const outcome = await OfflineQueue.syncAll();
+  updatePendingBanner();
+  if (keg) await loadKeg(); // reflect whatever just synced, or re-show "queued" if still offline
+
+  if (outcome.rejected.length) {
+    const details = outcome.rejected.map(r => r.error).join('; ');
+    document.getElementById('pendingBanner').innerHTML += `
+      <div class="error" style="margin-top:6px">Some actions couldn't sync and need attention: ${details}</div>
+    `;
+  }
+}
+
+// Auto-sync whenever connectivity returns, and re-check periodically in
+// case the 'online' event doesn't fire reliably (common on mobile).
+window.addEventListener('online', () => { updateOfflineBanner(); trySync(); });
+window.addEventListener('offline', updateOfflineBanner);
+setInterval(() => { if (navigator.onLine && OfflineQueue.count() > 0) trySync(); }, 30000);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    // Non-fatal: app still works online-only if the service worker fails
+    // to register (e.g. unsupported browser) - just no offline app-shell caching.
+  });
+}
+
+updateOfflineBanner();
 init();
 </script>
 </body>
