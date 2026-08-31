@@ -1,6 +1,7 @@
 // server.js - entry point
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
 
 const db = require('./db');
@@ -36,9 +37,21 @@ process.on('unhandledRejection', (reason) => {
 // which would make generated QR codes encode the wrong scheme.
 app.set('trust proxy', 1);
 
-// Secret persists across restarts (see lib/sessionSecret.js) so logins
-// survive a server restart instead of everyone being logged out each time.
+// Sessions now live in Postgres (the same Neon database everything else
+// uses), not Express's default in-memory store - this is what actually
+// fixes "logged out on every restart/redeploy/sleep-wake", which setting
+// SESSION_SECRET alone never did (that only kept the cookie-signing key
+// stable; the session DATA still lived in memory and was lost on every
+// restart regardless). connect-pg-simple manages its own "session" table
+// (auto-created on first run) and prunes expired rows automatically -
+// no separate Redis or other service needed now that the database
+// itself is a real persistent Postgres instance rather than SQLite.
 app.use(session({
+  store: new pgSession({
+    pool: db.pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+  }),
   secret: getSessionSecret(),
   resave: false,
   saveUninitialized: false,
