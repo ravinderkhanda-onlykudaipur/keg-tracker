@@ -18,7 +18,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('filler','washer','driver','warehouse','admin')),
+  role TEXT NOT NULL CHECK (role IN ('filler','washer','driver','warehouse','admin','manager')),
   password_hash TEXT NOT NULL
 );
 

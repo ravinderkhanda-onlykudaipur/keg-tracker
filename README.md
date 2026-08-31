@@ -2,7 +2,8 @@
 
 A working implementation of the QR-code keg tracking system: scan a keg's
 QR code, log a role-specific event (Filler, Washer, Driver, Warehouse),
-and see the keg's full history. Built to match the requirements doc
+and see the keg's full history. Admin and Manager roles oversee the
+whole operation from the admin page. Built to match the requirements doc
 discussed earlier. Deployed live at Render.
 
 ## What's here
@@ -16,22 +17,41 @@ discussed earlier. Deployed live at Render.
   happen together, see "Data model recap" below)
 - `lib/cooldown.js` — minimum time gap required before certain actions
   can repeat on the same keg (e.g. can't mark a keg empty moments after
-  delivering it) — see gap #10 below for why, and how to tune the
+  delivering it) — see the gap list below for why, and how to tune the
   duration via `ACTION_COOLDOWN_MS`
+- `lib/alerts.js` — flags kegs stuck too long in a status (not washed,
+  not dispatched, not delivered in time, etc.) — see the gap list below
+  for the full list of rules and how to tune each threshold
 - `lib/sessionSecret.js` — persists the session-signing secret across
   local restarts; on Render, `SESSION_SECRET` is set as an environment
   variable instead (see "Deploying"), since Render's free tier has no
   persistent disk for this file to survive redeploys on
 - `routes/auth.js` — bcrypt-hashed passwords + server-side sessions
-- `routes/kegs.js` — create kegs, generate QR codes, search/list
+- `routes/kegs.js` — create kegs (Admin only), generate QR codes, search/list
 - `routes/events.js` — the scan-to-action endpoint every form submits to;
   also where the "destination can't be left blank" and cooldown rules live
-- `public/index.html` — admin page: log in, create kegs, view QR codes
+- `routes/alerts.js` — the overdue-kegs API, used by both the admin
+  dashboard and the in-app banner on the scan page
+- `public/index.html` — admin page: log in, create kegs (Admin only),
+  view QR codes, browse all kegs, see the full alerts dashboard
 - `public/scan.html` — the mobile page a worker sees after scanning a QR
-  code; the form fields change based on their role and the keg's status
+  code; the form fields change based on their role and the keg's status;
+  also shows a banner if other kegs are overdue for that person's role
 - `public/sw.js`, `public/offline-queue.js` — offline support: caches the
   scan page for zero-signal loading, queues actions locally when offline
   and syncs them once back online
+
+## Roles
+
+- **Filler, Washer, Driver, Warehouse** — the four operational roles;
+  each only sees the form for their own job at the keg's current status
+  (see `public/scan.html`)
+- **Admin** — can do everything Manager can, plus create new kegs (the
+  only role that can)
+- **Manager** — read-only: sees the same kegs list, QR codes, and alerts
+  dashboard as Admin, but the "Create a new keg" form doesn't appear for
+  them, and the backend rejects a create-keg request from any non-admin
+  role even if attempted directly against the API
 
 ## Run it locally
 
@@ -42,8 +62,10 @@ npm install
 npm start          # auto-seeds demo users + DEMO-KEG-1 on first run
 ```
 
-Then open **http://localhost:3000** — that's the admin page. Log in with
-any of the seeded demo users (password `demo1234` for all) to create kegs.
+Then open **http://localhost:3000** — that's the admin page. Log in as
+**"Alex Admin"** (password `demo1234`) to create kegs, or **"Mona
+Manager"** to see the same view read-only. All 6 seeded demo users share
+password `demo1234`.
 
 To try the scan flow: open
 **http://localhost:3000/scan.html?keg=DEMO-KEG-1**, log in as "Wes Washer"
@@ -63,6 +85,36 @@ directly.
 primes the cache), then turn on Airplane Mode and submit an action — it
 queues locally instead of failing, and syncs automatically once
 connectivity returns (or tap "Sync now").
+
+## Alerts
+
+`lib/alerts.js` flags any keg that's been sitting in a status too long
+without the next step happening. Each rule has its own environment
+variable (in **hours**), so thresholds can be tuned without touching
+code — set one small (e.g. `1` or even `0.1`) on Render for testing:
+
+| Status | Env var | Default | Alerts |
+|---|---|---|---|
+| `empty_returned` (not washed) | `ALERT_WASH_HOURS` | 48 (2 days) | Washer |
+| `washed` (not filled) | `ALERT_FILL_HOURS` | 48 (2 days) | Filler |
+| `filled` (not dispatched) | `ALERT_DISPATCH_HOURS` | 120 (5 days) | Warehouse |
+| `dispatched` (not delivered) | `ALERT_DELIVERY_HOURS` | 12 | Driver |
+| `needs_repair` (not resolved) | `ALERT_REPAIR_HOURS` | 24 | Warehouse |
+
+A keg's "time in its current status" is the time since its most recent
+event (or its creation time, if it has none yet) — exactly when it
+entered that status, no separate tracking column needed.
+
+Two places surface this:
+- **Admin/Manager dashboard** (`public/index.html`) — the full breakdown
+  across every category, for anyone with oversight
+- **In-app banner** (`public/scan.html`) — after logging in, an
+  operational role sees a count of *other* kegs overdue for their own
+  role (e.g. a washer sees "3 other kegs are overdue for your role"),
+  filtered client-side from the same `/api/alerts` endpoint
+
+No push notifications or SMS/email yet — see the gap list below for what
+that would take.
 
 **Trying GPS location:** on the driver's pickup field, and the
 warehouse's zone/storage fields, tap "Use my location" to auto-fill real
@@ -201,16 +253,24 @@ Roughly in priority order:
     not done yet — see the corrected note under "Deploying" above; this
     needs external storage, not just the local-disk fixes used elsewhere,
     since Render's free tier wipes local disk on every restart too.
-15. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
-    state too long (e.g. not washed within 2 days, not dispatched within
-    5 days of filling, not delivered within 12 hours of dispatch) — needs
-    a scheduled job querying `events`/`kegs`, plus a way to surface it
-    (an in-app banner for the relevant role, and/or an admin dashboard
-    are the two free, no-new-infrastructure options; real push
-    notifications or SMS/email would need external services).
-16. **Reporting dashboards.** The data model supports turnover-time and
+15. ~~**Alerts.**~~ Done — see the "Alerts" section above. Computed live
+    on request (`lib/alerts.js`), not a scheduled/cached job, which is
+    fine at this scale but worth revisiting if the kegs/events tables
+    grow large. Surfaced via an admin dashboard and an in-app banner;
+    real push notifications or SMS/email would need external services
+    (not done, matches the same tradeoff as gap #14 above).
+16. ~~**Admin and Manager roles.**~~ Done — `admin` can create kegs (the
+    only role that can, enforced server-side via `requireRole('admin')`
+    in `routes/kegs.js`, not just hidden in the UI); `manager` sees
+    everything Admin sees (kegs list, QR codes, alerts dashboard) but
+    the create-keg form doesn't render for them and the backend rejects
+    the request even if attempted directly. Verified with mocked
+    request/response objects that admin passes through, manager and
+    every operational role get a 403, and an unauthenticated request
+    gets a 401.
+17. **Reporting dashboards.** The data model supports turnover-time and
     utilization queries; there's no chart UI yet.
-17. **Custom domain + always-on hosting**, once the free tier's sleep
+18. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

@@ -14,6 +14,10 @@
   td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 14px; }
   .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #eef; }
   a { color: #0f6e56; }
+  .alert-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #fde2e2; color: #8f1d1d; font-weight: 600; }
+  .role-note { background: #f0f0f0; color: #555; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -30,12 +34,21 @@
   <div id="mainBlock" style="display:none">
     <p class="muted" style="color:#777;font-size:13px">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
 
-    <div class="card">
+    <div id="readOnlyNote" class="role-note" style="display:none">
+      You have view-only access &mdash; you can see everything here, but only an Admin can create kegs or make changes.
+    </div>
+
+    <div class="card" id="createKegCard" style="display:none">
       <h3>Create a new keg</h3>
       <input id="size" type="number" placeholder="Size (liters)" value="50">
       <input id="material" placeholder="Material" value="stainless">
       <button onclick="createKeg()">Create keg + generate QR</button>
       <div id="createResult"></div>
+    </div>
+
+    <div class="card">
+      <h3>Alerts</h3>
+      <div id="alertsList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
     </div>
 
     <div class="card">
@@ -93,7 +106,17 @@ function showMain(user) {
   document.getElementById('loginCard').style.display = 'none';
   document.getElementById('mainBlock').style.display = 'block';
   document.getElementById('whoami').textContent = `${user.name} (${user.role})`;
+
+  // Only admins can create kegs - everyone else (including the new
+  // 'manager' role) gets a read-only view of everything below instead.
+  if (user.role === 'admin') {
+    document.getElementById('createKegCard').style.display = 'block';
+  } else {
+    document.getElementById('readOnlyNote').style.display = 'block';
+  }
+
   loadKegs();
+  loadAlerts();
 }
 
 async function createKeg() {
@@ -105,13 +128,14 @@ async function createKeg() {
     body: JSON.stringify({ size_liters, material }),
   });
   if (!res.ok) {
-    document.getElementById('createResult').textContent = 'Could not create keg - are you logged in?';
+    document.getElementById('createResult').textContent = 'Could not create keg - are you logged in as an admin?';
     return;
   }
   const data = await res.json();
   document.getElementById('createResult').innerHTML =
     `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
   loadKegs();
+  loadAlerts();
 }
 
 async function loadKegs() {
@@ -128,6 +152,25 @@ async function loadKegs() {
     </tr>
   `).join('');
 }
+
+async function loadAlerts() {
+  const res = await fetch('/api/alerts', { credentials: 'include' });
+  const el = document.getElementById('alertsList');
+  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load alerts.</p>'; return; }
+  const alerts = await res.json();
+  if (!alerts.length) {
+    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Nothing overdue right now.</p>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => `
+    <div class="alert-item">
+      <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a> &mdash; ${a.label}
+      <span class="alert-badge">${a.hoursOverdue}h overdue</span>
+      <br><span class="muted" style="color:#777">waiting on: ${a.role}</span>
+    </div>
+  `).join('');
+}
+
 init();
 </script>
 </body>

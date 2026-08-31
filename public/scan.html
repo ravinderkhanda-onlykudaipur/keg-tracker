@@ -19,6 +19,7 @@
   .history-item b { text-transform: capitalize; }
   .offline-banner { background: #fff3cd; color: #7a5c00; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
   .pending-banner { background: #e1f0ff; color: #0a4b8c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+  .my-alerts-banner { background: #fde2e2; color: #8f1d1d; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; font-weight: 600; }
   .pending-banner button { width: auto; display: inline-block; margin: 6px 6px 0 0; padding: 6px 12px; font-size: 13px; }
   .wrong-turn-banner { background: #fde2e2; color: #8f1d1d; border: 1px solid #f3a6a6; border-radius: 8px; padding: 14px; font-size: 14px; font-weight: 600; }
   .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 4px; }
@@ -45,6 +46,7 @@
     <h2 id="kegTitle"></h2>
     <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
     <p class="muted" id="kegDestinationLine" style="display:none">Destination: <b id="kegDestination"></b></p>
+    <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
 
     <div class="card" id="formCard"></div>
 
@@ -211,6 +213,28 @@ function showApp() {
   document.getElementById('appBlock').style.display = 'block';
   document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
   loadKeg();
+  loadMyAlerts();
+}
+
+async function loadMyAlerts() {
+  // Shows how many OTHER kegs (not necessarily this one) are overdue for
+  // this person's role - a general heads-up, separate from whatever
+  // specific keg they scanned to get here.
+  try {
+    const res = await fetch('/api/alerts', { credentials: 'include' });
+    if (!res.ok) return;
+    const alerts = await res.json();
+    const mine = alerts.filter(a => a.role === currentUser.role);
+    const banner = document.getElementById('myAlertsBanner');
+    if (mine.length > 0) {
+      banner.style.display = 'block';
+      banner.textContent = `\u26A0 ${mine.length} other keg${mine.length > 1 ? 's are' : ' is'} overdue for your role.`;
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch (err) {
+    // Offline or alerts fetch failed - not critical, just skip the banner silently.
+  }
 }
 
 async function loadKeg() {

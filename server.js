@@ -9,6 +9,7 @@ const { attachUser } = require('./middleware/requireAuth');
 const authRoutes = require('./routes/auth');
 const kegRoutes = require('./routes/kegs');
 const eventRoutes = require('./routes/events');
+const alertRoutes = require('./routes/alerts');
 
 const app = express();
 app.use(express.json());
@@ -50,6 +51,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/kegs', kegRoutes);
 app.use('/api/kegs', eventRoutes); // adds POST /api/kegs/:kegId/events
+app.use('/api/alerts', alertRoutes);
 
 const PORT = process.env.PORT || 3000;
 

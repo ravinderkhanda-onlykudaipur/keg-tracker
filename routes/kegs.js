@@ -3,11 +3,14 @@ const express = require('express');
 const QRCode = require('qrcode');
 const { nanoid } = require('nanoid');
 const db = require('../db');
-const { requireAuth } = require('../middleware/requireAuth');
+const { requireRole } = require('../middleware/requireAuth');
 
 const router = express.Router();
 
-router.post('/', requireAuth, (req, res) => {
+// Only admins can create kegs now - previously any logged-in role could,
+// which didn't match "admin can make changes, manager/everyone else can
+// only view."
+router.post('/', requireRole('admin'), (req, res) => {
   const { size_liters, material } = req.body;
   const id = 'KEG-' + nanoid(8).toUpperCase();
 

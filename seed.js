@@ -15,6 +15,8 @@ const users = [
   { id: 'u-washer',    name: 'Wes Washer',      role: 'washer' },
   { id: 'u-driver',    name: 'Dana Driver',     role: 'driver' },
   { id: 'u-warehouse', name: 'Wally Warehouse', role: 'warehouse' },
+  { id: 'u-admin',     name: 'Alex Admin',      role: 'admin' },   // can create kegs; sees everything
+  { id: 'u-manager',   name: 'Mona Manager',    role: 'manager' }, // sees everything admin sees, can't create/change anything
 ];
 
 async function seedIfEmpty() {
