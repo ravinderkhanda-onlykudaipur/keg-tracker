@@ -42,6 +42,7 @@
   <div id="appBlock" style="display:none">
     <h2 id="kegTitle"></h2>
     <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
+    <p class="muted" id="kegDestinationLine" style="display:none">Destination: <b id="kegDestination"></b></p>
 
     <div class="card" id="formCard"></div>
 
@@ -67,13 +68,19 @@ let keg = null;
 // device's actual GPS coordinates via the browser's Geolocation API.
 // Still a plain text field underneath, so it can be corrected/typed
 // manually too (e.g. if GPS is unavailable or inaccurate indoors).
+//
+// Fields marked `requiredWhen: { field, equals, minLength? }` are only
+// mandatory when another field in the same form has a specific value -
+// e.g. damage notes are only required (and held to a minimum length) if
+// the inspection result is "fail". Enforced client-side in
+// checkRequiredFields() before submission.
 const ROLE_ACTIONS = {
   washer: {
     action: 'wash', label: 'Log wash',
     fields: [
       { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
       { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
-      { name: 'notes', label: 'Damage notes (optional)', type: 'text' },
+      { name: 'notes', label: 'Damage notes (min 30 characters if failed)', type: 'text', requiredWhen: { field: 'inspection', equals: 'fail', minLength: 30 } },
     ],
   },
   filler: {
@@ -88,11 +95,14 @@ const ROLE_ACTIONS = {
   },
   driver: {
     // Driver has three possible actions depending on the keg's current status.
+    // Note: no "destination" field here anymore - that's assigned by
+    // Warehouse (see warehouse.assign_destination below) and shown
+    // read-only on this form; see getActionConfig()'s "waiting" case for
+    // what happens if Warehouse hasn't assigned one yet.
     dispatched_from_filled: {
       action: 'dispatch', label: 'Log dispatch',
       fields: [
         { name: 'pickup_location', label: 'Pickup location', type: 'text', geo: true },
-        { name: 'location', label: 'Delivery destination', type: 'text' },
       ],
     },
     delivered_from_dispatched: {
@@ -108,7 +118,13 @@ const ROLE_ACTIONS = {
     },
   },
   warehouse: {
-    // Warehouse also has two possible actions depending on the keg's status.
+    // Warehouse has three possible actions depending on the keg's status.
+    assign_destination: {
+      action: 'assign_destination', label: 'Assign delivery destination',
+      fields: [
+        { name: 'destination', label: 'Delivery destination (customer/address)', type: 'text' },
+      ],
+    },
     receive_from_empty_at_customer: {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
@@ -206,6 +222,7 @@ async function loadKeg() {
   OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
   document.getElementById('kegTitle').textContent = keg.id;
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
+  updateDestinationLine();
   renderForm();
   renderHistory();
   updatePendingBanner();
@@ -214,10 +231,21 @@ async function loadKeg() {
 function renderOfflineFallback() {
   document.getElementById('kegTitle').textContent = keg.id;
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
+  updateDestinationLine();
   renderForm();
   document.getElementById('history').innerHTML =
     '<p class="muted">History unavailable while offline.</p>';
   updatePendingBanner();
+}
+
+function updateDestinationLine() {
+  const line = document.getElementById('kegDestinationLine');
+  if (keg.destination) {
+    document.getElementById('kegDestination').textContent = keg.destination;
+    line.style.display = 'block';
+  } else {
+    line.style.display = 'none';
+  }
 }
 
 function getActionConfig() {
@@ -226,16 +254,24 @@ function getActionConfig() {
 
   if (currentUser.role === 'driver') {
     // Driver's form depends on the keg's current status.
-    if (keg.status === 'filled') return cfg.dispatched_from_filled;
+    if (keg.status === 'filled') {
+      // Can't dispatch until Warehouse has assigned a destination - see
+      // renderForm()'s handling of this sentinel value.
+      if (!keg.destination) return 'WAITING_FOR_DESTINATION';
+      return cfg.dispatched_from_filled;
+    }
     if (keg.status === 'dispatched') return cfg.delivered_from_dispatched;
     if (keg.status === 'delivered') return cfg.empty_from_delivered;
     return null;
   }
 
   if (currentUser.role === 'warehouse') {
-    // "Receive empty" is the transition back to empty_returned; otherwise
+    // Assigning a destination comes first for a freshly filled keg; then
+    // "receive empty" is the transition back to empty_returned; otherwise
     // warehouse staff can log a location/status update at any other stage.
-    return keg.status === 'empty_at_customer' ? cfg.receive_from_empty_at_customer : cfg.general_move;
+    if (keg.status === 'filled' && !keg.destination) return cfg.assign_destination;
+    if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
+    return cfg.general_move;
   }
 
   return cfg;
@@ -255,10 +291,15 @@ function renderForm() {
   }
 
   const cfg = getActionConfig();
+  if (cfg === 'WAITING_FOR_DESTINATION') {
+    card.innerHTML = `<p class="muted">This keg is filled and ready, but Warehouse hasn't assigned a delivery destination yet. Check back once they have, or ask them directly.</p>`;
+    return;
+  }
   if (!cfg) {
     card.innerHTML = `<p class="muted">No action available for role "${currentUser.role}" while keg is "${keg.status.replace(/_/g,' ')}".</p>`;
     return;
   }
+
   card.innerHTML = `
     <h3 style="margin-top:0">${cfg.label}</h3>
     ${cfg.fields.map(f => `
@@ -269,9 +310,29 @@ function renderForm() {
       ${f.geo ? `<button type="button" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
       <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
     `).join('')}
-    <button onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
+    <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
     <div id="submitMsg"></div>
   `;
+}
+
+// Checks any `requiredWhen` conditions on the current form's fields
+// against what's actually been entered - both presence and, if set, a
+// minimum length. Returns an error string, or null if everything
+// required is present and long enough.
+function checkRequiredFields(cfg, values) {
+  for (const f of cfg.fields) {
+    if (!f.requiredWhen) continue;
+    const depValue = values[f.requiredWhen.field];
+    if (depValue !== f.requiredWhen.equals) continue; // condition doesn't apply right now
+    const val = (values[f.name] || '').trim();
+    if (!val) {
+      return `${f.label.replace(/\s*\(.*\)/, '')} is required when ${f.requiredWhen.field.replace(/_/g,' ')} is "${f.requiredWhen.equals}".`;
+    }
+    if (f.requiredWhen.minLength && val.length < f.requiredWhen.minLength) {
+      return `${f.label.replace(/\s*\(.*\)/, '')} needs at least ${f.requiredWhen.minLength} characters when ${f.requiredWhen.field.replace(/_/g,' ')} is "${f.requiredWhen.equals}" (currently ${val.length}).`;
+    }
+  }
+  return null;
 }
 
 function useMyLocation(fieldName) {
@@ -299,43 +360,64 @@ function useMyLocation(fieldName) {
   );
 }
 
+let isSubmitting = false; // guards against double-submit (double-tap, slow network + impatient re-tap)
+
 async function submitEvent(action) {
+  if (isSubmitting) return; // ignore a second click while the first is still in flight
+
   const cfg = getActionConfig();
   const details = {};
   cfg.fields.forEach(f => { details[f.name] = document.getElementById(`f_${f.name}`).value; });
 
-  let res;
-  try {
-    res = await fetch(`/api/kegs/${kegId}/events`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // session cookie identifies the user - no userId sent
-      body: JSON.stringify({ actionType: action, details }),
-    });
-  } catch (err) {
-    // Network failure (not a server rejection) - save it locally instead
-    // of losing the work. It'll send automatically once back online.
-    if (!OfflineQueue.canQueueFor(kegId)) {
-      document.getElementById('submitMsg').className = 'error';
-      document.getElementById('submitMsg').textContent =
-        'There is already a queued action for this keg on this device - sync that one before adding another.';
-      return;
-    }
-    OfflineQueue.enqueue({ kegId, actionType: action, details });
-    renderForm(); // now shows the "queued" state instead of the form
-    updatePendingBanner();
-    return;
+  const requiredError = checkRequiredFields(cfg, details);
+  if (requiredError) {
+    const msg = document.getElementById('submitMsg');
+    msg.className = 'error';
+    msg.textContent = requiredError;
+    return; // never reaches the network - same guard applies whether online or offline
   }
 
-  const data = await res.json();
-  const msg = document.getElementById('submitMsg');
-  if (!res.ok) {
-    msg.className = 'error';
-    msg.textContent = data.error;
-    return;
+  isSubmitting = true;
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
+
+  try {
+    let res;
+    try {
+      res = await fetch(`/api/kegs/${kegId}/events`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // session cookie identifies the user - no userId sent
+        body: JSON.stringify({ actionType: action, details }),
+      });
+    } catch (err) {
+      // Network failure (not a server rejection) - save it locally instead
+      // of losing the work. It'll send automatically once back online.
+      if (!OfflineQueue.canQueueFor(kegId)) {
+        document.getElementById('submitMsg').className = 'error';
+        document.getElementById('submitMsg').textContent =
+          'There is already a queued action for this keg on this device - sync that one before adding another.';
+        return;
+      }
+      OfflineQueue.enqueue({ kegId, actionType: action, details });
+      renderForm(); // now shows the "queued" state instead of the form
+      updatePendingBanner();
+      return;
+    }
+
+    const data = await res.json();
+    const msg = document.getElementById('submitMsg');
+    if (!res.ok) {
+      msg.className = 'error';
+      msg.textContent = data.error;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = cfg.label; }
+      return;
+    }
+    msg.className = 'success';
+    msg.textContent = 'Logged. New status: ' + data.status.replace(/_/g, ' ');
+    await loadKeg(); // re-renders the form (or "no action available"), so submitBtn no longer exists to re-enable
+  } finally {
+    isSubmitting = false;
   }
-  msg.className = 'success';
-  msg.textContent = 'Logged. New status: ' + data.status.replace(/_/g, ' ');
-  await loadKeg();
 }
 
 async function renderHistory() {

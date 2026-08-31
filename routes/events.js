@@ -1,7 +1,8 @@
 // routes/events.js
 // This is the heart of the system: every QR scan submission lands here.
 // It validates the role/transition against the state machine, writes an
-// immutable event row, and updates the keg's current status/location.
+// immutable event row, and updates the keg's current status/location (or,
+// for 'assign_destination', its destination instead - see below).
 //
 // requireAuth ensures req.user comes from the server-side session, not
 // from anything the client claims in the request body - so this endpoint
@@ -27,20 +28,40 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
     return res.status(409).json({ error: result.error }); // 409 Conflict: illegal state transition
   }
 
+  // A driver can't dispatch a keg Warehouse hasn't assigned a delivery
+  // destination for yet - the destination has to come from Warehouse,
+  // not be typed in by the driver.
+  if (actionType === 'dispatch' && !keg.destination) {
+    return res.status(409).json({
+      error: 'No delivery destination assigned yet - ask Warehouse to assign one before dispatching.',
+    });
+  }
+
   const insertEvent = db.prepare(`
     INSERT INTO events (keg_id, user_id, role, action_type, details)
     VALUES (?, ?, ?, ?, ?)
   `);
 
   const updateKeg = db.prepare(`
-    UPDATE kegs SET status = ?, current_location = ? WHERE id = ?
+    UPDATE kegs SET status = ?, current_location = ?, destination = ? WHERE id = ?
   `);
 
   const tx = () => {
     insertEvent.run(kegId, user.id, user.role, actionType, JSON.stringify(details || {}));
     const nextStatus = result.nextStatus || keg.status; // warehouse_move: status unchanged
-    const nextLocation = details?.location || keg.current_location;
-    updateKeg.run(nextStatus, nextLocation, kegId);
+
+    // 'assign_destination' updates keg.destination; every other action
+    // updates keg.current_location as before. Kept as two separate
+    // columns since they mean different things - "where the keg
+    // physically is right now" vs "where Warehouse has assigned it to go".
+    const nextLocation = actionType === 'assign_destination'
+      ? keg.current_location
+      : (details?.location || keg.current_location);
+    const nextDestination = actionType === 'assign_destination'
+      ? (details?.destination || keg.destination)
+      : keg.destination;
+
+    updateKeg.run(nextStatus, nextLocation, nextDestination, kegId);
   };
   db.withTransaction(tx);
 

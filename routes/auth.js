@@ -17,8 +17,6 @@ router.post('/login', async (req, res) => {
   const ok = await bcrypt.compare(password || '', user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid user or password' });
 
-  // Regenerate the session on login to avoid session fixation, then store
-  // the minimal identity we need on every later request.
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Login failed, try again' });
     req.session.user = { id: user.id, name: user.name, role: user.role };
@@ -35,8 +33,6 @@ router.get('/me', (req, res) => {
 });
 
 router.get('/users', (req, res) => {
-  // Lets the frontend populate a "who are you" login dropdown. Only
-  // exposes id/name/role - never the password hash.
   const users = db.prepare('SELECT id, name, role FROM users ORDER BY role').all();
   res.json(users);
 });

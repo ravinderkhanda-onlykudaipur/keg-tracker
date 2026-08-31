@@ -1,9 +1,7 @@
 // db.js - SQLite setup and schema for the keg tracking MVP.
 // Uses Node's built-in node:sqlite module (no native compilation required -
 // avoids the better-sqlite3 native-binary crashes seen on newer Node
-// versions). Swap for a pg (PostgreSQL) client later without changing the
-// shape of the queries much - this schema maps directly onto the data
-// model in the requirements doc (Keg, User, Event/Log, Customer).
+// versions).
 
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
@@ -31,12 +29,13 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 CREATE TABLE IF NOT EXISTS kegs (
-  id TEXT PRIMARY KEY,        -- also encoded in the QR code
+  id TEXT PRIMARY KEY,
   size_liters REAL,
   material TEXT,
   status TEXT NOT NULL DEFAULT 'empty_returned'
     CHECK (status IN ('empty_returned','washed','filled','dispatched','delivered','empty_at_customer')),
   current_location TEXT,
+  destination TEXT, -- where Warehouse has assigned this keg to be delivered; set before a driver can dispatch it
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -45,8 +44,8 @@ CREATE TABLE IF NOT EXISTS events (
   keg_id TEXT NOT NULL REFERENCES kegs(id),
   user_id TEXT NOT NULL REFERENCES users(id),
   role TEXT NOT NULL,
-  action_type TEXT NOT NULL, -- 'wash' | 'fill' | 'dispatch' | 'deliver' | 'warehouse_move'
-  details TEXT NOT NULL,     -- JSON blob, shape depends on role (see routes/events.js)
+  action_type TEXT NOT NULL,
+  details TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -69,4 +68,3 @@ db.withTransaction = (fn) => {
 };
 
 module.exports = db;
-

@@ -3,10 +3,7 @@
 // keg sitting at "empty_returned" ready to be washed.
 //
 // Exported as seedIfEmpty() so server.js can auto-run it on startup when
-// the database is empty - important on hosts like Render's free tier,
-// where the disk resets on every redeploy and there's no easy way to
-// manually run `node seed.js` against the live instance each time.
-// Can still be run directly too: `node seed.js`.
+// the database is empty. Can still be run directly too: `node seed.js`.
 
 const bcrypt = require('bcryptjs');
 const db = require('./db');
@@ -45,5 +42,5 @@ async function seedIfEmpty() {
 module.exports = { seedIfEmpty };
 
 if (require.main === module) {
-  seedIfEmpty(); // allows `node seed.js` to still work directly
+  seedIfEmpty();
 }
