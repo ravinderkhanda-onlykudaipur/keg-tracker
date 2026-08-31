@@ -19,6 +19,16 @@ const users = [
   { id: 'u-manager',   name: 'Mona Manager',    role: 'manager' }, // sees everything admin sees, can't create/change anything
 ];
 
+// Demo customers, so the destination dropdown isn't empty on first run.
+// Replace with your real customer names/addresses whenever - see
+// public/index.html's "Customers" section, or add them inline from
+// Warehouse's "Assign destination" form.
+const customers = [
+  { id: 'CUST-DOWNTOWN', name: 'Downtown Taproom',       address: null },
+  { id: 'CUST-RIVERSIDE', name: 'Riverside Pub',          address: null },
+  { id: 'CUST-CITYCTR',  name: 'City Center Bar',         address: null },
+];
+
 async function seedIfEmpty() {
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM users').get();
   if (count > 0) {
@@ -32,12 +42,17 @@ async function seedIfEmpty() {
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   users.forEach((u) => insertUser.run(u.id, u.name, u.role, hash));
 
+  const insertCustomer = db.prepare(`
+    INSERT OR IGNORE INTO customers (id, name, address) VALUES (?, ?, ?)
+  `);
+  customers.forEach((c) => insertCustomer.run(c.id, c.name, c.address));
+
   db.prepare(`
     INSERT OR IGNORE INTO kegs (id, size_liters, material, status, current_location)
     VALUES ('DEMO-KEG-1', 50, 'stainless', 'empty_returned', 'warehouse')
   `).run();
 
-  console.log(`Seeded demo users (password "${DEMO_PASSWORD}" for all) and keg DEMO-KEG-1`);
+  console.log(`Seeded demo users (password "${DEMO_PASSWORD}" for all), ${customers.length} demo customers, and keg DEMO-KEG-1`);
   console.log(users.map((u) => `  ${u.role.padEnd(10)} -> ${u.id}`).join('\n'));
 }
 

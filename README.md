@@ -35,6 +35,9 @@ discussed earlier. Deployed live at Render.
 - `routes/alerts.js` — the overdue-kegs API, used by both the admin
   dashboard and the in-app banner on the scan page
 - `routes/reports.js` — the reports API (Admin/Manager only)
+- `routes/customers.js` — customer CRUD (Admin/Warehouse can create,
+  anyone logged in can list); feeds the destination dropdown in
+  `public/scan.html` and the "Customers" section on the admin page
 - `public/index.html` — admin page: log in, create kegs (Admin only),
   view QR codes, browse all kegs, see the full alerts and reports
   dashboards (Admin/Manager)
@@ -138,6 +141,10 @@ admin page.
 - **Fill stats** — total fills, total liters (fixed at 20L/fill), and a
   breakdown by product name
 - **Wash inspection results** — pass/fail counts and fail rate
+- **Customers holding kegs longest** — average time each customer holds
+  a keg (counting both `delivered`, full, and `empty_at_customer`,
+  empty-but-not-picked-up time), ranked longest-first - the report
+  customer management was specifically built to enable
 
 Shown as simple horizontal bar charts on the admin page, built with
 plain CSS (no charting library dependency).
@@ -300,7 +307,18 @@ Roughly in priority order:
     dependency. Tested against a hand-built scenario with known,
     controlled durations to confirm every number (stage averages,
     turnover time, fill/wash stats) matches exactly.
-18. **Custom domain + always-on hosting**, once the free tier's sleep
+18. ~~**Customer management.**~~ Done — the `customers` table existed in
+    the schema from the start but was never actually used; destination
+    was just free text. Now a real feature: `routes/customers.js`
+    (Admin and Warehouse can create customers, anyone logged in can
+    list them), a dropdown on Warehouse's "Assign destination" form
+    (`type: 'customer_select'` in `public/scan.html`) instead of typing,
+    with an inline "+ Add new customer" option so Warehouse isn't
+    blocked the first time they need a customer that doesn't exist yet.
+    Kegs now link to a real `customer_id`, which powers a new "who holds
+    kegs longest" report (`getCustomerHoldStats()` in `lib/reports.js`,
+    tested against a two-customer scenario with known hold durations).
+19. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

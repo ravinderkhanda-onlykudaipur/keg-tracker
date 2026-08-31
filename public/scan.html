@@ -124,7 +124,7 @@ const ROLE_ACTIONS = {
     assign_destination: {
       action: 'assign_destination', label: 'Assign destination & dispatch',
       fields: [
-        { name: 'destination', label: 'Delivery destination (customer/address)', type: 'text', required: true },
+        { name: 'customer_id', label: 'Delivery destination (customer)', type: 'customer_select', required: true },
       ],
     },
     receive_from_empty_at_customer: {
@@ -264,7 +264,7 @@ async function loadKeg() {
   document.getElementById('kegTitle').textContent = keg.id;
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
   updateDestinationLine();
-  renderForm();
+  await renderForm();
   renderHistory();
   updatePendingBanner();
 }
@@ -334,7 +334,65 @@ function getActionConfig() {
   return null;
 }
 
-function renderForm() {
+// Cached customer list, so switching between forms doesn't re-fetch every
+// time. Passed true to refetch after adding a new customer.
+let customersCache = null;
+async function fetchCustomers(forceRefresh) {
+  if (customersCache && !forceRefresh) return customersCache;
+  try {
+    const res = await fetch('/api/customers', { credentials: 'include' });
+    customersCache = res.ok ? await res.json() : (customersCache || []);
+  } catch (err) {
+    customersCache = customersCache || []; // offline - keep whatever we had, or empty
+  }
+  return customersCache;
+}
+
+function toggleAddCustomer() {
+  const box = document.getElementById('addCustomerBox');
+  if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function addNewCustomer() {
+  const name = document.getElementById('newCustomerName').value.trim();
+  const address = document.getElementById('newCustomerAddress').value.trim();
+  const msg = document.getElementById('addCustomerMsg');
+  if (!name) {
+    msg.className = 'error';
+    msg.textContent = 'Customer name is required.';
+    return;
+  }
+  msg.className = 'muted';
+  msg.textContent = 'Adding...';
+
+  let res;
+  try {
+    res = await fetch('/api/customers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, address }),
+    });
+  } catch (err) {
+    msg.className = 'error';
+    msg.textContent = 'No connection - try again once online.';
+    return;
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    msg.className = 'error';
+    msg.textContent = data.error || 'Could not add customer.';
+    return;
+  }
+
+  const newCustomer = await res.json();
+  await fetchCustomers(true); // refresh cache so the dropdown includes it
+  await renderForm(); // rebuild the form - new customer now in the list
+  const sel = document.getElementById('f_customer_id');
+  if (sel) sel.value = newCustomer.id; // pre-select the one just added
+}
+
+async function renderForm() {
   const card = document.getElementById('formCard');
 
   const pending = OfflineQueue.pendingFor(kegId);
@@ -364,16 +422,43 @@ function renderForm() {
     return;
   }
 
+  // Prefetch anything a field needs before building the HTML, so the
+  // template below can be built synchronously in one pass.
+  let customers = [];
+  if (cfg.fields.some((f) => f.type === 'customer_select')) {
+    customers = await fetchCustomers();
+  }
+
   card.innerHTML = `
     <h3 style="margin-top:0">${cfg.label}</h3>
-    ${cfg.fields.map(f => `
-      <label>${f.label}</label>
-      ${f.type === 'select'
-        ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
-        : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
-      ${f.geo ? `<button type="button" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
-      <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
-    `).join('')}
+    ${cfg.fields.map((f) => {
+      if (f.type === 'customer_select') {
+        return `
+          <label>${f.label}</label>
+          <select id="f_${f.name}">
+            <option value="">-- select customer --</option>
+            ${customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+          <button type="button" onclick="toggleAddCustomer()" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f">&#43; Add new customer</button>
+          <div id="addCustomerBox" style="display:none;margin-top:10px;padding:10px;border:1px solid #ddd;border-radius:8px">
+            <label>New customer name</label>
+            <input id="newCustomerName" type="text">
+            <label>Address (optional)</label>
+            <input id="newCustomerAddress" type="text">
+            <button type="button" onclick="addNewCustomer()" style="margin-top:8px">Add customer</button>
+            <div id="addCustomerMsg" class="muted"></div>
+          </div>
+        `;
+      }
+      return `
+        <label>${f.label}</label>
+        ${f.type === 'select'
+          ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
+          : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
+        ${f.geo ? `<button type="button" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
+        <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
+      `;
+    }).join('')}
     <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
     <div id="submitMsg"></div>
   `;

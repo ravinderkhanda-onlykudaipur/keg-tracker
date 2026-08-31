@@ -64,6 +64,17 @@
     </div>
 
     <div class="card">
+      <h3>Customers</h3>
+      <div id="customersList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+      <div id="addCustomerCard" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #eee">
+        <input id="customerName" placeholder="Customer name">
+        <input id="customerAddress" placeholder="Address (optional)">
+        <button onclick="addCustomer()">Add customer</button>
+        <div id="addCustomerResult" class="muted" style="color:#777;font-size:13px"></div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>All kegs</h3>
       <select id="filterStatus" onchange="loadKegs()">
         <option value="">All statuses</option>
@@ -126,6 +137,15 @@ function showMain(user) {
   } else {
     document.getElementById('readOnlyNote').style.display = 'block';
   }
+
+  // Adding customers is allowed for Admin and Warehouse (matches
+  // routes/customers.js) - Warehouse gets this too since they're the
+  // ones who'd hit a brand-new customer mid-workflow when assigning a
+  // destination; everyone else sees the list read-only.
+  if (user.role === 'admin' || user.role === 'warehouse') {
+    document.getElementById('addCustomerCard').style.display = 'block';
+  }
+  loadCustomers();
 
   // Reports are Admin/Manager oversight data - the backend already
   // rejects the request for any other role, so just skip trying for them.
@@ -238,7 +258,53 @@ async function loadReports() {
   html += '<h4>Wash inspection results</h4>';
   html += `<p style="font-size:13px">${r.washStats.total} wash${r.washStats.total === 1 ? '' : 'es'} &middot; ${r.washStats.pass} pass, ${r.washStats.fail} fail (${r.washStats.failRatePercent}% fail rate)</p>`;
 
+  html += '<h4>Customers holding kegs longest</h4>';
+  html += r.customerHoldStats.length
+    ? renderBarChart(r.customerHoldStats.map(c => ({ label: c.customerName, value: c.avgHours, displayValue: c.avgHours + 'h' })))
+    : '<p class="muted" style="color:#777;font-size:13px">No completed customer holds yet.</p>';
+
   el.innerHTML = html;
+}
+
+async function loadCustomers() {
+  const res = await fetch('/api/customers', { credentials: 'include' });
+  const el = document.getElementById('customersList');
+  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load customers.</p>'; return; }
+  const customers = await res.json();
+  if (!customers.length) {
+    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">No customers yet.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>Name</th><th>Address</th></tr></thead>
+      <tbody>
+        ${customers.map(c => `<tr><td>${c.name}</td><td>${c.address || '-'}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function addCustomer() {
+  const name = document.getElementById('customerName').value.trim();
+  const address = document.getElementById('customerAddress').value.trim();
+  const msg = document.getElementById('addCustomerResult');
+  if (!name) { msg.textContent = 'Customer name is required.'; return; }
+
+  const res = await fetch('/api/customers', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name, address }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    msg.textContent = data.error || 'Could not add customer - are you logged in as an admin?';
+    return;
+  }
+  document.getElementById('customerName').value = '';
+  document.getElementById('customerAddress').value = '';
+  msg.textContent = 'Added.';
+  loadCustomers();
 }
 
 init();

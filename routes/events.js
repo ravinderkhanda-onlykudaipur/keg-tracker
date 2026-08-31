@@ -46,11 +46,23 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
   // this, submitting the form blank would silently succeed (a logged
   // event with no actual effect) while ALSO moving the keg to
   // 'dispatched' with no real destination attached to it, since this
-  // action drives the status transition too now. The frontend also
-  // validates this (see checkRequiredFields() in scan.html), but the
-  // server is the real authority here, not just a UI nicety.
-  if (actionType === 'assign_destination' && !(details?.destination || '').trim()) {
-    return res.status(400).json({ error: 'A delivery destination is required.' });
+  // action drives the status transition too now. The frontend now sends
+  // a customer_id (picked from a dropdown, see routes/customers.js)
+  // rather than free text - this resolves it to a real customer record's
+  // name for display, and rejects an id that doesn't actually exist.
+  let resolvedDestination = null;
+  let resolvedCustomerId = null;
+  if (actionType === 'assign_destination') {
+    const customerId = details?.customer_id;
+    if (!customerId) {
+      return res.status(400).json({ error: 'A delivery destination (customer) is required.' });
+    }
+    const customer = db.prepare('SELECT id, name FROM customers WHERE id = ?').get(customerId);
+    if (!customer) {
+      return res.status(400).json({ error: 'Selected customer was not found.' });
+    }
+    resolvedDestination = customer.name;
+    resolvedCustomerId = customer.id;
   }
 
   const insertEvent = db.prepare(`
@@ -59,25 +71,24 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
   `);
 
   const updateKeg = db.prepare(`
-    UPDATE kegs SET status = ?, current_location = ?, destination = ? WHERE id = ?
+    UPDATE kegs SET status = ?, current_location = ?, destination = ?, customer_id = ? WHERE id = ?
   `);
 
   const tx = () => {
     insertEvent.run(kegId, user.id, user.role, actionType, JSON.stringify(details || {}));
     const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
 
-    // 'assign_destination' updates keg.destination; every other action
-    // updates keg.current_location as before. Kept as two separate
-    // columns since they mean different things - "where the keg
-    // physically is right now" vs "where Warehouse has assigned it to go".
+    // 'assign_destination' updates keg.destination + customer_id together;
+    // every other action updates keg.current_location as before. Kept as
+    // separate columns since they mean different things - "where the keg
+    // physically is right now" vs "which customer it's assigned to".
     const nextLocation = actionType === 'assign_destination'
       ? keg.current_location
       : (details?.location || keg.current_location);
-    const nextDestination = actionType === 'assign_destination'
-      ? (details?.destination || keg.destination)
-      : keg.destination;
+    const nextDestination = actionType === 'assign_destination' ? resolvedDestination : keg.destination;
+    const nextCustomerId = actionType === 'assign_destination' ? resolvedCustomerId : keg.customer_id;
 
-    updateKeg.run(nextStatus, nextLocation, nextDestination, kegId);
+    updateKeg.run(nextStatus, nextLocation, nextDestination, nextCustomerId, kegId);
   };
   db.withTransaction(tx);
 
