@@ -93,17 +93,10 @@ const ROLE_ACTIONS = {
     ],
   },
   driver: {
-    // Driver has three possible actions depending on the keg's current status.
-    // Note: no "destination" field here anymore - that's assigned by
-    // Warehouse (see warehouse.assign_destination below) and shown
-    // read-only on this form; see getActionConfig()'s "waiting" case for
-    // what happens if Warehouse hasn't assigned one yet.
-    dispatched_from_filled: {
-      action: 'dispatch', label: 'Log dispatch',
-      fields: [
-        { name: 'pickup_location', label: 'Pickup location', type: 'text', geo: true },
-      ],
-    },
+    // Driver's first involvement is confirming delivery - Warehouse
+    // assigning a destination now dispatches the keg directly (see
+    // warehouse.assign_destination below), so there's no separate
+    // driver-initiated "dispatch" step anymore.
     delivered_from_dispatched: {
       action: 'deliver', label: 'Log delivery',
       fields: [
@@ -118,8 +111,10 @@ const ROLE_ACTIONS = {
   },
   warehouse: {
     // Warehouse has three possible actions depending on the keg's status.
+    // Assigning a destination also dispatches the keg in one step - see
+    // lib/stateMachine.js's assign_destination rule.
     assign_destination: {
-      action: 'assign_destination', label: 'Assign delivery destination',
+      action: 'assign_destination', label: 'Assign destination & dispatch',
       fields: [
         { name: 'destination', label: 'Delivery destination (customer/address)', type: 'text', required: true },
       ],
@@ -252,29 +247,20 @@ function getActionConfig() {
   if (!cfg) return null;
 
   if (currentUser.role === 'driver') {
-    // Driver's form depends on the keg's current status.
-    if (keg.status === 'filled') {
-      // Can't dispatch until Warehouse has assigned a destination - see
-      // renderForm()'s handling of this sentinel value.
-      if (!keg.destination) return 'WAITING_FOR_DESTINATION';
-      return cfg.dispatched_from_filled;
-    }
+    // Driver's first involvement is confirming delivery once Warehouse
+    // has already dispatched it (see warehouse's assign_destination,
+    // which dispatches directly - no separate driver-initiated step).
     if (keg.status === 'dispatched') return cfg.delivered_from_dispatched;
     if (keg.status === 'delivered') return cfg.empty_from_delivered;
     return null;
   }
 
   if (currentUser.role === 'warehouse') {
-    // Assigning a destination comes first for a freshly filled keg. Once
-    // that's done, there's nothing further for Warehouse to do on this
-    // keg until a driver dispatches it - previously this fell through to
-    // "Log location / status" again, which asked Warehouse for a
-    // location repeatedly with no way to move the keg forward (a loop).
-    // Now it shows a clear "waiting for driver" message instead.
-    if (keg.status === 'filled') {
-      if (!keg.destination) return cfg.assign_destination;
-      return 'WAITING_FOR_DISPATCH';
-    }
+    // Assigning a destination also dispatches the keg in one step, so
+    // there's no separate "waiting" state here anymore - as soon as
+    // Warehouse submits this, the keg moves to 'dispatched' and this
+    // form won't come up again for it.
+    if (keg.status === 'filled') return cfg.assign_destination;
     // "Receive empty" is the transition back to empty_returned; otherwise
     // warehouse staff can log a location/status update at any other stage
     // (washed, empty_returned, delivered).
@@ -299,14 +285,6 @@ function renderForm() {
   }
 
   const cfg = getActionConfig();
-  if (cfg === 'WAITING_FOR_DESTINATION') {
-    card.innerHTML = `<p class="muted">This keg is filled and ready, but Warehouse hasn't assigned a delivery destination yet. Check back once they have, or ask them directly.</p>`;
-    return;
-  }
-  if (cfg === 'WAITING_FOR_DISPATCH') {
-    card.innerHTML = `<p class="muted">Destination assigned - this keg is ready to dispatch. Waiting for a driver to pick it up and log the dispatch. Nothing more for Warehouse to do on this keg right now.</p>`;
-    return;
-  }
   if (!cfg) {
     card.innerHTML = `<p class="muted">No action available for role "${currentUser.role}" while keg is "${keg.status.replace(/_/g,' ')}".</p>`;
     return;
@@ -444,13 +422,30 @@ async function submitEvent(action) {
   }
 }
 
+// The database stores timestamps in UTC as plain "YYYY-MM-DD HH:MM:SS"
+// text (SQLite's datetime('now'), no timezone marker in the string
+// itself). This converts one of those for display in Indian Standard
+// Time - storage stays UTC (the correct practice), only the display
+// layer converts.
+function formatIST(utcString) {
+  if (!utcString) return '';
+  const isoUtc = utcString.replace(' ', 'T') + 'Z'; // mark it explicitly UTC so Date parses it correctly
+  const date = new Date(isoUtc);
+  if (isNaN(date.getTime())) return utcString; // fall back to the raw value if parsing ever fails
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  }) + ' IST';
+}
+
 async function renderHistory() {
   const el = document.getElementById('history');
   if (!keg.history.length) { el.innerHTML = '<p class="muted">No events yet.</p>'; return; }
   el.innerHTML = keg.history.slice().reverse().map(h => `
     <div class="history-item">
       <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${h.role})<br>
-      <span class="muted">${h.created_at}</span>
+      <span class="muted">${formatIST(h.created_at)}</span>
       ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
     </div>
   `).join('');

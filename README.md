@@ -12,7 +12,8 @@ discussed earlier. Deployed live at Render.
   Node's built-in `node:sqlite` module (no native compilation needed)
 - `lib/stateMachine.js` — the rules for which role can move a keg from
   which status to which status (this is what stops a keg being dispatched
-  before it's ever filled, or before Warehouse has assigned a destination)
+  before it's ever filled - dispatch and destination-assignment now
+  happen together, see "Data model recap" below)
 - `lib/sessionSecret.js` — persists the session-signing secret across
   local restarts; on Render, `SESSION_SECRET` is set as an environment
   variable instead (see "Deploying"), since Render's free tier has no
@@ -20,7 +21,7 @@ discussed earlier. Deployed live at Render.
 - `routes/auth.js` — bcrypt-hashed passwords + server-side sessions
 - `routes/kegs.js` — create kegs, generate QR codes, search/list
 - `routes/events.js` — the scan-to-action endpoint every form submits to;
-  also where the "no dispatch without an assigned destination" rule lives
+  also where the "destination can't be left blank" rule lives
 - `public/index.html` — admin page: log in, create kegs, view QR codes
 - `public/scan.html` — the mobile page a worker sees after scanning a QR
   code; the form fields change based on their role and the keg's status
@@ -43,10 +44,12 @@ any of the seeded demo users (password `demo1234` for all) to create kegs.
 To try the scan flow: open
 **http://localhost:3000/scan.html?keg=DEMO-KEG-1**, log in as "Wes Washer"
 (password `demo1234`), submit a wash. Then log in as "Fiona Filler" and
-fill it. Then log in as "Wally Warehouse" and assign a delivery
-destination — only after that can "Dana Driver" dispatch it. Try
-dispatching before a destination is assigned, or filling before washing —
-the state machine rejects both with a clear 409 error.
+fill it (Beer Name, Batch Number, and ABV are all required). Then log in
+as "Wally Warehouse" and assign a delivery destination — this both sets
+the destination **and** dispatches the keg in the same step. Then log in
+as "Dana Driver" to confirm delivery. Try filling before washing, or
+submitting an assignment with a blank destination — the state machine and
+the server both reject these with a clear error.
 
 On an actual phone: visit `/api/kegs/DEMO-KEG-1/qrcode.png`, print or
 display it, and scan it with any camera app — it opens the scan page
@@ -115,8 +118,9 @@ Roughly in priority order:
    relevant fields, via the browser's Geolocation API.
 4. ~~**Destination assigned by Warehouse, not typed by the driver.**~~
    Done — see `assign_destination` in `lib/stateMachine.js` and
-   `routes/events.js`. A keg can't be dispatched until Warehouse has set
-   its destination.
+   `routes/events.js`. Superseded by gap #8 below: this action now also
+   dispatches the keg directly, rather than just setting the destination
+   and waiting for a separate driver step.
 5. ~~**Required explanation on failed wash inspection.**~~ Done — the
    washer's damage notes field becomes required, with a 30-character
    minimum, when inspection is marked "fail" (`requiredWhen` in
@@ -133,13 +137,16 @@ Roughly in priority order:
    `ROLE_ACTIONS.filler`). Fill volume is fixed at 20L, recorded
    automatically rather than asked as a field (`fixedDetails` on the
    filler config); best-before date was removed entirely.
-8. ~~**Fixed the Warehouse "loop."**~~ Done — after Warehouse assigns a
-   destination, they no longer get asked for "Log location / status"
-   again on that same keg (which had no way to move it forward). They
-   now see a clear "ready to dispatch, waiting for driver" message
-   instead (`WAITING_FOR_DISPATCH` in `getActionConfig()`,
-   `public/scan.html`). Warehouse still gets the general location-log
-   option for other statuses (e.g. logging where a washed keg is sitting).
+8. ~~**Simplified dispatch: Warehouse assigning a destination now
+   dispatches directly.**~~ Done — `assign_destination` moves the keg
+   straight from `filled` to `dispatched` in one step
+   (`lib/stateMachine.js`), instead of Warehouse setting a destination
+   and then waiting for a separate driver-initiated "dispatch" step. The
+   driver's first involvement is now confirming delivery once it's
+   already dispatched. This also resolved an earlier version of this
+   flow where Warehouse could get stuck being asked for "Log location /
+   status" repeatedly after assigning a destination, with no way to move
+   the keg forward.
 9. **Move off SQLite to a real hosted database** (e.g. Postgres via
    Neon's free tier), so data survives redeploys. Deliberately not done
    yet — see "Deploying" above for the current tradeoff.
@@ -189,7 +196,11 @@ A full code review turned up a few real bugs, now fixed:
 | Event | keg_id, user_id, role, action_type, details (JSON text), created_at |
 
 Status flow: `empty_returned → washed → filled → dispatched → delivered →
-empty_at_customer → empty_returned` (cycle repeats). Between `filled` and
-`dispatched`, Warehouse must run `assign_destination` (no status change,
-just sets the keg's destination) before a driver can dispatch it. See
-`lib/stateMachine.js` for the exact role/transition rules.
+empty_at_customer → empty_returned` (cycle repeats). The `filled →
+dispatched` transition happens in a single step: Warehouse runs
+`assign_destination`, which both sets the keg's destination and moves its
+status to `dispatched` at the same time - there's no separate
+driver-initiated dispatch action. The driver's first involvement is
+`deliver` (confirming delivery location + customer signature) once the
+keg is already dispatched. See `lib/stateMachine.js` for the exact
+role/transition rules.
