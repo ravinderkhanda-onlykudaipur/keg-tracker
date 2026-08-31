@@ -147,19 +147,29 @@ Roughly in priority order:
    flow where Warehouse could get stuck being asked for "Log location /
    status" repeatedly after assigning a destination, with no way to move
    the keg forward.
-9. **Move off SQLite to a real hosted database** (e.g. Postgres via
-   Neon's free tier), so data survives redeploys. Deliberately not done
-   yet — see "Deploying" above for the current tradeoff.
-10. **Persistent session storage** (e.g. a free Redis service), so logins
+9. ~~**Only the correct role can fill in details for a given status.**~~
+   Done — `getActionConfig()` in `public/scan.html` now checks the keg's
+   status for every role (previously only Driver and Warehouse did;
+   Washer and Filler would show their form regardless of status, only
+   getting rejected by the server after submitting). Verified against
+   every possible role × status combination to confirm the frontend
+   never shows a form the backend would reject. When it's not someone's
+   turn, they now see a clear red warning ("No details need to be filled
+   by you right now") instead of a plain gray note, and it names which
+   role the keg is actually waiting on (`STATUS_EXPECTED_ROLE` lookup).
+10. **Move off SQLite to a real hosted database** (e.g. Postgres via
+    Neon's free tier), so data survives redeploys. Deliberately not done
+    yet — see "Deploying" above for the current tradeoff.
+11. **Persistent session storage** (e.g. a free Redis service), so logins
     survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
     not done yet — see the corrected note under "Deploying" above; this
     needs external storage, not just the local-disk fixes used elsewhere,
     since Render's free tier wipes local disk on every restart too.
-11. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
+12. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
     state too long — that needs a scheduled job querying `events`/`kegs`.
-12. **Reporting dashboards.** The data model supports turnover-time and
+13. **Reporting dashboards.** The data model supports turnover-time and
     utilization queries; there's no chart UI yet.
-13. **Custom domain + always-on hosting**, once the free tier's sleep
+14. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

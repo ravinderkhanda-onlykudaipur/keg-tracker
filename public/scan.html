@@ -20,6 +20,8 @@
   .offline-banner { background: #fff3cd; color: #7a5c00; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
   .pending-banner { background: #e1f0ff; color: #0a4b8c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
   .pending-banner button { width: auto; display: inline-block; margin: 6px 6px 0 0; padding: 6px 12px; font-size: 13px; }
+  .wrong-turn-banner { background: #fde2e2; color: #8f1d1d; border: 1px solid #f3a6a6; border-radius: 8px; padding: 14px; font-size: 14px; font-weight: 600; }
+  .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -134,6 +136,18 @@ const ROLE_ACTIONS = {
   },
 };
 
+// Which role is expected to act next for each status - used only to make
+// the "not your turn" warning more useful (tells someone who scans at the
+// wrong point who to actually hand the keg to), not for any validation.
+const STATUS_EXPECTED_ROLE = {
+  empty_returned: 'washer',
+  washed: 'filler',
+  filled: 'warehouse',
+  dispatched: 'driver',
+  delivered: 'driver',
+  empty_at_customer: 'warehouse',
+};
+
 async function init() {
   // If a session cookie is already valid (e.g. page refresh), skip the
   // login screen entirely.
@@ -246,6 +260,20 @@ function getActionConfig() {
   const cfg = ROLE_ACTIONS[currentUser.role];
   if (!cfg) return null;
 
+  // Every branch below mirrors the "from" states enforced server-side in
+  // lib/stateMachine.js - keeping these in sync matters: this is what
+  // stops (say) a washer from even seeing the wash form while a keg is
+  // already filled or dispatched, instead of only finding out after
+  // submitting and getting rejected. See renderForm()'s handling of a
+  // null return for the actual on-screen warning shown in that case.
+  if (currentUser.role === 'washer') {
+    return keg.status === 'empty_returned' ? cfg : null;
+  }
+
+  if (currentUser.role === 'filler') {
+    return keg.status === 'washed' ? cfg : null;
+  }
+
   if (currentUser.role === 'driver') {
     // Driver's first involvement is confirming delivery once Warehouse
     // has already dispatched it (see warehouse's assign_destination,
@@ -261,14 +289,17 @@ function getActionConfig() {
     // Warehouse submits this, the keg moves to 'dispatched' and this
     // form won't come up again for it.
     if (keg.status === 'filled') return cfg.assign_destination;
-    // "Receive empty" is the transition back to empty_returned; otherwise
-    // warehouse staff can log a location/status update at any other stage
-    // (washed, empty_returned, delivered).
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
-    return cfg.general_move;
+    // General location/status logging only applies to the statuses
+    // lib/stateMachine.js's warehouse_move rule actually allows - a keg
+    // that's currently 'dispatched' (out with the driver) isn't one of
+    // them, so Warehouse gets the "nothing to do" warning for it instead
+    // of a form that would just get rejected on submit.
+    if (['washed', 'delivered', 'empty_returned'].includes(keg.status)) return cfg.general_move;
+    return null;
   }
 
-  return cfg;
+  return null;
 }
 
 function renderForm() {
@@ -286,7 +317,18 @@ function renderForm() {
 
   const cfg = getActionConfig();
   if (!cfg) {
-    card.innerHTML = `<p class="muted">No action available for role "${currentUser.role}" while keg is "${keg.status.replace(/_/g,' ')}".</p>`;
+    // Tell them not just "not your turn" but whose turn it actually is,
+    // so they know who to hand the keg off to instead of guessing.
+    const expectedRole = STATUS_EXPECTED_ROLE[keg.status];
+    card.innerHTML = `
+      <div class="wrong-turn-banner">
+        &#9888; No details need to be filled by you right now.
+        <span class="detail">
+          Role "${currentUser.role}" has nothing to do while this keg is "${keg.status.replace(/_/g,' ')}".
+          ${expectedRole ? `This keg is currently waiting on: <b>${expectedRole}</b>.` : ''}
+        </span>
+      </div>
+    `;
     return;
   }
 
