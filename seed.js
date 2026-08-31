@@ -1,0 +1,35 @@
+// seed.js - run with `node seed.js` to populate demo data so you can try
+// the whole flow immediately: one user per role, password "demo1234" for
+// everyone, hashed with bcrypt (never stored in plaintext), plus a keg
+// sitting at "empty_returned" ready to be washed.
+
+const bcrypt = require('bcryptjs');
+const db = require('./db');
+
+const DEMO_PASSWORD = 'demo1234';
+
+const users = [
+  { id: 'u-filler',    name: 'Fiona Filler',    role: 'filler' },
+  { id: 'u-washer',    name: 'Wes Washer',      role: 'washer' },
+  { id: 'u-driver',    name: 'Dana Driver',     role: 'driver' },
+  { id: 'u-warehouse', name: 'Wally Warehouse', role: 'warehouse' },
+];
+
+const insertUser = db.prepare(`
+  INSERT OR IGNORE INTO users (id, name, role, password_hash) VALUES (?, ?, ?, ?)
+`);
+
+async function seed() {
+  const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  users.forEach((u) => insertUser.run(u.id, u.name, u.role, hash));
+
+  db.prepare(`
+    INSERT OR IGNORE INTO kegs (id, size_liters, material, status, current_location)
+    VALUES ('DEMO-KEG-1', 50, 'stainless', 'empty_returned', 'warehouse')
+  `).run();
+
+  console.log(`Seeded demo users (password "${DEMO_PASSWORD}" for all) and keg DEMO-KEG-1`);
+  console.log(users.map((u) => `  ${u.role.padEnd(10)} -> ${u.id}`).join('\n'));
+}
+
+seed();

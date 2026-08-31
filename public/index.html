@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keg Tracker - Admin</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  input, select, button { font-size: 15px; padding: 8px; margin: 4px 4px 4px 0; }
+  button { cursor: pointer; background: #0f6e56; color: white; border: none; border-radius: 6px; padding: 8px 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #eef; }
+  a { color: #0f6e56; }
+</style>
+</head>
+<body>
+  <h1>Keg Tracker &mdash; Admin</h1>
+
+  <div class="card" id="loginCard">
+    <h3>Log in to manage kegs</h3>
+    <select id="userSelect"></select>
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Log in</button>
+    <div id="loginError" style="color:#a32d2d;font-size:13px"></div>
+  </div>
+
+  <div id="mainBlock" style="display:none">
+    <p class="muted" style="color:#777;font-size:13px">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
+
+    <div class="card">
+      <h3>Create a new keg</h3>
+      <input id="size" type="number" placeholder="Size (liters)" value="50">
+      <input id="material" placeholder="Material" value="stainless">
+      <button onclick="createKeg()">Create keg + generate QR</button>
+      <div id="createResult"></div>
+    </div>
+
+    <div class="card">
+      <h3>All kegs</h3>
+      <select id="filterStatus" onchange="loadKegs()">
+        <option value="">All statuses</option>
+        <option value="empty_returned">Empty returned</option>
+        <option value="washed">Washed</option>
+        <option value="filled">Filled</option>
+        <option value="dispatched">Dispatched</option>
+        <option value="delivered">Delivered</option>
+        <option value="empty_at_customer">Empty at customer</option>
+      </select>
+      <table id="kegTable">
+        <thead><tr><th>ID</th><th>Status</th><th>Location</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+async function init() {
+  const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+  const me = await meRes.json();
+  if (me) { showMain(me); return; }
+
+  const res = await fetch('/api/auth/users');
+  const users = await res.json();
+  document.getElementById('userSelect').innerHTML =
+    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+}
+
+async function login() {
+  const userId = document.getElementById('userSelect').value;
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, password }),
+  });
+  if (!res.ok) {
+    document.getElementById('loginError').textContent = 'Invalid password';
+    return;
+  }
+  showMain(await res.json());
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+function showMain(user) {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('mainBlock').style.display = 'block';
+  document.getElementById('whoami').textContent = `${user.name} (${user.role})`;
+  loadKegs();
+}
+
+async function createKeg() {
+  const size_liters = document.getElementById('size').value;
+  const material = document.getElementById('material').value;
+  const res = await fetch('/api/kegs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ size_liters, material }),
+  });
+  if (!res.ok) {
+    document.getElementById('createResult').textContent = 'Could not create keg - are you logged in?';
+    return;
+  }
+  const data = await res.json();
+  document.getElementById('createResult').innerHTML =
+    `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
+  loadKegs();
+}
+
+async function loadKegs() {
+  const status = document.getElementById('filterStatus').value;
+  const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''));
+  const kegs = await res.json();
+  const tbody = document.querySelector('#kegTable tbody');
+  tbody.innerHTML = kegs.map(k => `
+    <tr>
+      <td>${k.id}</td>
+      <td><span class="status">${k.status.replace(/_/g,' ')}</span></td>
+      <td>${k.current_location || '-'}</td>
+      <td><a href="/scan.html?keg=${k.id}">open</a> &middot; <a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
+    </tr>
+  `).join('');
+}
+init();
+</script>
+</body>
+</html>

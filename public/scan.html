@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keg Scan</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; color: #222; }
+  h2 { font-size: 18px; margin-bottom: 4px; }
+  .muted { color: #777; font-size: 13px; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; }
+  label { display: block; font-size: 13px; margin: 10px 0 4px; font-weight: 600; }
+  input, select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+  button { width: 100%; margin-top: 16px; font-size: 16px; padding: 12px; background: #0f6e56; color: white; border: none; border-radius: 8px; cursor: pointer; }
+  .status-pill { display: inline-block; padding: 3px 10px; border-radius: 12px; background: #e1f5ee; color: #085041; font-size: 13px; }
+  .error { color: #a32d2d; font-size: 14px; margin-top: 8px; }
+  .success { color: #3b6d11; font-size: 14px; margin-top: 8px; }
+  .history-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  .history-item b { text-transform: capitalize; }
+</style>
+</head>
+<body>
+
+  <div id="loginBlock" class="card">
+    <h2>Who are you?</h2>
+    <label>User</label>
+    <select id="userSelect"></select>
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Log in</button>
+    <div id="loginError" class="error"></div>
+  </div>
+
+  <div id="appBlock" style="display:none">
+    <h2 id="kegTitle"></h2>
+    <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
+
+    <div class="card" id="formCard"></div>
+
+    <div class="card">
+      <h3 style="margin-top:0">History</h3>
+      <div id="history"></div>
+    </div>
+  </div>
+
+<script>
+const kegId = new URLSearchParams(location.search).get('keg');
+let currentUser = null;
+let keg = null;
+
+// ---- Role -> form field config -------------------------------------------
+// This is the single place that drives "different roles fill different
+// fields" from the original requirement. Add a role/action and its fields
+// here; the form renders itself from this table.
+const ROLE_ACTIONS = {
+  washer: {
+    action: 'wash', label: 'Log wash',
+    fields: [
+      { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
+      { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
+      { name: 'notes', label: 'Damage notes (optional)', type: 'text' },
+    ],
+  },
+  filler: {
+    action: 'fill', label: 'Log fill',
+    fields: [
+      { name: 'product', label: 'Product / beer', type: 'text' },
+      { name: 'batch_number', label: 'Batch number', type: 'text' },
+      { name: 'volume_liters', label: 'Fill volume (L)', type: 'number' },
+      { name: 'abv', label: 'ABV %', type: 'number' },
+      { name: 'best_before', label: 'Best-before date', type: 'date' },
+    ],
+  },
+  driver: {
+    // Driver has three possible actions depending on the keg's current status.
+    dispatched_from_filled: {
+      action: 'dispatch', label: 'Log dispatch',
+      fields: [
+        { name: 'pickup_location', label: 'Pickup location', type: 'text' },
+        { name: 'location', label: 'Delivery destination', type: 'text' },
+      ],
+    },
+    delivered_from_dispatched: {
+      action: 'deliver', label: 'Log delivery',
+      fields: [
+        { name: 'location', label: 'Delivery location (confirm)', type: 'text' },
+        { name: 'customer_signature', label: 'Customer name (signature)', type: 'text' },
+      ],
+    },
+    empty_from_delivered: {
+      action: 'mark_empty', label: 'Mark keg empty at customer',
+      fields: [],
+    },
+  },
+  warehouse: {
+    // Warehouse also has two possible actions depending on the keg's status.
+    receive_from_empty_at_customer: {
+      action: 'receive_empty', label: 'Receive empty keg back into warehouse',
+      fields: [
+        { name: 'location', label: 'Storage zone', type: 'text' },
+      ],
+    },
+    general_move: {
+      action: 'warehouse_move', label: 'Log location / status',
+      fields: [
+        { name: 'location', label: 'Zone / location', type: 'text' },
+      ],
+    },
+  },
+};
+
+async function init() {
+  // If a session cookie is already valid (e.g. page refresh), skip the
+  // login screen entirely.
+  const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+  const me = await meRes.json();
+  if (me) {
+    currentUser = me;
+    showApp();
+    return;
+  }
+
+  const res = await fetch('/api/auth/users');
+  const users = await res.json();
+  document.getElementById('userSelect').innerHTML =
+    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+}
+
+async function login() {
+  const userId = document.getElementById('userSelect').value;
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // required so the session cookie is stored/sent
+    body: JSON.stringify({ userId, password }),
+  });
+  if (!res.ok) {
+    document.getElementById('loginError').textContent = 'Invalid password';
+    return;
+  }
+  currentUser = await res.json();
+  showApp();
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+function showApp() {
+  document.getElementById('loginBlock').style.display = 'none';
+  document.getElementById('appBlock').style.display = 'block';
+  document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
+  loadKeg();
+}
+
+async function loadKeg() {
+  const res = await fetch(`/api/kegs/${kegId}`);
+  if (!res.ok) {
+    document.getElementById('formCard').innerHTML = `<p class="error">Keg ${kegId} not found.</p>`;
+    return;
+  }
+  keg = await res.json();
+  document.getElementById('kegTitle').textContent = keg.id;
+  document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
+  renderForm();
+  renderHistory();
+}
+
+function getActionConfig() {
+  const cfg = ROLE_ACTIONS[currentUser.role];
+  if (!cfg) return null;
+
+  if (currentUser.role === 'driver') {
+    // Driver's form depends on the keg's current status.
+    if (keg.status === 'filled') return cfg.dispatched_from_filled;
+    if (keg.status === 'dispatched') return cfg.delivered_from_dispatched;
+    if (keg.status === 'delivered') return cfg.empty_from_delivered;
+    return null;
+  }
+
+  if (currentUser.role === 'warehouse') {
+    // "Receive empty" is the transition back to empty_returned; otherwise
+    // warehouse staff can log a location/status update at any other stage.
+    return keg.status === 'empty_at_customer' ? cfg.receive_from_empty_at_customer : cfg.general_move;
+  }
+
+  return cfg;
+}
+
+function renderForm() {
+  const cfg = getActionConfig();
+  const card = document.getElementById('formCard');
+  if (!cfg) {
+    card.innerHTML = `<p class="muted">No action available for role "${currentUser.role}" while keg is "${keg.status.replace(/_/g,' ')}".</p>`;
+    return;
+  }
+  card.innerHTML = `
+    <h3 style="margin-top:0">${cfg.label}</h3>
+    ${cfg.fields.map(f => `
+      <label>${f.label}</label>
+      ${f.type === 'select'
+        ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
+        : `<input id="f_${f.name}" type="${f.type}">`}
+    `).join('')}
+    <button onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
+    <div id="submitMsg"></div>
+  `;
+}
+
+async function submitEvent(action) {
+  const cfg = getActionConfig();
+  const details = {};
+  cfg.fields.forEach(f => { details[f.name] = document.getElementById(`f_${f.name}`).value; });
+
+  const res = await fetch(`/api/kegs/${kegId}/events`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // session cookie identifies the user - no userId sent
+    body: JSON.stringify({ actionType: action, details }),
+  });
+  const data = await res.json();
+  const msg = document.getElementById('submitMsg');
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  msg.className = 'success';
+  msg.textContent = 'Logged. New status: ' + data.status.replace(/_/g, ' ');
+  await loadKeg();
+}
+
+async function renderHistory() {
+  const el = document.getElementById('history');
+  if (!keg.history.length) { el.innerHTML = '<p class="muted">No events yet.</p>'; return; }
+  el.innerHTML = keg.history.slice().reverse().map(h => `
+    <div class="history-item">
+      <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${h.role})<br>
+      <span class="muted">${h.created_at}</span>
+      ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
+    </div>
+  `).join('');
+}
+
+init();
+</script>
+</body>
+</html>
