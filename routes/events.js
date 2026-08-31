@@ -37,6 +37,16 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
     });
   }
 
+  // Guard against an empty/blank destination being "assigned" - without
+  // this, submitting the form blank would silently succeed (a logged
+  // event with no actual effect), leaving the keg still un-assigned but
+  // looking like someone already handled it. The frontend also validates
+  // this (see checkRequiredFields() in scan.html), but the server is the
+  // real authority here, not just a UI nicety.
+  if (actionType === 'assign_destination' && !(details?.destination || '').trim()) {
+    return res.status(400).json({ error: 'A delivery destination is required.' });
+  }
+
   const insertEvent = db.prepare(`
     INSERT INTO events (keg_id, user_id, role, action_type, details)
     VALUES (?, ?, ?, ?, ?)

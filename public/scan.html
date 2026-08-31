@@ -122,7 +122,7 @@ const ROLE_ACTIONS = {
     assign_destination: {
       action: 'assign_destination', label: 'Assign delivery destination',
       fields: [
-        { name: 'destination', label: 'Delivery destination (customer/address)', type: 'text' },
+        { name: 'destination', label: 'Delivery destination (customer/address)', type: 'text', required: true },
       ],
     },
     receive_from_empty_at_customer: {
@@ -319,8 +319,20 @@ function renderForm() {
 // against what's actually been entered - both presence and, if set, a
 // minimum length. Returns an error string, or null if everything
 // required is present and long enough.
+// Checks:
+// - plain `required: true` fields are non-empty, always
+// - `requiredWhen` conditions (presence, and optionally a minimum length)
+//   against what's actually been entered, only when the condition applies
+// Returns an error string, or null if everything checks out.
 function checkRequiredFields(cfg, values) {
   for (const f of cfg.fields) {
+    if (f.required) {
+      const val = (values[f.name] || '').trim();
+      if (!val) {
+        return `${f.label.replace(/\s*\(.*\)/, '')} is required.`;
+      }
+    }
+
     if (!f.requiredWhen) continue;
     const depValue = values[f.requiredWhen.field];
     if (depValue !== f.requiredWhen.equals) continue; // condition doesn't apply right now
@@ -458,11 +470,24 @@ async function trySync() {
   if (keg) await loadKeg(); // reflect whatever just synced, or re-show "queued" if still offline
 
   if (outcome.rejected.length) {
-    const details = outcome.rejected.map(r => r.error).join('; ');
-    document.getElementById('pendingBanner').innerHTML += `
-      <div class="error" style="margin-top:6px">Some actions couldn't sync and need attention: ${details}</div>
-    `;
+    const rejectedHtml = outcome.rejected.map(({ item, error }) => `
+      <div class="error" style="margin-top:6px">
+        "${item.actionType.replace(/_/g,' ')}" for ${item.kegId} was rejected: ${error}
+        <br><button onclick="discardQueuedItem('${item.id}')" style="margin-top:4px">Discard this action</button>
+      </div>
+    `).join('');
+    document.getElementById('pendingBanner').innerHTML += rejectedHtml;
   }
+}
+
+function discardQueuedItem(id) {
+  // Lets someone clear a permanently-rejected queued action (e.g. it was
+  // superseded by someone else's update) instead of it blocking this keg
+  // on this device forever - see the comment in offline-queue.js's
+  // syncAll() for why rejections aren't auto-dropped.
+  OfflineQueue.removeById(id);
+  updatePendingBanner();
+  if (keg) renderForm(); // re-check whether this keg can now show its normal form again
 }
 
 // Auto-sync whenever connectivity returns, and re-check periodically in

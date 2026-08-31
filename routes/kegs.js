@@ -37,12 +37,17 @@ router.get('/:id', (req, res) => {
 });
 
 router.get('/:id/qrcode.png', async (req, res) => {
-  const keg = db.prepare('SELECT id FROM kegs WHERE id = ?').get(req.params.id);
-  if (!keg) return res.status(404).json({ error: 'Keg not found' });
+  try {
+    const keg = db.prepare('SELECT id FROM kegs WHERE id = ?').get(req.params.id);
+    if (!keg) return res.status(404).json({ error: 'Keg not found' });
 
-  const scanUrl = `${req.protocol}://${req.get('host')}/scan.html?keg=${keg.id}`;
-  res.type('png');
-  QRCode.toFileStream(res, scanUrl, { width: 400, margin: 2 });
+    const scanUrl = `${req.protocol}://${req.get('host')}/scan.html?keg=${keg.id}`;
+    res.type('png');
+    QRCode.toFileStream(res, scanUrl, { width: 400, margin: 2 });
+  } catch (err) {
+    console.error('QR code generation error:', err);
+    res.status(500).json({ error: 'Could not generate QR code' });
+  }
 });
 
 router.get('/', (req, res) => {

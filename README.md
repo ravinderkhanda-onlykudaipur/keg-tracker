@@ -80,6 +80,19 @@ demo; a real database (Postgres) would fix this, but that's a deliberate
 choice to defer for now (see gap list below) rather than something
 broken.
 
+**About `SESSION_SECRET` and staying logged in — corrected note:** setting
+this environment variable is still the right thing to do (it keeps the
+cookie-signing secret stable and unguessable), but on its own it does
+**not** stop people from being logged out on redeploy/restart/sleep-wake.
+That's because session *data* (who's actually logged in) lives in
+Express's default in-memory store, which is wiped by the exact same
+ephemeral-disk-and-process reset that wipes the SQLite file — completely
+independent of whether the secret is stable. A real fix needs an
+external, persistent session store (e.g. a free-tier Redis service like
+Upstash), which is infrastructure on the same order as the Postgres move
+already deferred below. Until then: expect to need to log back in after
+Render's 15-minute idle sleep, not just after a `git push`.
+
 Also: the free web service sleeps after 15 minutes of no traffic (first
 visit after that takes ~1 minute to wake up).
 
@@ -118,12 +131,42 @@ Roughly in priority order:
 7. **Move off SQLite to a real hosted database** (e.g. Postgres via
    Neon's free tier), so data survives redeploys. Deliberately not done
    yet — see "Deploying" above for the current tradeoff.
-8. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
+8. **Persistent session storage** (e.g. a free Redis service), so logins
+   survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
+   not done yet — see the corrected note under "Deploying" above; this
+   needs external storage, not just the local-disk fixes used elsewhere,
+   since Render's free tier wipes local disk on every restart too.
+9. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
    state too long — that needs a scheduled job querying `events`/`kegs`.
-9. **Reporting dashboards.** The data model supports turnover-time and
-   utilization queries; there's no chart UI yet.
-10. **Custom domain + always-on hosting**, once the free tier's sleep
+10. **Reporting dashboards.** The data model supports turnover-time and
+    utilization queries; there's no chart UI yet.
+11. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
+
+## Fixed in a review pass (worth knowing what these were)
+
+A full code review turned up a few real bugs, now fixed:
+
+- **Crash bug:** `/api/auth/login` would crash the entire server on a
+  malformed request (e.g. an empty POST body) — reachable by anyone,
+  without logging in, including automated bots that scan public URLs.
+  Fixed with input validation and a try/catch (`routes/auth.js`). Also
+  added a process-level safety net (`process.on('unhandledRejection', ...)`
+  in `server.js`) so the same class of bug elsewhere can't take the whole
+  app down again.
+- **Dead-end bug:** a queued offline action that got rejected on sync
+  (e.g. superseded by someone else's update) had no way to be removed —
+  it would block that keg on that device indefinitely. Fixed with a
+  "Discard this action" button (`discardQueuedItem()` in
+  `public/scan.html`, using the already-existing but previously
+  unwired `removeById()` in `offline-queue.js`).
+- **Silent-failure bug:** Warehouse could submit "Assign delivery
+  destination" with the field left blank — it would report success but
+  leave the keg's destination actually unset, creating a misleading
+  audit trail. Fixed with validation on both the frontend
+  (`checkRequiredFields()`) and, more importantly, the backend
+  (`routes/events.js`), since client-side validation alone isn't a real
+  guarantee.
 
 ## Data model recap
 

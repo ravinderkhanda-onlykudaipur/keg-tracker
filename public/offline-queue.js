@@ -85,8 +85,9 @@ const OfflineQueue = (() => {
         const data = await res.json().catch(() => ({}));
         outcome.rejected.push({ item, error: data.error || `HTTP ${res.status}` });
         // Leave it queued - a rejection needs a human to look at it, not
-        // a silent drop. See clearRejected() for how the UI lets someone
-        // discard it after reading the error.
+        // a silent drop. The scan.html UI shows the error and offers a
+        // "Discard" button that calls removeById(item.id) directly, so
+        // the item doesn't get stuck here forever with no way out.
       }
     }
     return outcome;

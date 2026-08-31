@@ -13,6 +13,19 @@ const eventRoutes = require('./routes/events');
 const app = express();
 app.use(express.json());
 
+// Safety net: an unhandled promise rejection anywhere in the app (e.g. an
+// async route handler that throws without a try/catch) would otherwise
+// crash the whole Node process by default - taking the entire app down
+// for every user, not just the one bad request. Logging and continuing
+// keeps the server up; the specific request that caused it still fails
+// with whatever Express does by default (a hung/dropped connection),
+// which is far better than a full outage. This is a backstop, not a
+// substitute for fixing the underlying bug where it's found - see
+// routes/auth.js's /login for the real fix to the crash we found there.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection (server stays up):', reason);
+});
+
 // Render (and most hosts) put the app behind a reverse proxy that
 // terminates HTTPS. Without this, req.protocol always reports 'http',
 // which would make generated QR codes encode the wrong scheme.
