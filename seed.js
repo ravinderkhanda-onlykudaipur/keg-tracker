@@ -1,7 +1,12 @@
-// seed.js - run with `node seed.js` to populate demo data so you can try
-// the whole flow immediately: one user per role, password "demo1234" for
-// everyone, hashed with bcrypt (never stored in plaintext), plus a keg
-// sitting at "empty_returned" ready to be washed.
+// seed.js - populates demo data: one user per role, password "demo1234"
+// for everyone (hashed with bcrypt, never stored in plaintext), plus a
+// keg sitting at "empty_returned" ready to be washed.
+//
+// Exported as seedIfEmpty() so server.js can auto-run it on startup when
+// the database is empty - important on hosts like Render's free tier,
+// where the disk resets on every redeploy and there's no easy way to
+// manually run `node seed.js` against the live instance each time.
+// Can still be run directly too: `node seed.js`.
 
 const bcrypt = require('bcryptjs');
 const db = require('./db');
@@ -15,11 +20,16 @@ const users = [
   { id: 'u-warehouse', name: 'Wally Warehouse', role: 'warehouse' },
 ];
 
-const insertUser = db.prepare(`
-  INSERT OR IGNORE INTO users (id, name, role, password_hash) VALUES (?, ?, ?, ?)
-`);
+async function seedIfEmpty() {
+  const { count } = db.prepare('SELECT COUNT(*) AS count FROM users').get();
+  if (count > 0) {
+    console.log(`Database already has ${count} user(s) - skipping seed.`);
+    return;
+  }
 
-async function seed() {
+  const insertUser = db.prepare(`
+    INSERT OR IGNORE INTO users (id, name, role, password_hash) VALUES (?, ?, ?, ?)
+  `);
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   users.forEach((u) => insertUser.run(u.id, u.name, u.role, hash));
 
@@ -32,4 +42,8 @@ async function seed() {
   console.log(users.map((u) => `  ${u.role.padEnd(10)} -> ${u.id}`).join('\n'));
 }
 
-seed();
+module.exports = { seedIfEmpty };
+
+if (require.main === module) {
+  seedIfEmpty(); // allows `node seed.js` to still work directly
+}
