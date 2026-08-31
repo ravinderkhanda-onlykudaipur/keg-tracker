@@ -52,6 +52,24 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_keg ON events(keg_id);
 CREATE INDEX IF NOT EXISTS idx_kegs_status ON kegs(status);
+
+CREATE TABLE IF NOT EXISTS device_registrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  role TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  device_label TEXT,
+  registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(role, device_id)
+);
+
+CREATE TABLE IF NOT EXISTS device_approval_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  role TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  requested_by_user_id TEXT,
+  requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(role, device_id)
+);
 `);
 
 // node:sqlite's DatabaseSync has no built-in .transaction() helper (unlike

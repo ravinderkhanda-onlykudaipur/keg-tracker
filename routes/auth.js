@@ -1,17 +1,20 @@
 // routes/auth.js
 // Real auth: hashed passwords (bcrypt) + server-side sessions. The session
 // cookie, not anything the client claims in a request body, is what
-// determines who's logged in - see middleware/requireAuth.js.
+// determines who's logged in - see middleware/requireAuth.js. Also where
+// device registration (lib/deviceAuth.js) is checked, after the password
+// - only for the four operational roles, see that file for why.
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
+const { checkAndRegisterDevice } = require('../lib/deviceAuth');
 
 const router = express.Router();
 
 router.post('/login', async (req, res) => {
   try {
-    const { userId, password } = req.body || {};
+    const { userId, password, deviceId } = req.body || {};
 
     // Validate input shape before it ever reaches the database - this is
     // exactly the gap that let a malformed request (e.g. an empty body)
@@ -29,6 +32,19 @@ router.post('/login', async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid user or password' });
+
+    // Device check runs only after a correct password - this way a
+    // random unauthenticated request can't probe which roles are
+    // device-gated or spam pending-approval log entries just by
+    // guessing usernames.
+    const deviceCheck = checkAndRegisterDevice(db, user.role, deviceId, user.id);
+    if (!deviceCheck.allowed) {
+      return res.status(403).json({
+        error: deviceCheck.pending
+          ? `This device isn't approved for the ${user.role} role yet. An Admin needs to approve it from the Devices section on the admin page.`
+          : `Could not identify this device - try reloading the page and logging in again.`,
+      });
+    }
 
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: 'Login failed, try again' });

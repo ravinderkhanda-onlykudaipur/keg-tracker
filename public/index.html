@@ -25,6 +25,11 @@
   .bar-value { width: 64px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
   .card h4 { margin: 16px 0 4px; font-size: 14px; }
   .card h4:first-child { margin-top: 0; }
+  .device-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  .device-item:last-child { border-bottom: none; }
+  .device-id-code { font-family: monospace; font-size: 11px; color: #666; word-break: break-all; }
+  .device-item button { font-size: 12px; padding: 4px 10px; margin-top: 4px; }
+  .btn-danger { background: #a32d2d; }
 </style>
 </head>
 <body>
@@ -63,6 +68,12 @@
       <div id="reportsContent"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
     </div>
 
+    <div class="card" id="devicesCard" style="display:none">
+      <h3>Devices</h3>
+      <p class="muted" style="color:#777;font-size:13px">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
+      <div id="devicesContent"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+    </div>
+
     <div class="card">
       <h3>Customers</h3>
       <div id="customersList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
@@ -93,7 +104,10 @@
     </div>
   </div>
 
+<script src="/device-id.js"></script>
 <script>
+let isAdmin = false;
+
 async function init() {
   const meRes = await fetch('/api/auth/me', { credentials: 'include' });
   const me = await meRes.json();
@@ -111,10 +125,11 @@ async function login() {
   const res = await fetch('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ userId, password }),
+    body: JSON.stringify({ userId, password, deviceId: DeviceId.get() }),
   });
   if (!res.ok) {
-    document.getElementById('loginError').textContent = 'Invalid password';
+    const data = await res.json().catch(() => ({}));
+    document.getElementById('loginError').textContent = data.error || 'Invalid password';
     return;
   }
   showMain(await res.json());
@@ -152,6 +167,9 @@ function showMain(user) {
   if (user.role === 'admin' || user.role === 'manager') {
     document.getElementById('reportsCard').style.display = 'block';
     loadReports();
+    isAdmin = user.role === 'admin';
+    document.getElementById('devicesCard').style.display = 'block';
+    loadDevices();
   }
 
   loadKegs();
@@ -305,6 +323,64 @@ async function addCustomer() {
   document.getElementById('customerAddress').value = '';
   msg.textContent = 'Added.';
   loadCustomers();
+}
+
+async function loadDevices() {
+  const res = await fetch('/api/devices', { credentials: 'include' });
+  const el = document.getElementById('devicesContent');
+  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load devices.</p>'; return; }
+  const { registered, pending } = await res.json();
+
+  let html = '<h4>Pending approval</h4>';
+  html += pending.length
+    ? pending.map(p => `
+        <div class="device-item">
+          <b>${p.role}</b> &mdash; requested by ${p.requested_by_name || 'unknown user'}
+          <br><span class="device-id-code">${p.device_id}</span>
+          ${isAdmin ? `
+            <br><button onclick="approveDevice('${p.role}','${p.device_id}')">Approve</button>
+            <button onclick="dismissDevice('${p.role}','${p.device_id}')" style="background:#888">Dismiss</button>
+          ` : ''}
+        </div>
+      `).join('')
+    : '<p class="muted" style="color:#777;font-size:13px">No pending requests.</p>';
+
+  html += '<h4>Approved devices</h4>';
+  html += registered.length
+    ? registered.map(d => `
+        <div class="device-item">
+          <b>${d.role}</b>${d.device_label ? ' &mdash; ' + d.device_label : ''}
+          <br><span class="device-id-code">${d.device_id}</span>
+          ${isAdmin ? `<br><button class="btn-danger" onclick="revokeDevice('${d.role}','${d.device_id}')">Revoke</button>` : ''}
+        </div>
+      `).join('')
+    : '<p class="muted" style="color:#777;font-size:13px">No devices approved yet.</p>';
+
+  el.innerHTML = html;
+}
+
+async function approveDevice(role, deviceId) {
+  await fetch('/api/devices/approve', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+  });
+  loadDevices();
+}
+
+async function revokeDevice(role, deviceId) {
+  await fetch('/api/devices/revoke', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+  });
+  loadDevices();
+}
+
+async function dismissDevice(role, deviceId) {
+  await fetch('/api/devices/dismiss', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+  });
+  loadDevices();
 }
 
 init();

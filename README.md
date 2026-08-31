@@ -38,9 +38,14 @@ discussed earlier. Deployed live at Render.
 - `routes/customers.js` — customer CRUD (Admin/Warehouse can create,
   anyone logged in can list); feeds the destination dropdown in
   `public/scan.html` and the "Customers" section on the admin page
+- `lib/deviceAuth.js` — device registration for the four operational
+  roles (see "Device registration" below)
+- `routes/devices.js` — Admin approves/revokes devices, Manager can view
+- `public/device-id.js` — generates and persists this browser's random
+  device ID, used by both `scan.html` and `index.html` at login
 - `public/index.html` — admin page: log in, create kegs (Admin only),
-  view QR codes, browse all kegs, see the full alerts and reports
-  dashboards (Admin/Manager)
+  view QR codes, browse all kegs, see the full alerts, reports, and
+  device-approval dashboards (Admin/Manager)
 - `public/scan.html` — the mobile page a worker sees after scanning a QR
   code; the form fields change based on their role and the keg's status;
   also shows a banner if other kegs are overdue for that person's role
@@ -59,6 +64,36 @@ discussed earlier. Deployed live at Render.
   dashboard as Admin, but the "Create a new keg" form doesn't appear for
   them, and the backend rejects a create-keg request from any non-admin
   role even if attempted directly against the API
+
+## Device registration
+
+The four operational roles are also restricted to approved devices - see
+`lib/deviceAuth.js`. **The first successful login for a role
+auto-registers that device**, since otherwise nobody could ever log in
+the first time; every device after that needs Admin approval from the
+"Devices" section on the admin page. Blocked attempts aren't just
+rejected - they're logged as a pending request Admin can review and
+approve without needing anyone to read out a device ID over the phone.
+
+Deliberately **not** applied to Admin or Manager: gating those risks an
+unrecoverable lockout (if the only Admin's device ever changed, nobody
+would be left to approve a fix), and they legitimately might check things
+from a home computer or office desktop without that being suspicious.
+Each role's approved-device list is independent - a device approved for
+Washer isn't automatically approved for Filler.
+
+**In practice, if you've been testing all four operational roles from
+one phone**, each role auto-bootstrapped to that same phone the first
+time you logged in as it - you won't see any rejection. You'd only hit
+the "not approved" message by logging in as one of those roles from a
+*second* device or browser, which is exactly the scenario this is meant
+to catch.
+
+The device identifier itself (`public/device-id.js`) is a random ID
+generated once and stored in that browser's local storage - not
+fingerprinting, nothing derived from the device's actual hardware. It's
+also reset if someone clears their browser data or reinstalls the app,
+so this is a real but soft signal, not a hard security guarantee.
 
 ## Run it locally
 
@@ -318,7 +353,25 @@ Roughly in priority order:
     Kegs now link to a real `customer_id`, which powers a new "who holds
     kegs longest" report (`getCustomerHoldStats()` in `lib/reports.js`,
     tested against a two-customer scenario with known hold durations).
-19. **Custom domain + always-on hosting**, once the free tier's sleep
+19. ~~**Device registration for operational roles.**~~ Done — see
+    "Device registration" above. Restricts login as Filler, Washer,
+    Driver, or Warehouse to Admin-approved devices, after a
+    trust-on-first-use bootstrap. Tested extensively given the
+    security-sensitive nature: bootstrap on first login, same device
+    allowed again, a genuinely different device blocked and logged as
+    pending (not silently dropped), Admin/Manager confirmed exempt even
+    across wildly different devices, a missing device ID rejected
+    cleanly without logging a bogus request, repeat attempts from the
+    same blocked device confirmed not to spam duplicate pending rows,
+    and the full approve → now-allowed and revoke → blocked-again
+    round trips both confirmed against a real database. Route-level
+    permissions also verified: Admin can approve/revoke, Manager can
+    view only, operational roles can't reach this API at all. Known
+    limitation, stated plainly: the device ID lives in that browser's
+    local storage, so it resets if someone clears their data or
+    reinstalls - a real signal for casual/accidental cases, not a hard
+    guarantee against someone deliberately spoofing it.
+20. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

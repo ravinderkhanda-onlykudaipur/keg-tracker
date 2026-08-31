@@ -57,6 +57,7 @@
   </div>
 
 <script src="/offline-queue.js"></script>
+<script src="/device-id.js"></script>
 <script>
 const kegId = new URLSearchParams(location.search).get('keg');
 let currentUser = null;
@@ -193,10 +194,15 @@ async function login() {
   const res = await fetch('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'include', // required so the session cookie is stored/sent
-    body: JSON.stringify({ userId, password }),
+    body: JSON.stringify({ userId, password, deviceId: DeviceId.get() }),
   });
   if (!res.ok) {
-    document.getElementById('loginError').textContent = 'Invalid password';
+    // Show the server's actual reason (wrong password, or now also a
+    // possible "device not approved" rejection - see lib/deviceAuth.js)
+    // instead of a fixed "Invalid password" that would be misleading for
+    // the device case.
+    const data = await res.json().catch(() => ({}));
+    document.getElementById('loginError').textContent = data.error || 'Invalid password';
     return;
   }
   currentUser = await res.json();
