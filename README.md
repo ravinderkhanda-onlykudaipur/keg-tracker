@@ -128,19 +128,31 @@ Roughly in priority order:
 6. ~~**Prevent duplicate submissions.**~~ Done — `submitEvent()` disables
    the submit button and ignores repeat clicks while a submission is in
    flight (`isSubmitting` guard in `public/scan.html`).
-7. **Move off SQLite to a real hosted database** (e.g. Postgres via
+7. ~~**Required filler fields; simplified fill fields.**~~ Done — Beer
+   Name, Batch Number, and ABV are now required (`required: true` in
+   `ROLE_ACTIONS.filler`). Fill volume is fixed at 20L, recorded
+   automatically rather than asked as a field (`fixedDetails` on the
+   filler config); best-before date was removed entirely.
+8. ~~**Fixed the Warehouse "loop."**~~ Done — after Warehouse assigns a
+   destination, they no longer get asked for "Log location / status"
+   again on that same keg (which had no way to move it forward). They
+   now see a clear "ready to dispatch, waiting for driver" message
+   instead (`WAITING_FOR_DISPATCH` in `getActionConfig()`,
+   `public/scan.html`). Warehouse still gets the general location-log
+   option for other statuses (e.g. logging where a washed keg is sitting).
+9. **Move off SQLite to a real hosted database** (e.g. Postgres via
    Neon's free tier), so data survives redeploys. Deliberately not done
    yet — see "Deploying" above for the current tradeoff.
-8. **Persistent session storage** (e.g. a free Redis service), so logins
-   survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
-   not done yet — see the corrected note under "Deploying" above; this
-   needs external storage, not just the local-disk fixes used elsewhere,
-   since Render's free tier wipes local disk on every restart too.
-9. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
-   state too long — that needs a scheduled job querying `events`/`kegs`.
-10. **Reporting dashboards.** The data model supports turnover-time and
+10. **Persistent session storage** (e.g. a free Redis service), so logins
+    survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
+    not done yet — see the corrected note under "Deploying" above; this
+    needs external storage, not just the local-disk fixes used elsewhere,
+    since Render's free tier wipes local disk on every restart too.
+11. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
+    state too long — that needs a scheduled job querying `events`/`kegs`.
+12. **Reporting dashboards.** The data model supports turnover-time and
     utilization queries; there's no chart UI yet.
-11. **Custom domain + always-on hosting**, once the free tier's sleep
+13. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

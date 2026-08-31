@@ -85,12 +85,11 @@ const ROLE_ACTIONS = {
   },
   filler: {
     action: 'fill', label: 'Log fill',
+    fixedDetails: { volume_liters: 20 }, // every fill is 20L - not a field the user fills in, just recorded automatically
     fields: [
-      { name: 'product', label: 'Product / beer', type: 'text' },
-      { name: 'batch_number', label: 'Batch number', type: 'text' },
-      { name: 'volume_liters', label: 'Fill volume (L)', type: 'number' },
-      { name: 'abv', label: 'ABV %', type: 'number' },
-      { name: 'best_before', label: 'Best-before date', type: 'date' },
+      { name: 'product', label: 'Beer Name', type: 'text', required: true },
+      { name: 'batch_number', label: 'Batch Number', type: 'text', required: true },
+      { name: 'abv', label: 'ABV %', type: 'number', required: true },
     ],
   },
   driver: {
@@ -266,10 +265,19 @@ function getActionConfig() {
   }
 
   if (currentUser.role === 'warehouse') {
-    // Assigning a destination comes first for a freshly filled keg; then
-    // "receive empty" is the transition back to empty_returned; otherwise
-    // warehouse staff can log a location/status update at any other stage.
-    if (keg.status === 'filled' && !keg.destination) return cfg.assign_destination;
+    // Assigning a destination comes first for a freshly filled keg. Once
+    // that's done, there's nothing further for Warehouse to do on this
+    // keg until a driver dispatches it - previously this fell through to
+    // "Log location / status" again, which asked Warehouse for a
+    // location repeatedly with no way to move the keg forward (a loop).
+    // Now it shows a clear "waiting for driver" message instead.
+    if (keg.status === 'filled') {
+      if (!keg.destination) return cfg.assign_destination;
+      return 'WAITING_FOR_DISPATCH';
+    }
+    // "Receive empty" is the transition back to empty_returned; otherwise
+    // warehouse staff can log a location/status update at any other stage
+    // (washed, empty_returned, delivered).
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
     return cfg.general_move;
   }
@@ -293,6 +301,10 @@ function renderForm() {
   const cfg = getActionConfig();
   if (cfg === 'WAITING_FOR_DESTINATION') {
     card.innerHTML = `<p class="muted">This keg is filled and ready, but Warehouse hasn't assigned a delivery destination yet. Check back once they have, or ask them directly.</p>`;
+    return;
+  }
+  if (cfg === 'WAITING_FOR_DISPATCH') {
+    card.innerHTML = `<p class="muted">Destination assigned - this keg is ready to dispatch. Waiting for a driver to pick it up and log the dispatch. Nothing more for Warehouse to do on this keg right now.</p>`;
     return;
   }
   if (!cfg) {
@@ -378,7 +390,7 @@ async function submitEvent(action) {
   if (isSubmitting) return; // ignore a second click while the first is still in flight
 
   const cfg = getActionConfig();
-  const details = {};
+  const details = { ...(cfg.fixedDetails || {}) }; // e.g. filler's fixed 20L volume, not a visible field
   cfg.fields.forEach(f => { details[f.name] = document.getElementById(`f_${f.name}`).value; });
 
   const requiredError = checkRequiredFields(cfg, details);
