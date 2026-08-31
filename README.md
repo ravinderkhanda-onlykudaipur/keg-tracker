@@ -14,6 +14,10 @@ discussed earlier. Deployed live at Render.
   which status to which status (this is what stops a keg being dispatched
   before it's ever filled - dispatch and destination-assignment now
   happen together, see "Data model recap" below)
+- `lib/cooldown.js` — minimum time gap required before certain actions
+  can repeat on the same keg (e.g. can't mark a keg empty moments after
+  delivering it) — see gap #10 below for why, and how to tune the
+  duration via `ACTION_COOLDOWN_MS`
 - `lib/sessionSecret.js` — persists the session-signing secret across
   local restarts; on Render, `SESSION_SECRET` is set as an environment
   variable instead (see "Deploying"), since Render's free tier has no
@@ -21,7 +25,7 @@ discussed earlier. Deployed live at Render.
 - `routes/auth.js` — bcrypt-hashed passwords + server-side sessions
 - `routes/kegs.js` — create kegs, generate QR codes, search/list
 - `routes/events.js` — the scan-to-action endpoint every form submits to;
-  also where the "destination can't be left blank" rule lives
+  also where the "destination can't be left blank" and cooldown rules live
 - `public/index.html` — admin page: log in, create kegs, view QR codes
 - `public/scan.html` — the mobile page a worker sees after scanning a QR
   code; the form fields change based on their role and the keg's status
@@ -157,19 +161,31 @@ Roughly in priority order:
    turn, they now see a clear red warning ("No details need to be filled
    by you right now") instead of a plain gray note, and it names which
    role the keg is actually waiting on (`STATUS_EXPECTED_ROLE` lookup).
-10. **Move off SQLite to a real hosted database** (e.g. Postgres via
+10. ~~**Cooldown between certain actions on the same keg.**~~ Done —
+    `lib/cooldown.js`. Two real problems this fixes: (1) a driver could
+    log delivery and immediately mark the same keg empty in one sitting,
+    even though "empty" is really a separate, later real-world moment;
+    (2) Warehouse's "Log location / status" had no natural stopping
+    point and could be submitted in an unbounded loop. Both now require
+    a minimum time gap since the relevant prior event, enforced
+    server-side (429 response with a clear "time remaining" message).
+    Duration is set via the `ACTION_COOLDOWN_MS` environment variable —
+    defaults to 1 day (`86400000`) if unset; set it to something short
+    like `60000` (1 minute) on Render for testing, and back to a day (or
+    remove it) for real use. No code change needed to adjust it.
+11. **Move off SQLite to a real hosted database** (e.g. Postgres via
     Neon's free tier), so data survives redeploys. Deliberately not done
     yet — see "Deploying" above for the current tradeoff.
-11. **Persistent session storage** (e.g. a free Redis service), so logins
+12. **Persistent session storage** (e.g. a free Redis service), so logins
     survive Render's redeploys/restarts/sleep-wake cycles. Deliberately
     not done yet — see the corrected note under "Deploying" above; this
     needs external storage, not just the local-disk fixes used elsewhere,
     since Render's free tier wipes local disk on every restart too.
-12. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
+13. **Alerts.** Nothing yet flags overdue returns or kegs stuck in one
     state too long — that needs a scheduled job querying `events`/`kegs`.
-13. **Reporting dashboards.** The data model supports turnover-time and
+14. **Reporting dashboards.** The data model supports turnover-time and
     utilization queries; there's no chart UI yet.
-14. **Custom domain + always-on hosting**, once the free tier's sleep
+15. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Fixed in a review pass (worth knowing what these were)

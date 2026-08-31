@@ -1,8 +1,9 @@
 // routes/events.js
 // This is the heart of the system: every QR scan submission lands here.
-// It validates the role/transition against the state machine, writes an
-// immutable event row, and updates the keg's current status/location (and,
-// for 'assign_destination', its destination too - see below. That action
+// It validates the role/transition against the state machine, checks any
+// cooldown rule (lib/cooldown.js), and writes an immutable event row,
+// updating the keg's current status/location (and, for
+// 'assign_destination', its destination too - see below. That action
 // also moves the keg straight to 'dispatched': Warehouse assigning a
 // destination IS the dispatch, there's no separate driver-initiated step).
 //
@@ -14,6 +15,7 @@ const express = require('express');
 const db = require('../db');
 const { validateTransition } = require('../lib/stateMachine');
 const { requireAuth } = require('../middleware/requireAuth');
+const { checkCooldown } = require('../lib/cooldown');
 
 const router = express.Router();
 
@@ -28,6 +30,16 @@ router.post('/:kegId/events', requireAuth, (req, res) => {
   const result = validateTransition(actionType, user.role, keg.status);
   if (!result.ok) {
     return res.status(409).json({ error: result.error }); // 409 Conflict: illegal state transition
+  }
+
+  // A minimum time gap before certain actions can repeat on this keg -
+  // see lib/cooldown.js for why (e.g. a keg can't realistically be
+  // "empty at customer" moments after being delivered full; Warehouse's
+  // location log shouldn't be spammable in an unbounded loop). Duration
+  // is set via ACTION_COOLDOWN_MS - short for testing, longer for real use.
+  const cooldown = checkCooldown(db, kegId, actionType);
+  if (cooldown.blocked) {
+    return res.status(429).json({ error: cooldown.error }); // 429 Too Many Requests
   }
 
   // Guard against an empty/blank destination being "assigned" - without
