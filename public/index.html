@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Keg Tracker - Admin</title>
+
+<!-- PWA installability - see the matching comment in scan.html for why
+     both the manifest and the apple-specific tags are needed. -->
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#16130F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Kegs Admin">
 <style>
   :root {
     --bg: #16130F;
@@ -54,6 +64,16 @@
   .user-inactive { opacity: 0.55; }
   .badge-inactive { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 13px; background: #3D342A; color: var(--text-muted); margin-left: 6px; }
   .mfg-number { color: var(--text-muted); font-size: 14px; }
+  .tab-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 2px; }
+  .tab-btn { background: transparent; color: var(--text-muted); border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 10px 14px; font-weight: 600; font-size: 15px; margin: 0; }
+  .tab-btn:hover { background: var(--card-bg); color: var(--text); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  .kpi-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px 20px; flex: 1; min-width: 120px; }
+  .kpi-number { font-size: 32px; font-weight: 800; color: var(--primary); line-height: 1.1; }
+  .kpi-label { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -77,97 +97,123 @@
   <div id="mainBlock" style="display:none">
     <p class="muted">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
 
-    <div id="readOnlyNote" class="role-note" style="display:none">
-      You have view-only access &mdash; you can see everything here, but only an Admin can create kegs or make changes.
+    <div class="tab-bar">
+      <button class="tab-btn" id="tabBtn-overview" onclick="showTab('overview')">Overview</button>
+      <button class="tab-btn" id="tabBtn-kegs" onclick="showTab('kegs')">Kegs</button>
+      <button class="tab-btn" id="tabBtn-customers" onclick="showTab('customers')">Customers</button>
+      <button class="tab-btn" id="tabBtn-products" onclick="showTab('products')">Products</button>
+      <button class="tab-btn" id="tabBtn-reports" onclick="showTab('reports')" style="display:none">Reports</button>
+      <button class="tab-btn" id="tabBtn-users" onclick="showTab('users')" style="display:none">Users</button>
+      <button class="tab-btn" id="tabBtn-devices" onclick="showTab('devices')" style="display:none">Devices</button>
     </div>
 
-    <div class="card" id="createKegCard" style="display:none">
-      <h3>Create a new keg</h3>
-      <input id="mfgNumber" placeholder="Manufacturing keg number (required)">
-      <input id="size" type="number" placeholder="Size (liters)" value="50">
-      <input id="material" placeholder="Material" value="stainless">
-      <button onclick="createKeg()">Create keg + generate QR</button>
-      <div id="createResult"></div>
+    <div class="tab-panel" id="tab-overview">
+      <div id="readOnlyNote" class="role-note" style="display:none">
+        You have view-only access &mdash; you can see everything here, but only an Admin can create kegs or make changes.
+      </div>
+
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <div class="card">
+        <h3>Alerts</h3>
+        <div id="alertsList"><p class="muted">Loading...</p></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>Alerts</h3>
-      <div id="alertsList"><p class="muted">Loading...</p></div>
-    </div>
+    <div class="tab-panel" id="tab-kegs">
+      <div class="card" id="createKegCard" style="display:none">
+        <h3>Create a new keg</h3>
+        <input id="mfgNumber" placeholder="Manufacturing keg number (required)">
+        <input id="size" type="number" placeholder="Size (liters)" value="50">
+        <input id="material" placeholder="Material" value="stainless">
+        <button onclick="createKeg()">Create keg + generate QR</button>
+        <div id="createResult"></div>
+      </div>
 
-    <div class="card" id="reportsCard" style="display:none">
-      <h3>Reports</h3>
-      <div id="reportsContent"><p class="muted">Loading...</p></div>
-    </div>
-
-    <div class="card" id="devicesCard" style="display:none">
-      <h3>Devices</h3>
-      <p class="muted">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
-      <div id="devicesContent"><p class="muted">Loading...</p></div>
-    </div>
-
-    <div class="card" id="usersCard" style="display:none">
-      <h3>Users</h3>
-      <p class="muted">Individual accounts with their own passwords. Deactivating a user blocks their login without deleting their history - see the note on why in the README.</p>
-      <div id="usersList"><p class="muted">Loading...</p></div>
-      <div id="addUserCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
-        <h4>Create a new user</h4>
-        <input id="newUserName" placeholder="Full name">
-        <select id="newUserRole">
-          <option value="filler">Filler</option>
-          <option value="washer">Washer</option>
-          <option value="driver">Driver</option>
-          <option value="warehouse">Warehouse</option>
-          <option value="admin">Admin</option>
-          <option value="manager">Manager</option>
+      <div class="card">
+        <h3>All kegs</h3>
+        <select id="filterStatus" onchange="loadKegs()">
+          <option value="">All statuses</option>
+          <option value="empty_returned">Empty returned</option>
+          <option value="washed">Washed</option>
+          <option value="filled">Filled</option>
+          <option value="dispatched">Dispatched</option>
+          <option value="delivered">Delivered</option>
+          <option value="empty_at_customer">Empty at customer</option>
+          <option value="needs_repair">Needs repair</option>
         </select>
-        <input id="newUserPassword" type="password" placeholder="Password (min 6 characters)">
-        <button onclick="createUser()">Create user</button>
-        <div id="createUserResult" class="muted"></div>
+        <table id="kegTable">
+          <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="kegTableNote"></div>
       </div>
     </div>
 
-    <div class="card" id="productsCard">
-      <h3>Products</h3>
-      <p class="muted">The beers Filler picks from when logging a fill. Keeps naming consistent - matters for the Fills report, which groups by exact name.</p>
-      <div id="productsList"><p class="muted">Loading...</p></div>
-      <div id="addProductCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
-        <input id="productName" placeholder="Beer name">
-        <input id="productAbv" type="number" step="0.1" placeholder="Typical ABV % (optional)">
-        <button onclick="addProduct()">Add beer</button>
-        <div id="addProductResult" class="muted"></div>
+    <div class="tab-panel" id="tab-customers">
+      <div class="card">
+        <h3>Customers</h3>
+        <div id="customersList"><p class="muted">Loading...</p></div>
+        <div id="addCustomerCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
+          <input id="customerName" placeholder="Customer name">
+          <input id="customerAddress" placeholder="Address (optional)">
+          <input id="customerPhone" type="tel" placeholder="Mobile number (optional)">
+          <button onclick="addCustomer()">Add customer</button>
+          <div id="addCustomerResult" class="muted"></div>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h3>Customers</h3>
-      <div id="customersList"><p class="muted">Loading...</p></div>
-      <div id="addCustomerCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
-        <input id="customerName" placeholder="Customer name">
-        <input id="customerAddress" placeholder="Address (optional)">
-        <input id="customerPhone" type="tel" placeholder="Mobile number (optional)">
-        <button onclick="addCustomer()">Add customer</button>
-        <div id="addCustomerResult" class="muted"></div>
+    <div class="tab-panel" id="tab-products">
+      <div class="card">
+        <h3>Products</h3>
+        <p class="muted">The beers Filler picks from when logging a fill. Keeps naming consistent - matters for the Fills report, which groups by exact name.</p>
+        <div id="productsList"><p class="muted">Loading...</p></div>
+        <div id="addProductCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
+          <input id="productName" placeholder="Beer name">
+          <input id="productAbv" type="number" step="0.1" placeholder="Typical ABV % (optional)">
+          <button onclick="addProduct()">Add beer</button>
+          <div id="addProductResult" class="muted"></div>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h3>All kegs</h3>
-      <select id="filterStatus" onchange="loadKegs()">
-        <option value="">All statuses</option>
-        <option value="empty_returned">Empty returned</option>
-        <option value="washed">Washed</option>
-        <option value="filled">Filled</option>
-        <option value="dispatched">Dispatched</option>
-        <option value="delivered">Delivered</option>
-        <option value="empty_at_customer">Empty at customer</option>
-        <option value="needs_repair">Needs repair</option>
-      </select>
-      <table id="kegTable">
-        <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <div id="kegTableNote"></div>
+    <div class="tab-panel" id="tab-reports">
+      <div class="card">
+        <h3>Reports</h3>
+        <div id="reportsContent"><p class="muted">Loading...</p></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-users">
+      <div class="card">
+        <h3>Users</h3>
+        <p class="muted">Individual accounts with their own passwords. Deactivating a user blocks their login without deleting their history - see the note on why in the README.</p>
+        <div id="usersList"><p class="muted">Loading...</p></div>
+        <div id="addUserCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
+          <h4>Create a new user</h4>
+          <input id="newUserName" placeholder="Full name">
+          <select id="newUserRole">
+            <option value="filler">Filler</option>
+            <option value="washer">Washer</option>
+            <option value="driver">Driver</option>
+            <option value="warehouse">Warehouse</option>
+            <option value="admin">Admin</option>
+            <option value="manager">Manager</option>
+          </select>
+          <input id="newUserPassword" type="password" placeholder="Password (min 6 characters)">
+          <button onclick="createUser()">Create user</button>
+          <div id="createUserResult" class="muted"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-devices">
+      <div class="card">
+        <h3>Devices</h3>
+        <p class="muted">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
+        <div id="devicesContent"><p class="muted">Loading...</p></div>
+      </div>
     </div>
   </div>
 
@@ -175,6 +221,13 @@
 <script>
 let isAdmin = false;
 let canSeeMfgNumber = false; // admin or manager only - see routes/kegs.js for the matching backend enforcement
+
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach((el) => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach((el) => el.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  document.getElementById(`tabBtn-${name}`).classList.add('active');
+}
 
 async function init() {
   const meRes = await fetch('/api/auth/me', { credentials: 'include' });
@@ -244,21 +297,24 @@ function showMain(user) {
   }
   loadProducts();
 
-  // Reports are Admin/Manager oversight data - the backend already
-  // rejects the request for any other role, so just skip trying for them.
+  // Reports/Users/Devices tabs are Admin/Manager oversight only - the
+  // backend already rejects the request for any other role, so the tab
+  // button itself is hidden for them rather than showing a tab that
+  // would just error.
   if (user.role === 'admin' || user.role === 'manager') {
-    document.getElementById('reportsCard').style.display = 'block';
+    document.getElementById('tabBtn-reports').style.display = '';
     loadReports();
     isAdmin = user.role === 'admin';
-    document.getElementById('devicesCard').style.display = 'block';
+    document.getElementById('tabBtn-devices').style.display = '';
     loadDevices();
-    document.getElementById('usersCard').style.display = 'block';
+    document.getElementById('tabBtn-users').style.display = '';
     if (isAdmin) document.getElementById('addUserCard').style.display = 'block';
     loadUsers();
   }
 
   loadKegs();
   loadAlerts();
+  showTab('overview');
 }
 
 async function createKeg() {
@@ -330,6 +386,34 @@ async function loadKegs() {
     </tr>
   `).join('');
   document.getElementById('kegTableNote').textContent = `${kegs.length} keg${kegs.length === 1 ? '' : 's'} total.`;
+
+  // Only render the Overview KPI row from the UNFILTERED full list - if
+  // someone's browsing the Kegs tab with a status filter applied, the
+  // Overview tab's summary shouldn't shift to match that filter.
+  if (!status) renderKpiSummary(kegs);
+}
+
+// Simple "at a glance" counts for the Overview tab - reuses the kegs
+// array loadKegs() already fetched rather than a separate request.
+function renderKpiSummary(kegs) {
+  const total = kegs.length;
+  const withCustomer = kegs.filter(k => k.status === 'delivered' || k.status === 'empty_at_customer').length;
+  const needsRepair = kegs.filter(k => k.status === 'needs_repair').length;
+  const inTransit = kegs.filter(k => k.status === 'dispatched').length;
+
+  const cards = [
+    { number: total, label: 'Total kegs' },
+    { number: withCustomer, label: 'With customers' },
+    { number: inTransit, label: 'In transit' },
+    { number: needsRepair, label: 'Needs repair' },
+  ];
+
+  document.getElementById('kpiRow').innerHTML = cards.map(c => `
+    <div class="kpi-card">
+      <div class="kpi-number">${c.number}</div>
+      <div class="kpi-label">${c.label}</div>
+    </div>
+  `).join('');
 }
 
 async function loadAlerts() {

@@ -6,8 +6,11 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v2'; // bumped: device-id.js added to the cached shell
-const SHELL_FILES = ['/scan.html', '/index.html', '/offline-queue.js', '/device-id.js'];
+const CACHE_NAME = 'keg-tracker-shell-v3'; // bumped: manifest.json + icons added, for PWA installability
+const SHELL_FILES = [
+  '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
+  '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

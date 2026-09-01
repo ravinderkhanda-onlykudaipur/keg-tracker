@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Keg Scan</title>
+
+<!-- PWA installability: lets "Add to Home Screen" create a real app icon
+     that opens full-screen (no browser address bar) instead of just a
+     bookmark. manifest.json covers Android/Chrome; the apple-* tags
+     below cover iOS Safari, which doesn't fully honor the manifest. -->
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#16130F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Kegs">
 <style>
   :root {
     --bg: #16130F;
