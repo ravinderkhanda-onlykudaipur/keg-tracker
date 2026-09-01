@@ -12,10 +12,19 @@ const router = express.Router();
 // only view."
 router.post('/', requireRole('admin'), async (req, res) => {
   const { size_liters, material, manufacturing_number } = req.body;
+
+  // Every physical keg has a manufacturer-stamped serial number - this
+  // is required, not optional, so it's always recorded at the moment
+  // the system ID and QR code are generated (never added later as an
+  // afterthought). Rejecting a blank submission here is the actual
+  // enforcement; the frontend also checks this before submitting, but
+  // that's just a UI nicety - this is the real guarantee.
+  const mfgNumber = typeof manufacturing_number === 'string' ? manufacturing_number.trim() : '';
+  if (!mfgNumber) {
+    return res.status(400).json({ error: 'Manufacturing keg number is required.' });
+  }
+
   const id = 'KEG-' + nanoid(8).toUpperCase();
-  const mfgNumber = typeof manufacturing_number === 'string' && manufacturing_number.trim()
-    ? manufacturing_number.trim()
-    : null;
 
   await pool.query(`
     INSERT INTO kegs (id, manufacturing_number, size_liters, material, status, current_location)

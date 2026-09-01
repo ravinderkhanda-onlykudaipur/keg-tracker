@@ -84,7 +84,7 @@
 
     <div class="card" id="createKegCard" style="display:none">
       <h3>Create a new keg</h3>
-      <input id="mfgNumber" placeholder="Manufacturing keg number">
+      <input id="mfgNumber" placeholder="Manufacturing keg number (required)">
       <input id="size" type="number" placeholder="Size (liters)" value="50">
       <input id="material" placeholder="Material" value="stainless">
       <button onclick="createKeg()">Create keg + generate QR</button>
@@ -254,21 +254,32 @@ function showMain(user) {
 }
 
 async function createKeg() {
-  const manufacturing_number = document.getElementById('mfgNumber').value;
+  const manufacturing_number = document.getElementById('mfgNumber').value.trim();
   const size_liters = document.getElementById('size').value;
   const material = document.getElementById('material').value;
+  const resultEl = document.getElementById('createResult');
+
+  if (!manufacturing_number) {
+    resultEl.textContent = 'Manufacturing keg number is required.';
+    resultEl.style.color = 'var(--error-text)';
+    return;
+  }
+
   const res = await fetch('/api/kegs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ manufacturing_number, size_liters, material }),
   });
   if (!res.ok) {
-    document.getElementById('createResult').textContent = 'Could not create keg - are you logged in as an admin?';
+    const data = await res.json().catch(() => ({}));
+    resultEl.textContent = data.error || 'Could not create keg - are you logged in as an admin?';
+    resultEl.style.color = 'var(--error-text)';
     return;
   }
   const data = await res.json();
   document.getElementById('mfgNumber').value = '';
-  document.getElementById('createResult').innerHTML =
+  resultEl.style.color = '';
+  resultEl.innerHTML =
     `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
   loadKegs();
   loadAlerts();
