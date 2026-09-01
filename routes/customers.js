@@ -19,7 +19,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 router.post('/', requireRole('admin', 'warehouse'), async (req, res) => {
-  const { name, address } = req.body || {};
+  const { name, address, phone } = req.body || {};
   if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Customer name is required.' });
   }
@@ -27,10 +27,14 @@ router.post('/', requireRole('admin', 'warehouse'), async (req, res) => {
   const id = 'CUST-' + nanoid(8).toUpperCase();
   const trimmedName = name.trim();
   const trimmedAddress = typeof address === 'string' && address.trim() ? address.trim() : null;
+  const trimmedPhone = typeof phone === 'string' && phone.trim() ? phone.trim() : null;
 
-  await pool.query('INSERT INTO customers (id, name, address) VALUES ($1, $2, $3)', [id, trimmedName, trimmedAddress]);
+  await pool.query(
+    'INSERT INTO customers (id, name, address, phone) VALUES ($1, $2, $3, $4)',
+    [id, trimmedName, trimmedAddress, trimmedPhone]
+  );
 
-  res.status(201).json({ id, name: trimmedName, address: trimmedAddress });
+  res.status(201).json({ id, name: trimmedName, address: trimmedAddress, phone: trimmedPhone });
 });
 
 module.exports = router;

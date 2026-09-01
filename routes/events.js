@@ -61,40 +61,44 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
   // action drives the status transition too now. The frontend now sends
   // a customer_id (picked from a dropdown, see routes/customers.js)
   // rather than free text - this resolves it to a real customer record's
-  // name AND address for display, and rejects an id that doesn't
-  // actually exist. Storing the address alongside the name means the
-  // driver sees exactly where to go, not just who - typing the address
-  // fresh every time would just reintroduce the typo problem customer
-  // management was built to fix.
+  // name, address, AND phone for display, and rejects an id that doesn't
+  // actually exist. Storing these alongside the name means the driver
+  // sees exactly where to go and who to call, not just who - typing
+  // this fresh every time would just reintroduce the typo problem
+  // customer management was built to fix.
   let resolvedDestination = null;
   let resolvedDestinationAddress = null;
+  let resolvedDestinationPhone = null;
   let resolvedCustomerId = null;
   if (actionType === 'assign_destination') {
     const customerId = details?.customer_id;
     if (!customerId) {
       return res.status(400).json({ error: 'A delivery destination (customer) is required.' });
     }
-    const { rows: custRows } = await pool.query('SELECT id, name, address FROM customers WHERE id = $1', [customerId]);
+    const { rows: custRows } = await pool.query('SELECT id, name, address, phone FROM customers WHERE id = $1', [customerId]);
     const customer = custRows[0];
     if (!customer) {
       return res.status(400).json({ error: 'Selected customer was not found.' });
     }
     resolvedDestination = customer.name;
     resolvedDestinationAddress = customer.address;
+    resolvedDestinationPhone = customer.phone;
     resolvedCustomerId = customer.id;
   }
 
   const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
 
-  // 'assign_destination' updates keg.destination + address + customer_id
-  // together; every other action updates keg.current_location as before.
-  // Kept as separate columns since they mean different things - "where
-  // the keg physically is right now" vs "which customer it's assigned to".
+  // 'assign_destination' updates keg.destination + address + phone +
+  // customer_id together; every other action updates keg.current_location
+  // as before. Kept as separate columns since they mean different things
+  // - "where the keg physically is right now" vs "which customer it's
+  // assigned to".
   const nextLocation = actionType === 'assign_destination'
     ? keg.current_location
     : (details?.location || keg.current_location);
   const nextDestination = actionType === 'assign_destination' ? resolvedDestination : keg.destination;
   const nextDestinationAddress = actionType === 'assign_destination' ? resolvedDestinationAddress : keg.destination_address;
+  const nextDestinationPhone = actionType === 'assign_destination' ? resolvedDestinationPhone : keg.destination_phone;
   const nextCustomerId = actionType === 'assign_destination' ? resolvedCustomerId : keg.customer_id;
 
   await withTransaction(async (client) => {
@@ -104,8 +108,8 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
     `, [kegId, user.id, user.role, actionType, JSON.stringify(details || {})]);
 
     await client.query(`
-      UPDATE kegs SET status = $1, current_location = $2, destination = $3, destination_address = $4, customer_id = $5 WHERE id = $6
-    `, [nextStatus, nextLocation, nextDestination, nextDestinationAddress, nextCustomerId, kegId]);
+      UPDATE kegs SET status = $1, current_location = $2, destination = $3, destination_address = $4, destination_phone = $5, customer_id = $6 WHERE id = $7
+    `, [nextStatus, nextLocation, nextDestination, nextDestinationAddress, nextDestinationPhone, nextCustomerId, kegId]);
   });
 
   const { rows: updatedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);

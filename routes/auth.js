@@ -4,6 +4,10 @@
 // determines who's logged in - see middleware/requireAuth.js. Also where
 // device registration (lib/deviceAuth.js) is checked, after the password
 // - only for the four operational roles, see that file for why.
+//
+// Password changes are Admin-only now (routes/users.js's reset-password) -
+// self-service change-password was removed on request; users tell an
+// Admin if they need a new one.
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
@@ -28,7 +32,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, name, role, password_hash FROM users WHERE id = $1', [userId]
+      'SELECT id, name, role, password_hash, active FROM users WHERE id = $1', [userId]
     );
     const user = rows[0];
     if (!user) return res.status(401).json({ error: 'Invalid user or password' });
@@ -36,10 +40,16 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid user or password' });
 
-    // Device check runs only after a correct password - this way a
-    // random unauthenticated request can't probe which roles are
-    // device-gated or spam pending-approval log entries just by
-    // guessing usernames.
+    // Checked only after a correct password - this way a random
+    // unauthenticated request can't confirm an account exists (and its
+    // active/inactive status) just by guessing usernames.
+    if (!user.active) {
+      return res.status(403).json({ error: 'This account has been deactivated. Contact an Admin.' });
+    }
+
+    // Device check also runs only after a correct password - same
+    // reasoning: don't let guessing usernames probe which roles are
+    // device-gated or spam pending-approval log entries.
     const deviceCheck = await checkAndRegisterDevice(pool, user.role, deviceId, user.id);
     if (!deviceCheck.allowed) {
       return res.status(403).json({
@@ -69,7 +79,9 @@ router.get('/me', (req, res) => {
 });
 
 router.get('/users', async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, role FROM users ORDER BY role');
+  // Only active users show in the login dropdown - a deactivated
+  // account shouldn't even look selectable.
+  const { rows } = await pool.query('SELECT id, name, role FROM users WHERE active = true ORDER BY role');
   res.json(rows);
 });
 

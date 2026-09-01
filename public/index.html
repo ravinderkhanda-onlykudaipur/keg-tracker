@@ -75,15 +75,7 @@
   </div>
 
   <div id="mainBlock" style="display:none">
-    <p class="muted">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a> &middot; <a href="#" onclick="toggleChangePassword();return false;">change my password</a></p>
-
-    <div id="changePasswordCard" class="card" style="display:none">
-      <h3>Change my password</h3>
-      <input id="currentPassword" type="password" placeholder="Current password">
-      <input id="newPassword" type="password" placeholder="New password (min 6 characters)">
-      <button onclick="changeMyPassword()">Update password</button>
-      <div id="changePasswordResult" class="muted"></div>
-    </div>
+    <p class="muted">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
 
     <div id="readOnlyNote" class="role-note" style="display:none">
       You have view-only access &mdash; you can see everything here, but only an Admin can create kegs or make changes.
@@ -153,6 +145,7 @@
       <div id="addCustomerCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
         <input id="customerName" placeholder="Customer name">
         <input id="customerAddress" placeholder="Address (optional)">
+        <input id="customerPhone" type="tel" placeholder="Mobile number (optional)">
         <button onclick="addCustomer()">Add customer</button>
         <div id="addCustomerResult" class="muted"></div>
       </div>
@@ -322,9 +315,12 @@ async function loadKegs() {
   // Admin/Manager would never see it either.
   const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''), { credentials: 'include' });
   const kegs = await res.json(); // already newest-first from the server
-  const capped = capList(kegs, 7);
+  // No display cap here (unlike Alerts/Devices) - Admin specifically
+  // asked to see every keg, not a "most recent N" summary. The backend
+  // still caps at 200 (routes/kegs.js) as a sane upper bound; worth
+  // raising that too if the business ever has more kegs than that.
   const tbody = document.querySelector('#kegTable tbody');
-  tbody.innerHTML = capped.shown.map(k => `
+  tbody.innerHTML = kegs.map(k => `
     <tr>
       <td>${k.id}</td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
@@ -333,7 +329,7 @@ async function loadKegs() {
       <td><a href="/scan.html?keg=${k.id}">open</a> &middot; <a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
     </tr>
   `).join('');
-  document.getElementById('kegTableNote').innerHTML = moreNote(capped);
+  document.getElementById('kegTableNote').textContent = `${kegs.length} keg${kegs.length === 1 ? '' : 's'} total.`;
 }
 
 async function loadAlerts() {
@@ -425,9 +421,9 @@ async function loadCustomers() {
   }
   el.innerHTML = `
     <table>
-      <thead><tr><th>Name</th><th>Address</th></tr></thead>
+      <thead><tr><th>Name</th><th>Address</th><th>Mobile</th></tr></thead>
       <tbody>
-        ${customers.map(c => `<tr><td>${c.name}</td><td>${c.address || '-'}</td></tr>`).join('')}
+        ${customers.map(c => `<tr><td>${c.name}</td><td>${c.address || '-'}</td><td>${c.phone || '-'}</td></tr>`).join('')}
       </tbody>
     </table>
   `;
@@ -436,13 +432,14 @@ async function loadCustomers() {
 async function addCustomer() {
   const name = document.getElementById('customerName').value.trim();
   const address = document.getElementById('customerAddress').value.trim();
+  const phone = document.getElementById('customerPhone').value.trim();
   const msg = document.getElementById('addCustomerResult');
   if (!name) { msg.textContent = 'Customer name is required.'; return; }
 
   const res = await fetch('/api/customers', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ name, address }),
+    body: JSON.stringify({ name, address, phone }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -451,6 +448,7 @@ async function addCustomer() {
   }
   document.getElementById('customerName').value = '';
   document.getElementById('customerAddress').value = '';
+  document.getElementById('customerPhone').value = '';
   msg.textContent = 'Added.';
   loadCustomers();
 }
@@ -642,28 +640,6 @@ async function reactivateUser(userId) {
     credentials: 'include', body: JSON.stringify({}),
   });
   loadUsers();
-}
-
-function toggleChangePassword() {
-  const card = document.getElementById('changePasswordCard');
-  card.style.display = card.style.display === 'none' ? 'block' : 'none';
-}
-
-async function changeMyPassword() {
-  const currentPassword = document.getElementById('currentPassword').value;
-  const newPassword = document.getElementById('newPassword').value;
-  const msg = document.getElementById('changePasswordResult');
-
-  const res = await fetch('/api/auth/change-password', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ currentPassword, newPassword }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { msg.textContent = data.error || 'Could not change password.'; return; }
-
-  document.getElementById('currentPassword').value = '';
-  document.getElementById('newPassword').value = '';
-  msg.textContent = 'Password updated.';
 }
 
 init();

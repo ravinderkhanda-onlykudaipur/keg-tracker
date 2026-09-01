@@ -104,11 +104,9 @@
         <path d="M8 20 Q28 26 48 20" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
         <path d="M7 44 Q28 50 49 44" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
       </svg>
-      <div id="kegTitle" class="keg-title-row"></div>
       <div class="header-row">
         <div class="header-left">
           Logged in as <b id="whoami"></b>
-          <br><a href="#" onclick="toggleChangePassword();return false;">change my password</a>
         </div>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
@@ -119,18 +117,9 @@
     <div id="kegDestinationLine" class="destination-line" style="display:none">
       Destination: <b id="kegDestination"></b>
       <span class="address" id="kegDestinationAddress"></span>
+      <span class="address" id="kegDestinationPhone"></span>
     </div>
     <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
-
-    <div class="card" id="changePasswordCard" style="display:none">
-      <h3 style="margin-top:0">Change my password</h3>
-      <label>Current password</label>
-      <input id="currentPassword" type="password">
-      <label>New password (min 6 characters)</label>
-      <input id="newPassword" type="password">
-      <button onclick="changeMyPassword()">Update password</button>
-      <div id="changePasswordResult" class="muted"></div>
-    </div>
 
     <div class="card" id="formCard"></div>
 
@@ -355,7 +344,6 @@ async function loadKeg() {
   }
   keg = await res.json();
   OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
-  updateKegTitle();
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
   updateDestinationLine();
   await renderForm();
@@ -364,7 +352,6 @@ async function loadKeg() {
 }
 
 function renderOfflineFallback() {
-  updateKegTitle();
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
   updateDestinationLine();
   renderForm();
@@ -373,31 +360,18 @@ function renderOfflineFallback() {
   updatePendingBanner();
 }
 
-function updateKegTitle() {
-  // Shows the manufacturer's own serial number alongside our internal
-  // system ID, when one was recorded at keg creation - lets anyone
-  // physically holding the keg cross-check it against the number
-  // actually stamped on the metal. Restricted to Admin/Manager: the
-  // backend (routes/kegs.js) strips manufacturing_number out of the API
-  // response entirely for every other role, so it's simply absent here
-  // for them - this ternary's fallback to the plain id is what makes
-  // that work, not a separate role check on this end.
-  const titleEl = document.getElementById('kegTitle');
-  titleEl.innerHTML = keg.manufacturing_number
-    ? `${keg.id} <span class="muted" style="font-size:15px;font-weight:400">(Mfg #: ${keg.manufacturing_number})</span>`
-    : keg.id;
-}
-
 function updateDestinationLine() {
   const line = document.getElementById('kegDestinationLine');
   if (keg.destination) {
     document.getElementById('kegDestination').textContent = keg.destination;
-    // Show the address too, not just the customer's name - a driver
-    // needs to know exactly where to go, not just who they're
-    // delivering to (this was confusing before: name alone doesn't
-    // tell you a location).
+    // Show the address AND phone too, not just the customer's name - a
+    // driver needs to know exactly where to go and who to call, not
+    // just who they're delivering to (this was confusing before: name
+    // alone doesn't tell you a location or how to reach someone).
     const addressEl = document.getElementById('kegDestinationAddress');
     addressEl.textContent = keg.destination_address ? keg.destination_address : '';
+    const phoneEl = document.getElementById('kegDestinationPhone');
+    phoneEl.textContent = keg.destination_phone ? ('\u260E ' + keg.destination_phone) : '';
     line.style.display = 'block';
   } else {
     line.style.display = 'none';
@@ -511,6 +485,7 @@ function toggleAddProduct() {
 async function addNewCustomer() {
   const name = document.getElementById('newCustomerName').value.trim();
   const address = document.getElementById('newCustomerAddress').value.trim();
+  const phone = document.getElementById('newCustomerPhone').value.trim();
   const msg = document.getElementById('addCustomerMsg');
   if (!name) {
     msg.className = 'error';
@@ -525,7 +500,7 @@ async function addNewCustomer() {
     res = await fetch('/api/customers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name, address }),
+      body: JSON.stringify({ name, address, phone }),
     });
   } catch (err) {
     msg.className = 'error';
@@ -643,6 +618,8 @@ async function renderForm() {
             <input id="newCustomerName" type="text">
             <label>Address (optional)</label>
             <input id="newCustomerAddress" type="text">
+            <label>Mobile number (optional)</label>
+            <input id="newCustomerPhone" type="tel">
             <button type="button" onclick="addNewCustomer()" style="margin-top:8px">Add customer</button>
             <div id="addCustomerMsg" class="muted"></div>
           </div>
@@ -890,40 +867,6 @@ if ('serviceWorker' in navigator) {
     // Non-fatal: app still works online-only if the service worker fails
     // to register (e.g. unsupported browser) - just no offline app-shell caching.
   });
-}
-
-function toggleChangePassword() {
-  const card = document.getElementById('changePasswordCard');
-  card.style.display = card.style.display === 'none' ? 'block' : 'none';
-}
-
-async function changeMyPassword() {
-  const currentPassword = document.getElementById('currentPassword').value;
-  const newPassword = document.getElementById('newPassword').value;
-  const msg = document.getElementById('changePasswordResult');
-
-  let res;
-  try {
-    res = await fetch('/api/auth/change-password', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', body: JSON.stringify({ currentPassword, newPassword }),
-    });
-  } catch (err) {
-    msg.className = 'error';
-    msg.textContent = 'No connection - try again once online.';
-    return;
-  }
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    msg.className = 'error';
-    msg.textContent = data.error || 'Could not change password.';
-    return;
-  }
-  document.getElementById('currentPassword').value = '';
-  document.getElementById('newPassword').value = '';
-  msg.className = 'success';
-  msg.textContent = 'Password updated.';
 }
 
 updateOfflineBanner();
