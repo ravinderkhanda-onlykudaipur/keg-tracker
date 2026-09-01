@@ -5,24 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Keg Scan</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; color: #222; }
-  h2 { font-size: 18px; margin-bottom: 4px; }
-  .muted { color: #777; font-size: 13px; }
-  .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 16px 0; }
-  label { display: block; font-size: 13px; margin: 10px 0 4px; font-weight: 600; }
-  input, select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
-  button { width: 100%; margin-top: 16px; font-size: 16px; padding: 12px; background: #0f6e56; color: white; border: none; border-radius: 8px; cursor: pointer; }
-  .status-pill { display: inline-block; padding: 3px 10px; border-radius: 12px; background: #e1f5ee; color: #085041; font-size: 13px; }
-  .error { color: #a32d2d; font-size: 14px; margin-top: 8px; }
-  .success { color: #3b6d11; font-size: 14px; margin-top: 8px; }
-  .history-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  :root {
+    --bg: #FAF5EC;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE3D3;
+    --text: #2B2420;
+    --text-muted: #6B5D4F;
+    --text-heading: #3D2C1E;
+    --input-bg: #FFFCF8;
+    --input-border: #D9CBB5;
+    --primary: #B5651D;
+    --primary-hover: #9A5518;
+    --secondary: #3B6D8F;
+    --secondary-hover: #2F5972;
+    --success-bg: #E4F1EA;
+    --success-text: #1E6B44;
+    --error-bg: #FBE4E1;
+    --error-text: #932B1F;
+    --error-border: #F0B8AE;
+    --pending-bg: #E3EFFB;
+    --pending-text: #1B4E82;
+    --warn-bg: #FFF2D6;
+    --warn-text: #7A5000;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
+  h2 { font-size: 22px; margin-bottom: 6px; color: var(--text-heading); }
+  h3 { font-size: 18px; color: var(--text-heading); margin: 0 0 4px; }
+  .muted { color: var(--text-muted); font-size: 14px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin: 16px 0; box-shadow: 0 1px 3px rgba(80,60,30,0.07), 0 1px 2px rgba(80,60,30,0.05); }
+  label { display: block; font-size: 14px; margin: 12px 0 5px; font-weight: 600; color: var(--text-heading); }
+  input, select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(181,101,29,0.14); }
+  button { width: 100%; margin-top: 18px; font-size: 16px; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; }
+  button:hover { background: var(--primary-hover); }
+  .status-pill { display: inline-block; padding: 4px 12px; border-radius: 12px; background: var(--success-bg); color: var(--success-text); font-size: 14px; font-weight: 600; }
+  .error { color: var(--error-text); font-size: 15px; margin-top: 10px; font-weight: 500; }
+  .success { color: var(--success-text); font-size: 15px; margin-top: 10px; font-weight: 500; }
+  .history-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
   .history-item b { text-transform: capitalize; }
-  .offline-banner { background: #fff3cd; color: #7a5c00; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
-  .pending-banner { background: #e1f0ff; color: #0a4b8c; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
-  .my-alerts-banner { background: #fde2e2; color: #8f1d1d; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; font-weight: 600; }
-  .pending-banner button { width: auto; display: inline-block; margin: 6px 6px 0 0; padding: 6px 12px; font-size: 13px; }
-  .wrong-turn-banner { background: #fde2e2; color: #8f1d1d; border: 1px solid #f3a6a6; border-radius: 8px; padding: 14px; font-size: 14px; font-weight: 600; }
-  .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 4px; }
+  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; }
+  .pending-banner { background: var(--pending-bg); color: var(--pending-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; }
+  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; font-weight: 600; }
+  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 14px; }
+  .wrong-turn-banner { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 10px; padding: 16px; font-size: 15px; font-weight: 600; }
+  .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 6px; }
+  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 14px; background: var(--secondary); }
+  .geo-btn:hover { background: var(--secondary-hover); }
+  .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--input-bg); }
+  .destination-line { background: var(--success-bg); border-radius: 10px; padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+  .destination-line .address { display: block; color: var(--text-muted); font-size: 13px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -44,9 +75,22 @@
 
   <div id="appBlock" style="display:none">
     <h2 id="kegTitle"></h2>
-    <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
-    <p class="muted" id="kegDestinationLine" style="display:none">Destination: <b id="kegDestination"></b></p>
+    <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a> &middot; <a href="#" onclick="toggleChangePassword();return false;">change my password</a></p>
+    <div id="kegDestinationLine" class="destination-line" style="display:none">
+      Destination: <b id="kegDestination"></b>
+      <span class="address" id="kegDestinationAddress"></span>
+    </div>
     <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
+
+    <div class="card" id="changePasswordCard" style="display:none">
+      <h3 style="margin-top:0">Change my password</h3>
+      <label>Current password</label>
+      <input id="currentPassword" type="password">
+      <label>New password (min 6 characters)</label>
+      <input id="newPassword" type="password">
+      <button onclick="changeMyPassword()">Update password</button>
+      <div id="changePasswordResult" class="muted"></div>
+    </div>
 
     <div class="card" id="formCard"></div>
 
@@ -92,7 +136,7 @@ const ROLE_ACTIONS = {
     action: 'fill', label: 'Log fill',
     fixedDetails: { volume_liters: 20 }, // every fill is 20L - not a field the user fills in, just recorded automatically
     fields: [
-      { name: 'product', label: 'Beer Name', type: 'text', required: true },
+      { name: 'product', label: 'Beer Name', type: 'product_select', required: true },
       { name: 'batch_number', label: 'Batch Number', type: 'text', required: true },
       { name: 'abv', label: 'ABV %', type: 'number', required: true },
     ],
@@ -267,7 +311,7 @@ async function loadKeg() {
   }
   keg = await res.json();
   OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
-  document.getElementById('kegTitle').textContent = keg.id;
+  updateKegTitle();
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
   updateDestinationLine();
   await renderForm();
@@ -276,7 +320,7 @@ async function loadKeg() {
 }
 
 function renderOfflineFallback() {
-  document.getElementById('kegTitle').textContent = keg.id;
+  updateKegTitle();
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
   updateDestinationLine();
   renderForm();
@@ -285,10 +329,27 @@ function renderOfflineFallback() {
   updatePendingBanner();
 }
 
+function updateKegTitle() {
+  // Shows the manufacturer's own serial number alongside our internal
+  // system ID, when one was recorded at keg creation - lets anyone
+  // physically holding the keg cross-check it against the number
+  // actually stamped on the metal.
+  const titleEl = document.getElementById('kegTitle');
+  titleEl.innerHTML = keg.manufacturing_number
+    ? `${keg.id} <span class="muted" style="font-size:15px;font-weight:400">(Mfg #: ${keg.manufacturing_number})</span>`
+    : keg.id;
+}
+
 function updateDestinationLine() {
   const line = document.getElementById('kegDestinationLine');
   if (keg.destination) {
     document.getElementById('kegDestination').textContent = keg.destination;
+    // Show the address too, not just the customer's name - a driver
+    // needs to know exactly where to go, not just who they're
+    // delivering to (this was confusing before: name alone doesn't
+    // tell you a location).
+    const addressEl = document.getElementById('kegDestinationAddress');
+    addressEl.textContent = keg.destination_address ? keg.destination_address : '';
     line.style.display = 'block';
   } else {
     line.style.display = 'none';
@@ -354,9 +415,49 @@ async function fetchCustomers(forceRefresh) {
   return customersCache;
 }
 
+let productsCache = null;
+async function fetchProducts(forceRefresh) {
+  if (productsCache && !forceRefresh) return productsCache;
+  try {
+    const res = await fetch('/api/products', { credentials: 'include' });
+    productsCache = res.ok ? await res.json() : (productsCache || []);
+  } catch (err) {
+    productsCache = productsCache || [];
+  }
+  return productsCache;
+}
+
+// When a beer is picked, auto-fill its typical ABV (still editable -
+// actual batches can vary slightly, this is just a helpful starting
+// point). Reads straight off the selected <option>'s data-abv attribute
+// rather than looking the product up by id - simpler, and consistent
+// with the dropdown submitting the beer's NAME as the value (not an id),
+// since that's what lib/reports.js's getFillStats() already expects in
+// details.product, and what any existing fill history already has.
+function onProductSelected(selectEl) {
+  const abvField = document.getElementById('f_abv');
+  const opt = selectEl.options[selectEl.selectedIndex];
+  const abv = opt ? opt.dataset.abv : '';
+  if (abvField && abv) abvField.value = abv;
+}
+
 function toggleAddCustomer() {
   const box = document.getElementById('addCustomerBox');
-  if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if (!box) return;
+  // Checks the actual rendered display (whether it's hidden via the CSS
+  // class or a previous inline override), not just the inline style
+  // attribute directly - a plain `box.style.display === 'none'` check
+  // would be wrong now that hiding comes from the .inline-add-box CSS
+  // class rather than an inline style.
+  const isHidden = getComputedStyle(box).display === 'none';
+  box.style.display = isHidden ? 'block' : 'none';
+}
+
+function toggleAddProduct() {
+  const box = document.getElementById('addProductBox');
+  if (!box) return;
+  const isHidden = getComputedStyle(box).display === 'none';
+  box.style.display = isHidden ? 'block' : 'none';
 }
 
 async function addNewCustomer() {
@@ -398,6 +499,45 @@ async function addNewCustomer() {
   if (sel) sel.value = newCustomer.id; // pre-select the one just added
 }
 
+async function addNewProduct() {
+  const name = document.getElementById('newProductName').value.trim();
+  const abvRaw = document.getElementById('newProductAbv').value;
+  const msg = document.getElementById('addProductMsg');
+  if (!name) {
+    msg.className = 'error';
+    msg.textContent = 'Beer name is required.';
+    return;
+  }
+  msg.className = 'muted';
+  msg.textContent = 'Adding...';
+
+  let res;
+  try {
+    res = await fetch('/api/products', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, default_abv: abvRaw || null }),
+    });
+  } catch (err) {
+    msg.className = 'error';
+    msg.textContent = 'No connection - try again once online.';
+    return;
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    msg.className = 'error';
+    msg.textContent = data.error || 'Could not add beer.';
+    return;
+  }
+
+  const newProduct = await res.json();
+  await fetchProducts(true); // refresh cache so the dropdown includes it
+  await renderForm(); // rebuild the form - new beer now in the list
+  const sel = document.getElementById('f_product');
+  if (sel) { sel.value = newProduct.name; onProductSelected(sel); }
+}
+
 async function renderForm() {
   const card = document.getElementById('formCard');
 
@@ -431,8 +571,12 @@ async function renderForm() {
   // Prefetch anything a field needs before building the HTML, so the
   // template below can be built synchronously in one pass.
   let customers = [];
+  let products = [];
   if (cfg.fields.some((f) => f.type === 'customer_select')) {
     customers = await fetchCustomers();
+  }
+  if (cfg.fields.some((f) => f.type === 'product_select')) {
+    products = await fetchProducts();
   }
 
   card.innerHTML = `
@@ -445,8 +589,8 @@ async function renderForm() {
             <option value="">-- select customer --</option>
             ${customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('')}
           </select>
-          <button type="button" onclick="toggleAddCustomer()" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f">&#43; Add new customer</button>
-          <div id="addCustomerBox" style="display:none;margin-top:10px;padding:10px;border:1px solid #ddd;border-radius:8px">
+          <button type="button" onclick="toggleAddCustomer()" class="geo-btn">&#43; Add new customer</button>
+          <div id="addCustomerBox" class="inline-add-box">
             <label>New customer name</label>
             <input id="newCustomerName" type="text">
             <label>Address (optional)</label>
@@ -456,12 +600,31 @@ async function renderForm() {
           </div>
         `;
       }
+      if (f.type === 'product_select') {
+        return `
+          <label>${f.label}</label>
+          <select id="f_${f.name}" onchange="onProductSelected(this)">
+            <option value="">-- select beer --</option>
+            ${products.map((p) => `<option value="${p.name}" data-abv="${p.default_abv ?? ''}">${p.name}</option>`).join('')}
+          </select>
+          <button type="button" onclick="toggleAddProduct()" class="geo-btn">&#43; Add new beer</button>
+          <div id="addProductBox" class="inline-add-box">
+            <label>New beer name</label>
+            <input id="newProductName" type="text">
+            <label>Typical ABV % (optional)</label>
+            <input id="newProductAbv" type="number" step="0.1">
+            <button type="button" onclick="addNewProduct()" style="margin-top:8px">Add beer</button>
+            <div id="addProductMsg" class="muted"></div>
+          </div>
+        `;
+      }
+      const isLocationOptional = f.geo && !f.required;
       return `
-        <label>${f.label}</label>
+        <label>${f.label}${isLocationOptional ? ' <span class="muted">(optional)</span>' : ''}</label>
         ${f.type === 'select'
           ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
           : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
-        ${f.geo ? `<button type="button" style="margin-top:6px;width:auto;display:inline-block;padding:8px 14px;font-size:14px;background:#3b6d8f" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
+        ${f.geo ? `<button type="button" class="geo-btn" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
         <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
       `;
     }).join('')}
@@ -679,6 +842,40 @@ if ('serviceWorker' in navigator) {
     // Non-fatal: app still works online-only if the service worker fails
     // to register (e.g. unsupported browser) - just no offline app-shell caching.
   });
+}
+
+function toggleChangePassword() {
+  const card = document.getElementById('changePasswordCard');
+  card.style.display = card.style.display === 'none' ? 'block' : 'none';
+}
+
+async function changeMyPassword() {
+  const currentPassword = document.getElementById('currentPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const msg = document.getElementById('changePasswordResult');
+
+  let res;
+  try {
+    res = await fetch('/api/auth/change-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  } catch (err) {
+    msg.className = 'error';
+    msg.textContent = 'No connection - try again once online.';
+    return;
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error || 'Could not change password.';
+    return;
+  }
+  document.getElementById('currentPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  msg.className = 'success';
+  msg.textContent = 'Password updated.';
 }
 
 updateOfflineBanner();

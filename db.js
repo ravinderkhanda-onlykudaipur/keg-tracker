@@ -40,14 +40,22 @@ async function init() {
       address TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      default_abv REAL
+    );
+
     CREATE TABLE IF NOT EXISTS kegs (
       id TEXT PRIMARY KEY,
+      manufacturing_number TEXT,
       size_liters REAL,
       material TEXT,
       status TEXT NOT NULL DEFAULT 'empty_returned'
         CHECK (status IN ('empty_returned','washed','filled','dispatched','delivered','empty_at_customer','needs_repair')),
       current_location TEXT,
       destination TEXT,
+      destination_address TEXT,
       customer_id TEXT REFERENCES customers(id),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -91,6 +99,8 @@ async function init() {
   // safely with IF NOT EXISTS so this is a no-op on every future boot
   // once it's already applied once.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS manufacturing_number TEXT;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS destination_address TEXT;`);
 }
 
 // Runs fn with a dedicated client, wrapped in BEGIN/COMMIT/ROLLBACK,

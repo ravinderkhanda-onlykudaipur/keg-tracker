@@ -5,31 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Keg Tracker - Admin</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #222; }
-  h1 { font-size: 20px; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  input, select, button { font-size: 15px; padding: 8px; margin: 4px 4px 4px 0; }
-  button { cursor: pointer; background: #0f6e56; color: white; border: none; border-radius: 6px; padding: 8px 14px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 14px; }
-  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #eef; }
-  a { color: #0f6e56; }
-  .alert-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  :root {
+    --bg: #FAF5EC;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE3D3;
+    --text: #2B2420;
+    --text-muted: #6B5D4F;
+    --text-heading: #3D2C1E;
+    --input-bg: #FFFCF8;
+    --input-border: #D9CBB5;
+    --primary: #B5651D;
+    --primary-hover: #9A5518;
+    --secondary: #3B6D8F;
+    --success-bg: #E4F1EA;
+    --success-text: #1E6B44;
+    --error-bg: #FBE4E1;
+    --error-text: #932B1F;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 780px; margin: 24px auto; padding: 0 16px 40px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
+  h1 { font-size: 24px; color: var(--text-heading); }
+  h3 { font-size: 18px; color: var(--text-heading); margin: 0 0 10px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(80,60,30,0.07), 0 1px 2px rgba(80,60,30,0.05); }
+  input, select, button { font-size: 16px; padding: 10px; margin: 4px 6px 4px 0; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(181,101,29,0.14); }
+  button { cursor: pointer; background: var(--primary); color: white; border: none; padding: 10px 16px; font-weight: 600; }
+  button:hover { background: var(--primary-hover); }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  td, th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--card-border); font-size: 14px; }
+  .status { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; background: var(--success-bg); color: var(--success-text); font-weight: 600; }
+  a { color: var(--primary); }
+  .muted { color: var(--text-muted); font-size: 14px; }
+  .alert-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
   .alert-item:last-child { border-bottom: none; }
-  .alert-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #fde2e2; color: #8f1d1d; font-weight: 600; }
-  .role-note { background: #f0f0f0; color: #555; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
-  .bar-row { display: flex; align-items: center; margin: 6px 0; font-size: 13px; }
-  .bar-label { width: 140px; flex-shrink: 0; text-transform: capitalize; }
-  .bar-track { flex: 1; background: #f0f0f0; border-radius: 4px; height: 18px; overflow: hidden; margin: 0 8px; }
-  .bar-fill { background: #0f6e56; height: 100%; border-radius: 4px; }
-  .bar-value { width: 64px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-  .card h4 { margin: 16px 0 4px; font-size: 14px; }
+  .alert-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; background: var(--error-bg); color: var(--error-text); font-weight: 600; }
+  .role-note { background: #F3EBDC; color: var(--text-heading); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 18px; }
+  .bar-row { display: flex; align-items: center; margin: 8px 0; font-size: 14px; }
+  .bar-label { width: 150px; flex-shrink: 0; text-transform: capitalize; }
+  .bar-track { flex: 1; background: #F0E8D8; border-radius: 4px; height: 20px; overflow: hidden; margin: 0 8px; }
+  .bar-fill { background: var(--primary); height: 100%; border-radius: 4px; }
+  .bar-value { width: 70px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .card h4 { margin: 18px 0 6px; font-size: 15px; color: var(--text-heading); }
   .card h4:first-child { margin-top: 0; }
-  .device-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
+  .device-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
   .device-item:last-child { border-bottom: none; }
-  .device-id-code { font-family: monospace; font-size: 11px; color: #666; word-break: break-all; }
-  .device-item button { font-size: 12px; padding: 4px 10px; margin-top: 4px; }
-  .btn-danger { background: #a32d2d; }
+  .device-id-code { font-family: monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
+  .device-item button { font-size: 13px; padding: 6px 12px; margin-top: 6px; }
+  .btn-danger { background: var(--error-text); }
+  .user-inactive { opacity: 0.55; }
+  .badge-inactive { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; background: #EDE3D3; color: var(--text-muted); margin-left: 6px; }
+  .mfg-number { color: var(--text-muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -40,11 +64,19 @@
     <select id="userSelect"></select>
     <input id="password" type="password" placeholder="Password">
     <button onclick="login()">Log in</button>
-    <div id="loginError" style="color:#a32d2d;font-size:13px"></div>
+    <div id="loginError" style="color:var(--error-text);font-size:14px"></div>
   </div>
 
   <div id="mainBlock" style="display:none">
-    <p class="muted" style="color:#777;font-size:13px">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a></p>
+    <p class="muted">Logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a> &middot; <a href="#" onclick="toggleChangePassword();return false;">change my password</a></p>
+
+    <div id="changePasswordCard" class="card" style="display:none">
+      <h3>Change my password</h3>
+      <input id="currentPassword" type="password" placeholder="Current password">
+      <input id="newPassword" type="password" placeholder="New password (min 6 characters)">
+      <button onclick="changeMyPassword()">Update password</button>
+      <div id="changePasswordResult" class="muted"></div>
+    </div>
 
     <div id="readOnlyNote" class="role-note" style="display:none">
       You have view-only access &mdash; you can see everything here, but only an Admin can create kegs or make changes.
@@ -52,6 +84,7 @@
 
     <div class="card" id="createKegCard" style="display:none">
       <h3>Create a new keg</h3>
+      <input id="mfgNumber" placeholder="Manufacturing keg number">
       <input id="size" type="number" placeholder="Size (liters)" value="50">
       <input id="material" placeholder="Material" value="stainless">
       <button onclick="createKeg()">Create keg + generate QR</button>
@@ -60,28 +93,61 @@
 
     <div class="card">
       <h3>Alerts</h3>
-      <div id="alertsList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+      <div id="alertsList"><p class="muted">Loading...</p></div>
     </div>
 
     <div class="card" id="reportsCard" style="display:none">
       <h3>Reports</h3>
-      <div id="reportsContent"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+      <div id="reportsContent"><p class="muted">Loading...</p></div>
     </div>
 
     <div class="card" id="devicesCard" style="display:none">
       <h3>Devices</h3>
-      <p class="muted" style="color:#777;font-size:13px">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
-      <div id="devicesContent"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
+      <p class="muted">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
+      <div id="devicesContent"><p class="muted">Loading...</p></div>
+    </div>
+
+    <div class="card" id="usersCard" style="display:none">
+      <h3>Users</h3>
+      <p class="muted">Individual accounts with their own passwords. Deactivating a user blocks their login without deleting their history - see the note on why in the README.</p>
+      <div id="usersList"><p class="muted">Loading...</p></div>
+      <div id="addUserCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
+        <h4>Create a new user</h4>
+        <input id="newUserName" placeholder="Full name">
+        <select id="newUserRole">
+          <option value="filler">Filler</option>
+          <option value="washer">Washer</option>
+          <option value="driver">Driver</option>
+          <option value="warehouse">Warehouse</option>
+          <option value="admin">Admin</option>
+          <option value="manager">Manager</option>
+        </select>
+        <input id="newUserPassword" type="password" placeholder="Password (min 6 characters)">
+        <button onclick="createUser()">Create user</button>
+        <div id="createUserResult" class="muted"></div>
+      </div>
+    </div>
+
+    <div class="card" id="productsCard">
+      <h3>Products</h3>
+      <p class="muted">The beers Filler picks from when logging a fill. Keeps naming consistent - matters for the Fills report, which groups by exact name.</p>
+      <div id="productsList"><p class="muted">Loading...</p></div>
+      <div id="addProductCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
+        <input id="productName" placeholder="Beer name">
+        <input id="productAbv" type="number" step="0.1" placeholder="Typical ABV % (optional)">
+        <button onclick="addProduct()">Add beer</button>
+        <div id="addProductResult" class="muted"></div>
+      </div>
     </div>
 
     <div class="card">
       <h3>Customers</h3>
-      <div id="customersList"><p class="muted" style="color:#777;font-size:13px">Loading...</p></div>
-      <div id="addCustomerCard" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #eee">
+      <div id="customersList"><p class="muted">Loading...</p></div>
+      <div id="addCustomerCard" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--card-border)">
         <input id="customerName" placeholder="Customer name">
         <input id="customerAddress" placeholder="Address (optional)">
         <button onclick="addCustomer()">Add customer</button>
-        <div id="addCustomerResult" class="muted" style="color:#777;font-size:13px"></div>
+        <div id="addCustomerResult" class="muted"></div>
       </div>
     </div>
 
@@ -98,9 +164,10 @@
         <option value="needs_repair">Needs repair</option>
       </select>
       <table id="kegTable">
-        <thead><tr><th>ID</th><th>Status</th><th>Location</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th>Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      <div id="kegTableNote"></div>
     </div>
   </div>
 
@@ -162,6 +229,13 @@ function showMain(user) {
   }
   loadCustomers();
 
+  // Adding products is allowed for Admin and Filler (matches
+  // routes/products.js) - same reasoning as customers/Warehouse above.
+  if (user.role === 'admin' || user.role === 'filler') {
+    document.getElementById('addProductCard').style.display = 'block';
+  }
+  loadProducts();
+
   // Reports are Admin/Manager oversight data - the backend already
   // rejects the request for any other role, so just skip trying for them.
   if (user.role === 'admin' || user.role === 'manager') {
@@ -170,6 +244,9 @@ function showMain(user) {
     isAdmin = user.role === 'admin';
     document.getElementById('devicesCard').style.display = 'block';
     loadDevices();
+    document.getElementById('usersCard').style.display = 'block';
+    if (isAdmin) document.getElementById('addUserCard').style.display = 'block';
+    loadUsers();
   }
 
   loadKegs();
@@ -177,55 +254,78 @@ function showMain(user) {
 }
 
 async function createKeg() {
+  const manufacturing_number = document.getElementById('mfgNumber').value;
   const size_liters = document.getElementById('size').value;
   const material = document.getElementById('material').value;
   const res = await fetch('/api/kegs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ size_liters, material }),
+    body: JSON.stringify({ manufacturing_number, size_liters, material }),
   });
   if (!res.ok) {
     document.getElementById('createResult').textContent = 'Could not create keg - are you logged in as an admin?';
     return;
   }
   const data = await res.json();
+  document.getElementById('mfgNumber').value = '';
   document.getElementById('createResult').innerHTML =
     `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
   loadKegs();
   loadAlerts();
 }
 
+// Caps a list to the N most recent/most relevant entries for display,
+// so the dashboard doesn't grow unbounded and become a long scroll as
+// data accumulates - each section already fetches everything it needs
+// for its own logic (e.g. alert counts elsewhere), this only trims what
+// actually renders on screen.
+function capList(items, n) {
+  return { shown: items.slice(0, n), total: items.length, hasMore: items.length > n };
+}
+function moreNote(capped) {
+  return capped.hasMore
+    ? `<p class="muted" style="color:#777;font-size:12px;margin-top:6px">Showing ${capped.shown.length} most recent of ${capped.total} total.</p>`
+    : '';
+}
+
 async function loadKegs() {
   const status = document.getElementById('filterStatus').value;
   const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''));
-  const kegs = await res.json();
+  const kegs = await res.json(); // already newest-first from the server
+  const capped = capList(kegs, 7);
   const tbody = document.querySelector('#kegTable tbody');
-  tbody.innerHTML = kegs.map(k => `
+  tbody.innerHTML = capped.shown.map(k => `
     <tr>
       <td>${k.id}</td>
+      <td class="mfg-number">${k.manufacturing_number || '-'}</td>
       <td><span class="status">${k.status.replace(/_/g,' ')}</span></td>
       <td>${k.current_location || '-'}</td>
       <td><a href="/scan.html?keg=${k.id}">open</a> &middot; <a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
     </tr>
   `).join('');
+  document.getElementById('kegTableNote').innerHTML = moreNote(capped);
 }
 
 async function loadAlerts() {
   const res = await fetch('/api/alerts', { credentials: 'include' });
   const el = document.getElementById('alertsList');
-  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load alerts.</p>'; return; }
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load alerts.</p>'; return; }
   const alerts = await res.json();
   if (!alerts.length) {
-    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Nothing overdue right now.</p>';
+    el.innerHTML = '<p class="muted">Nothing overdue right now.</p>';
     return;
   }
-  el.innerHTML = alerts.map(a => `
+  // Worst-overdue first, so if the list is long, the most urgent ones
+  // are what actually stays visible.
+  const sorted = alerts.slice().sort((a, b) => b.hoursOverdue - a.hoursOverdue);
+  const capped = capList(sorted, 7);
+  el.innerHTML = capped.shown.map(a => `
     <div class="alert-item">
       <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a> &mdash; ${a.label}
       <span class="alert-badge">${a.hoursOverdue}h overdue</span>
       <br><span class="muted" style="color:#777">waiting on: ${a.role}</span>
     </div>
-  `).join('');
+  `).join('') + moreNote(capped);
 }
 
 // rows: [{ label, value, displayValue }] - renders a simple horizontal
@@ -246,7 +346,7 @@ async function loadReports() {
   const res = await fetch('/api/reports', { credentials: 'include' });
   const el = document.getElementById('reportsContent');
   if (!res.ok) {
-    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load reports.</p>';
+    el.innerHTML = '<p class="muted">Could not load reports.</p>';
     return;
   }
   const r = await res.json();
@@ -255,18 +355,18 @@ async function loadReports() {
   html += '<h4>Current inventory</h4>';
   html += r.inventory.length
     ? renderBarChart(r.inventory.map(i => ({ label: i.status.replace(/_/g,' '), value: i.count, displayValue: i.count })))
-    : '<p class="muted" style="color:#777;font-size:13px">No kegs yet.</p>';
+    : '<p class="muted">No kegs yet.</p>';
 
   html += '<h4>Average time per stage</h4>';
   const stageEntries = Object.entries(r.stageDurations);
   html += stageEntries.length
     ? renderBarChart(stageEntries.map(([status, s]) => ({ label: status.replace(/_/g,' '), value: s.avgHours, displayValue: s.avgHours + 'h' })))
-    : '<p class="muted" style="color:#777;font-size:13px">Not enough completed stages yet.</p>';
+    : '<p class="muted">Not enough completed stages yet.</p>';
 
   html += '<h4>Full-cycle turnover time</h4>';
   html += r.turnover
     ? `<p style="font-size:13px">Average <b>${r.turnover.avgHours}h</b> from ${r.turnover.count} completed cycle${r.turnover.count > 1 ? 's' : ''} (range ${r.turnover.minHours}h&ndash;${r.turnover.maxHours}h)</p>`
-    : '<p class="muted" style="color:#777;font-size:13px">No completed full cycles yet (a keg needs to be washed twice to measure one).</p>';
+    : '<p class="muted">No completed full cycles yet (a keg needs to be washed twice to measure one).</p>';
 
   html += '<h4>Fills</h4>';
   html += `<p style="font-size:13px">${r.fillStats.totalFills} fill${r.fillStats.totalFills === 1 ? '' : 's'} logged &middot; ${r.fillStats.totalLiters}L total</p>`;
@@ -279,7 +379,7 @@ async function loadReports() {
   html += '<h4>Customers holding kegs longest</h4>';
   html += r.customerHoldStats.length
     ? renderBarChart(r.customerHoldStats.map(c => ({ label: c.customerName, value: c.avgHours, displayValue: c.avgHours + 'h' })))
-    : '<p class="muted" style="color:#777;font-size:13px">No completed customer holds yet.</p>';
+    : '<p class="muted">No completed customer holds yet.</p>';
 
   el.innerHTML = html;
 }
@@ -287,10 +387,10 @@ async function loadReports() {
 async function loadCustomers() {
   const res = await fetch('/api/customers', { credentials: 'include' });
   const el = document.getElementById('customersList');
-  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load customers.</p>'; return; }
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load customers.</p>'; return; }
   const customers = await res.json();
   if (!customers.length) {
-    el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">No customers yet.</p>';
+    el.innerHTML = '<p class="muted">No customers yet.</p>';
     return;
   }
   el.innerHTML = `
@@ -325,15 +425,57 @@ async function addCustomer() {
   loadCustomers();
 }
 
+async function loadProducts() {
+  const res = await fetch('/api/products', { credentials: 'include' });
+  const el = document.getElementById('productsList');
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load products.</p>'; return; }
+  const products = await res.json();
+  if (!products.length) { el.innerHTML = '<p class="muted">No products yet.</p>'; return; }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>Beer</th><th>Typical ABV</th></tr></thead>
+      <tbody>
+        ${products.map(p => `<tr><td>${p.name}</td><td>${p.default_abv != null ? p.default_abv + '%' : '-'}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function addProduct() {
+  const name = document.getElementById('productName').value.trim();
+  const default_abv = document.getElementById('productAbv').value;
+  const msg = document.getElementById('addProductResult');
+  if (!name) { msg.textContent = 'Beer name is required.'; return; }
+
+  const res = await fetch('/api/products', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name, default_abv: default_abv || null }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    msg.textContent = data.error || 'Could not add beer - are you logged in as an admin or filler?';
+    return;
+  }
+  document.getElementById('productName').value = '';
+  document.getElementById('productAbv').value = '';
+  msg.textContent = 'Added.';
+  loadProducts();
+}
+
 async function loadDevices() {
   const res = await fetch('/api/devices', { credentials: 'include' });
   const el = document.getElementById('devicesContent');
-  if (!res.ok) { el.innerHTML = '<p class="muted" style="color:#777;font-size:13px">Could not load devices.</p>'; return; }
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load devices.</p>'; return; }
   const { registered, pending } = await res.json();
 
+  const cappedPending = capList(pending, 7); // already newest-first from the server
   let html = '<h4>Pending approval</h4>';
-  html += pending.length
-    ? pending.map(p => `
+  if (isAdmin && pending.length > 1) {
+    html += `<button onclick="dismissAllDevices()" style="background:#888;margin-bottom:8px">Dismiss all pending (${pending.length})</button>`;
+  }
+  html += cappedPending.shown.length
+    ? cappedPending.shown.map(p => `
         <div class="device-item">
           <b>${p.role}</b> &mdash; requested by ${p.requested_by_name || 'unknown user'}
           <br><span class="device-id-code">${p.device_id}</span>
@@ -342,19 +484,20 @@ async function loadDevices() {
             <button onclick="dismissDevice('${p.role}','${p.device_id}')" style="background:#888">Dismiss</button>
           ` : ''}
         </div>
-      `).join('')
-    : '<p class="muted" style="color:#777;font-size:13px">No pending requests.</p>';
+      `).join('') + moreNote(cappedPending)
+    : '<p class="muted">No pending requests.</p>';
 
+  const cappedRegistered = capList(registered, 7); // already newest-first from the server
   html += '<h4>Approved devices</h4>';
-  html += registered.length
-    ? registered.map(d => `
+  html += cappedRegistered.shown.length
+    ? cappedRegistered.shown.map(d => `
         <div class="device-item">
           <b>${d.role}</b>${d.device_label ? ' &mdash; ' + d.device_label : ''}
           <br><span class="device-id-code">${d.device_id}</span>
           ${isAdmin ? `<br><button class="btn-danger" onclick="revokeDevice('${d.role}','${d.device_id}')">Revoke</button>` : ''}
         </div>
-      `).join('')
-    : '<p class="muted" style="color:#777;font-size:13px">No devices approved yet.</p>';
+      `).join('') + moreNote(cappedRegistered)
+    : '<p class="muted">No devices approved yet.</p>';
 
   el.innerHTML = html;
 }
@@ -381,6 +524,116 @@ async function dismissDevice(role, deviceId) {
     credentials: 'include', body: JSON.stringify({ role, deviceId }),
   });
   loadDevices();
+}
+
+async function dismissAllDevices() {
+  await fetch('/api/devices/dismiss-all', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({}), // no role = clears every pending request
+  });
+  loadDevices();
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/users', { credentials: 'include' });
+  const el = document.getElementById('usersList');
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load users.</p>'; return; }
+  const users = await res.json();
+  el.innerHTML = users.map(u => `
+    <div class="device-item${u.active ? '' : ' user-inactive'}">
+      <b>${u.name}</b> (${u.role})${!u.active ? '<span class="badge-inactive">deactivated</span>' : ''}
+      ${isAdmin ? `
+        <br>
+        <button onclick="promptResetPassword('${u.id}','${u.name}')" style="font-size:12px;padding:4px 10px">Reset password</button>
+        ${u.active
+          ? `<button onclick="deactivateUser('${u.id}','${u.name}')" class="btn-danger" style="font-size:12px;padding:4px 10px">Deactivate</button>`
+          : `<button onclick="reactivateUser('${u.id}')" style="font-size:12px;padding:4px 10px">Reactivate</button>`}
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+async function createUser() {
+  const name = document.getElementById('newUserName').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  const password = document.getElementById('newUserPassword').value;
+  const msg = document.getElementById('createUserResult');
+
+  const res = await fetch('/api/users', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ name, role, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { msg.textContent = data.error || 'Could not create user.'; return; }
+
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  msg.textContent = `Created ${data.name}.`;
+  loadUsers();
+}
+
+function promptResetPassword(userId, userName) {
+  const newPassword = prompt(`New password for ${userName} (min 6 characters):`);
+  if (newPassword === null) return; // cancelled
+  if (newPassword.length < 6) { alert('Password must be at least 6 characters.'); return; }
+  resetUserPassword(userId, newPassword);
+}
+
+async function resetUserPassword(userId, newPassword) {
+  const res = await fetch(`/api/users/${userId}/reset-password`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Could not reset password.');
+    return;
+  }
+  alert('Password reset. Let them know their new password directly - it is not shown anywhere else.');
+}
+
+async function deactivateUser(userId, userName) {
+  if (!confirm(`Deactivate ${userName}? They will no longer be able to log in. Their past history stays intact and can be restored anytime by reactivating.`)) return;
+  const res = await fetch(`/api/users/${userId}/deactivate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Could not deactivate user.');
+    return;
+  }
+  loadUsers();
+}
+
+async function reactivateUser(userId) {
+  await fetch(`/api/users/${userId}/reactivate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({}),
+  });
+  loadUsers();
+}
+
+function toggleChangePassword() {
+  const card = document.getElementById('changePasswordCard');
+  card.style.display = card.style.display === 'none' ? 'block' : 'none';
+}
+
+async function changeMyPassword() {
+  const currentPassword = document.getElementById('currentPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const msg = document.getElementById('changePasswordResult');
+
+  const res = await fetch('/api/auth/change-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { msg.textContent = data.error || 'Could not change password.'; return; }
+
+  document.getElementById('currentPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  msg.textContent = 'Password updated.';
 }
 
 init();

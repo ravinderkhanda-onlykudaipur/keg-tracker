@@ -16,6 +16,7 @@ const reportRoutes = require('./routes/reports');
 const customerRoutes = require('./routes/customers');
 const deviceRoutes = require('./routes/devices');
 const userRoutes = require('./routes/users');
+const productRoutes = require('./routes/products');
 
 const app = express();
 app.use(express.json());
@@ -74,6 +75,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
 
 const PORT = process.env.PORT || 3000;
 

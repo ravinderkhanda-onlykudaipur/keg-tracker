@@ -11,15 +11,18 @@ const router = express.Router();
 // which didn't match "admin can make changes, manager/everyone else can
 // only view."
 router.post('/', requireRole('admin'), async (req, res) => {
-  const { size_liters, material } = req.body;
+  const { size_liters, material, manufacturing_number } = req.body;
   const id = 'KEG-' + nanoid(8).toUpperCase();
+  const mfgNumber = typeof manufacturing_number === 'string' && manufacturing_number.trim()
+    ? manufacturing_number.trim()
+    : null;
 
   await pool.query(`
-    INSERT INTO kegs (id, size_liters, material, status, current_location)
-    VALUES ($1, $2, $3, 'empty_returned', 'warehouse')
-  `, [id, size_liters || null, material || null]);
+    INSERT INTO kegs (id, manufacturing_number, size_liters, material, status, current_location)
+    VALUES ($1, $2, $3, $4, 'empty_returned', 'warehouse')
+  `, [id, mfgNumber, size_liters || null, material || null]);
 
-  res.status(201).json({ id });
+  res.status(201).json({ id, manufacturing_number: mfgNumber });
 });
 
 router.get('/:id', async (req, res) => {
