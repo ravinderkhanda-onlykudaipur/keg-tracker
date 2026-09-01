@@ -7,6 +7,19 @@ const { requireRole } = require('../middleware/requireAuth');
 
 const router = express.Router();
 
+// Manufacturing number is Admin/Manager only - stripped out for every
+// other role, including anyone not logged in at all. Enforced here, not
+// just hidden in the UI, since GET /:id and GET / are intentionally left
+// open (no requireAuth) for the QR-scan flow - the real guarantee has to
+// live server-side or it's not a guarantee.
+function canSeeManufacturingNumber(req) {
+  return !!req.user && (req.user.role === 'admin' || req.user.role === 'manager');
+}
+function stripManufacturingNumber(keg) {
+  const { manufacturing_number, ...rest } = keg;
+  return rest;
+}
+
 // Only admins can create kegs now - previously any logged-in role could,
 // which didn't match "admin can make changes, manager/everyone else can
 // only view."
@@ -36,8 +49,9 @@ router.post('/', requireRole('admin'), async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [req.params.id]);
-  const keg = kegRows[0];
+  let keg = kegRows[0];
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
+  if (!canSeeManufacturingNumber(req)) keg = stripManufacturingNumber(keg);
 
   const { rows: events } = await pool.query(`
     SELECT e.id, e.action_type, e.role, e.details, e.created_at, u.name AS user_name
@@ -87,7 +101,9 @@ router.get('/', async (req, res) => {
     `SELECT * FROM kegs ${where} ORDER BY created_at DESC LIMIT 200`,
     params
   );
-  res.json(rows);
+
+  const result = canSeeManufacturingNumber(req) ? rows : rows.map(stripManufacturingNumber);
+  res.json(result);
 });
 
 module.exports = router;

@@ -6,54 +6,73 @@
 <title>Keg Scan</title>
 <style>
   :root {
-    --bg: #FAF5EC;
-    --card-bg: #FFFFFF;
-    --card-border: #EDE3D3;
-    --text: #2B2420;
-    --text-muted: #6B5D4F;
-    --text-heading: #3D2C1E;
-    --input-bg: #FFFCF8;
-    --input-border: #D9CBB5;
-    --primary: #B5651D;
-    --primary-hover: #9A5518;
-    --secondary: #3B6D8F;
-    --secondary-hover: #2F5972;
-    --success-bg: #E4F1EA;
-    --success-text: #1E6B44;
-    --error-bg: #FBE4E1;
-    --error-text: #932B1F;
-    --error-border: #F0B8AE;
-    --pending-bg: #E3EFFB;
-    --pending-text: #1B4E82;
-    --warn-bg: #FFF2D6;
-    --warn-text: #7A5000;
+    --bg: #16130F;
+    --card-bg: #221D17;
+    --card-border: #3D342A;
+    --text: #F2EBDD;
+    --text-muted: #B8A98F;
+    --text-heading: #FFFFFF;
+    --input-bg: #2A2419;
+    --input-border: #4D4433;
+    --primary: #E8923F;
+    --primary-hover: #F0A25A;
+    --secondary: #5CA1CC;
+    --secondary-hover: #74B3DC;
+    --success-bg: #1D3A28;
+    --success-text: #7FE0A3;
+    --error-bg: #4A2320;
+    --error-text: #FF9B85;
+    --error-border: #6B342E;
+    --pending-bg: #1D3350;
+    --pending-text: #8FC5F5;
+    --warn-bg: #4A3B12;
+    --warn-text: #F5CE6E;
   }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
-  h2 { font-size: 22px; margin-bottom: 6px; color: var(--text-heading); }
-  h3 { font-size: 18px; color: var(--text-heading); margin: 0 0 4px; }
-  .muted { color: var(--text-muted); font-size: 14px; }
-  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin: 16px 0; box-shadow: 0 1px 3px rgba(80,60,30,0.07), 0 1px 2px rgba(80,60,30,0.05); }
-  label { display: block; font-size: 14px; margin: 12px 0 5px; font-weight: 600; color: var(--text-heading); }
-  input, select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
-  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(181,101,29,0.14); }
-  button { width: 100%; margin-top: 18px; font-size: 16px; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 18px; line-height: 1.5; }
+  h2 { font-size: 24px; margin-bottom: 6px; color: var(--text-heading); }
+  h3 { font-size: 20px; color: var(--text-heading); margin: 0 0 4px; }
+  .muted { color: var(--text-muted); font-size: 15px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2); }
+  label { display: block; font-size: 15px; margin: 12px 0 5px; font-weight: 600; color: var(--text-heading); }
+  input, select { width: 100%; box-sizing: border-box; font-size: 17px; padding: 13px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(232,146,63,0.2); }
+  button { width: 100%; margin-top: 18px; font-size: 17px; padding: 14px; background: var(--primary); color: #1A1409; border: none; border-radius: 10px; cursor: pointer; font-weight: 700; }
   button:hover { background: var(--primary-hover); }
-  .status-pill { display: inline-block; padding: 4px 12px; border-radius: 12px; background: var(--success-bg); color: var(--success-text); font-size: 14px; font-weight: 600; }
-  .error { color: var(--error-text); font-size: 15px; margin-top: 10px; font-weight: 500; }
-  .success { color: var(--success-text); font-size: 15px; margin-top: 10px; font-weight: 500; }
+
+  /* Header: logo centered, then user-info-left/logout-right row, then bold-caps status */
+  .app-header { margin-bottom: 8px; }
+  .keg-logo { display: block; margin: 4px auto 10px; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .header-left { font-size: 15px; color: var(--text-muted); }
+  .header-left b { color: var(--text-heading); }
+  .header-left a { color: var(--secondary); text-decoration: none; }
+  .logout-btn { width: auto; margin-top: 0; padding: 9px 16px; font-size: 14px; font-weight: 700; text-transform: uppercase; background: var(--error-text); color: #2A1512; }
+  .logout-btn:hover { opacity: 0.85; background: var(--error-text); }
+  .keg-title-row { font-size: 20px; font-weight: 700; color: var(--text-heading); margin: 10px 0 6px; }
+  .status-row { margin: 8px 0 14px; }
+  .status-pill { display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--success-bg); color: var(--success-text); font-size: 17px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .error { color: var(--error-text); font-size: 16px; margin-top: 10px; font-weight: 500; }
+  .success { color: var(--success-text); font-size: 16px; margin-top: 10px; font-weight: 500; }
+  /* History intentionally stays at its original, smaller size while
+     everything else on the page got larger - a dense list of past
+     events reads better compact, and doesn't need the same emphasis as
+     the current action a worker is actually taking. */
   .history-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
   .history-item b { text-transform: capitalize; }
-  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; }
-  .pending-banner { background: var(--pending-bg); color: var(--pending-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; }
-  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 14px; font-weight: 600; }
-  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 14px; }
-  .wrong-turn-banner { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 10px; padding: 16px; font-size: 15px; font-weight: 600; }
-  .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 6px; }
-  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 14px; background: var(--secondary); }
+  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
+  .pending-banner { background: var(--pending-bg); color: var(--pending-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
+  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; font-weight: 700; }
+  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 15px; }
+  /* Warning banner: bold + ALL CAPS, per explicit request - this is the
+     "wrong role / wrong time" message, meant to be unmissable. */
+  .wrong-turn-banner { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 10px; padding: 16px; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
+  .wrong-turn-banner .detail { font-weight: 600; display: block; margin-top: 8px; text-transform: none; }
+  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 15px; background: var(--secondary); color: #0D2333; }
   .geo-btn:hover { background: var(--secondary-hover); }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--input-bg); }
-  .destination-line { background: var(--success-bg); border-radius: 10px; padding: 10px 14px; margin: 10px 0; font-size: 14px; }
-  .destination-line .address { display: block; color: var(--text-muted); font-size: 13px; margin-top: 2px; }
+  .destination-line { background: var(--success-bg); border-radius: 10px; padding: 12px 16px; margin: 10px 0; font-size: 16px; color: var(--success-text); }
+  .destination-line .address { display: block; color: var(--text-muted); font-size: 14px; margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -64,6 +83,11 @@
   <div id="pendingBanner" class="pending-banner" style="display:none"></div>
 
   <div id="loginBlock" class="card">
+    <svg class="keg-logo" width="56" height="64" viewBox="0 0 56 64" aria-label="Keg logo">
+      <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#E8923F" stroke="#F0A25A" stroke-width="2"/>
+      <path d="M8 20 Q28 26 48 20" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+      <path d="M7 44 Q28 50 49 44" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+    </svg>
     <h2>Who are you?</h2>
     <label>User</label>
     <select id="userSelect"></select>
@@ -74,8 +98,24 @@
   </div>
 
   <div id="appBlock" style="display:none">
-    <h2 id="kegTitle"></h2>
-    <p class="muted">Status: <span id="kegStatus" class="status-pill"></span> &middot; logged in as <span id="whoami"></span> &middot; <a href="#" onclick="logout();return false;">log out</a> &middot; <a href="#" onclick="toggleChangePassword();return false;">change my password</a></p>
+    <div class="app-header">
+      <svg class="keg-logo" width="56" height="64" viewBox="0 0 56 64" aria-label="Keg logo">
+        <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#E8923F" stroke="#F0A25A" stroke-width="2"/>
+        <path d="M8 20 Q28 26 48 20" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+        <path d="M7 44 Q28 50 49 44" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+      </svg>
+      <div id="kegTitle" class="keg-title-row"></div>
+      <div class="header-row">
+        <div class="header-left">
+          Logged in as <b id="whoami"></b>
+          <br><a href="#" onclick="toggleChangePassword();return false;">change my password</a>
+        </div>
+        <button class="logout-btn" onclick="logout();return false;">Log out</button>
+      </div>
+      <div class="status-row">
+        <span id="kegStatus" class="status-pill"></span>
+      </div>
+    </div>
     <div id="kegDestinationLine" class="destination-line" style="display:none">
       Destination: <b id="kegDestination"></b>
       <span class="address" id="kegDestinationAddress"></span>
@@ -290,7 +330,11 @@ async function loadMyAlerts() {
 async function loadKeg() {
   let res;
   try {
-    res = await fetch(`/api/kegs/${kegId}`);
+    // credentials: 'include' is required now - the backend
+    // (routes/kegs.js) decides whether to include manufacturing_number
+    // based on the logged-in session, so without sending the cookie,
+    // Admin/Manager would never see it either.
+    res = await fetch(`/api/kegs/${kegId}`, { credentials: 'include' });
   } catch (err) {
     // No connectivity at all - fall back to the last-known data for this
     // keg, if we have any (i.e. this device has scanned it before).
@@ -333,7 +377,11 @@ function updateKegTitle() {
   // Shows the manufacturer's own serial number alongside our internal
   // system ID, when one was recorded at keg creation - lets anyone
   // physically holding the keg cross-check it against the number
-  // actually stamped on the metal.
+  // actually stamped on the metal. Restricted to Admin/Manager: the
+  // backend (routes/kegs.js) strips manufacturing_number out of the API
+  // response entirely for every other role, so it's simply absent here
+  // for them - this ternary's fallback to the plain id is what makes
+  // that work, not a separate role check on this end.
   const titleEl = document.getElementById('kegTitle');
   titleEl.innerHTML = keg.manufacturing_number
     ? `${keg.id} <span class="muted" style="font-size:15px;font-weight:400">(Mfg #: ${keg.manufacturing_number})</span>`

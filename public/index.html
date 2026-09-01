@@ -6,58 +6,65 @@
 <title>Keg Tracker - Admin</title>
 <style>
   :root {
-    --bg: #FAF5EC;
-    --card-bg: #FFFFFF;
-    --card-border: #EDE3D3;
-    --text: #2B2420;
-    --text-muted: #6B5D4F;
-    --text-heading: #3D2C1E;
-    --input-bg: #FFFCF8;
-    --input-border: #D9CBB5;
-    --primary: #B5651D;
-    --primary-hover: #9A5518;
-    --secondary: #3B6D8F;
-    --success-bg: #E4F1EA;
-    --success-text: #1E6B44;
-    --error-bg: #FBE4E1;
-    --error-text: #932B1F;
+    --bg: #16130F;
+    --card-bg: #221D17;
+    --card-border: #3D342A;
+    --text: #F2EBDD;
+    --text-muted: #B8A98F;
+    --text-heading: #FFFFFF;
+    --input-bg: #2A2419;
+    --input-border: #4D4433;
+    --primary: #E8923F;
+    --primary-hover: #F0A25A;
+    --secondary: #5CA1CC;
+    --success-bg: #1D3A28;
+    --success-text: #7FE0A3;
+    --error-bg: #4A2320;
+    --error-text: #FF9B85;
   }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 780px; margin: 24px auto; padding: 0 16px 40px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
-  h1 { font-size: 24px; color: var(--text-heading); }
-  h3 { font-size: 18px; color: var(--text-heading); margin: 0 0 10px; }
-  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(80,60,30,0.07), 0 1px 2px rgba(80,60,30,0.05); }
-  input, select, button { font-size: 16px; padding: 10px; margin: 4px 6px 4px 0; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text); }
-  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(181,101,29,0.14); }
-  button { cursor: pointer; background: var(--primary); color: white; border: none; padding: 10px 16px; font-weight: 600; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 780px; margin: 24px auto; padding: 0 16px 40px; color: var(--text); background: var(--bg); font-size: 18px; line-height: 1.5; }
+  h1 { font-size: 26px; color: var(--text-heading); display: flex; align-items: center; gap: 12px; }
+  h3 { font-size: 20px; color: var(--text-heading); margin: 0 0 10px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2); }
+  input, select, button { font-size: 17px; padding: 11px; margin: 4px 6px 4px 0; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(232,146,63,0.2); }
+  button { cursor: pointer; background: var(--primary); color: #1A1409; border: none; padding: 11px 18px; font-weight: 700; }
   button:hover { background: var(--primary-hover); }
   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  td, th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--card-border); font-size: 14px; }
-  .status { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; background: var(--success-bg); color: var(--success-text); font-weight: 600; }
-  a { color: var(--primary); }
-  .muted { color: var(--text-muted); font-size: 14px; }
-  .alert-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
+  td, th { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--card-border); font-size: 15px; }
+  .status { display: inline-block; padding: 4px 12px; border-radius: 10px; font-size: 14px; background: var(--success-bg); color: var(--success-text); font-weight: 700; text-transform: uppercase; }
+  a { color: var(--secondary); }
+  .muted { color: var(--text-muted); font-size: 15px; }
+  .alert-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 15px; }
   .alert-item:last-child { border-bottom: none; }
-  .alert-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; background: var(--error-bg); color: var(--error-text); font-weight: 600; }
-  .role-note { background: #F3EBDC; color: var(--text-heading); border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 18px; }
-  .bar-row { display: flex; align-items: center; margin: 8px 0; font-size: 14px; }
+  .alert-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 14px; background: var(--error-bg); color: var(--error-text); font-weight: 700; }
+  .role-note { background: #2E2717; color: var(--text-heading); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 18px; }
+  .bar-row { display: flex; align-items: center; margin: 8px 0; font-size: 15px; }
   .bar-label { width: 150px; flex-shrink: 0; text-transform: capitalize; }
-  .bar-track { flex: 1; background: #F0E8D8; border-radius: 4px; height: 20px; overflow: hidden; margin: 0 8px; }
+  .bar-track { flex: 1; background: #33291B; border-radius: 4px; height: 20px; overflow: hidden; margin: 0 8px; }
   .bar-fill { background: var(--primary); height: 100%; border-radius: 4px; }
   .bar-value { width: 70px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-  .card h4 { margin: 18px 0 6px; font-size: 15px; color: var(--text-heading); }
+  .card h4 { margin: 18px 0 6px; font-size: 16px; color: var(--text-heading); }
   .card h4:first-child { margin-top: 0; }
-  .device-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 14px; }
+  .device-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 15px; }
   .device-item:last-child { border-bottom: none; }
-  .device-id-code { font-family: monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }
-  .device-item button { font-size: 13px; padding: 6px 12px; margin-top: 6px; }
+  .device-id-code { font-family: monospace; font-size: 13px; color: var(--text-muted); word-break: break-all; }
+  .device-item button { font-size: 14px; padding: 6px 12px; margin-top: 6px; }
   .btn-danger { background: var(--error-text); }
   .user-inactive { opacity: 0.55; }
-  .badge-inactive { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; background: #EDE3D3; color: var(--text-muted); margin-left: 6px; }
-  .mfg-number { color: var(--text-muted); font-size: 13px; }
+  .badge-inactive { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 13px; background: #3D342A; color: var(--text-muted); margin-left: 6px; }
+  .mfg-number { color: var(--text-muted); font-size: 14px; }
 </style>
 </head>
 <body>
-  <h1>Keg Tracker &mdash; Admin</h1>
+  <h1>
+    <svg width="34" height="40" viewBox="0 0 56 64" aria-label="Keg logo">
+      <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#E8923F" stroke="#F0A25A" stroke-width="2"/>
+      <path d="M8 20 Q28 26 48 20" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+      <path d="M7 44 Q28 50 49 44" stroke="#16130F" stroke-width="2.5" fill="none" opacity="0.45"/>
+    </svg>
+    Keg Tracker &mdash; Admin
+  </h1>
 
   <div class="card" id="loginCard">
     <h3>Log in to manage kegs</h3>
@@ -164,7 +171,7 @@
         <option value="needs_repair">Needs repair</option>
       </select>
       <table id="kegTable">
-        <thead><tr><th>ID</th><th>Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <div id="kegTableNote"></div>
@@ -174,6 +181,7 @@
 <script src="/device-id.js"></script>
 <script>
 let isAdmin = false;
+let canSeeMfgNumber = false; // admin or manager only - see routes/kegs.js for the matching backend enforcement
 
 async function init() {
   const meRes = await fetch('/api/auth/me', { credentials: 'include' });
@@ -219,6 +227,13 @@ function showMain(user) {
   } else {
     document.getElementById('readOnlyNote').style.display = 'block';
   }
+
+  // Manufacturing number is Admin/Manager only - matches the backend
+  // restriction in routes/kegs.js (which is the real enforcement; this
+  // just controls whether the UI bothers showing the column at all,
+  // since the data won't be present in the API response for anyone else).
+  canSeeMfgNumber = (user.role === 'admin' || user.role === 'manager');
+  document.getElementById('mfgHeaderCell').style.display = canSeeMfgNumber ? '' : 'none';
 
   // Adding customers is allowed for Admin and Warehouse (matches
   // routes/customers.js) - Warehouse gets this too since they're the
@@ -301,14 +316,18 @@ function moreNote(capped) {
 
 async function loadKegs() {
   const status = document.getElementById('filterStatus').value;
-  const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''));
+  // credentials: 'include' is required here now - the backend
+  // (routes/kegs.js) decides whether to include manufacturing_number
+  // based on the logged-in session, so without sending the cookie,
+  // Admin/Manager would never see it either.
+  const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''), { credentials: 'include' });
   const kegs = await res.json(); // already newest-first from the server
   const capped = capList(kegs, 7);
   const tbody = document.querySelector('#kegTable tbody');
   tbody.innerHTML = capped.shown.map(k => `
     <tr>
       <td>${k.id}</td>
-      <td class="mfg-number">${k.manufacturing_number || '-'}</td>
+      ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
       <td><span class="status">${k.status.replace(/_/g,' ')}</span></td>
       <td>${k.current_location || '-'}</td>
       <td><a href="/scan.html?keg=${k.id}">open</a> &middot; <a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
