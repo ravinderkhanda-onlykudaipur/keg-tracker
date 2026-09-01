@@ -30,7 +30,8 @@ async function init() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('filler','washer','driver','warehouse','admin','manager')),
-      password_hash TEXT NOT NULL
+      password_hash TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT true
     );
 
     CREATE TABLE IF NOT EXISTS customers (
@@ -82,6 +83,14 @@ async function init() {
       UNIQUE(role, device_id)
     );
   `);
+
+  // Schema migrations for databases created before a column was added -
+  // CREATE TABLE IF NOT EXISTS above is a no-op once the table already
+  // exists (which it does now that Postgres persists across deploys),
+  // so a genuinely new column needs its own explicit ALTER TABLE, run
+  // safely with IF NOT EXISTS so this is a no-op on every future boot
+  // once it's already applied once.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;`);
 }
 
 // Runs fn with a dedicated client, wrapped in BEGIN/COMMIT/ROLLBACK,
