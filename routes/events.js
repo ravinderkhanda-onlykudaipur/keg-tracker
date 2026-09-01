@@ -42,6 +42,18 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
     return res.status(429).json({ error: cooldown.error }); // 429 Too Many Requests
   }
 
+  // Location is required (not optional) for a driver confirming delivery
+  // and for Warehouse receiving an empty keg back - both are meant to
+  // record where the keg physically is at that exact moment, so a blank
+  // submission would silently lose that. Same pattern as the
+  // manufacturing-number and destination guards below/above: the
+  // frontend also marks these fields required, but this is the real
+  // enforcement, not just a UI nicety.
+  const LOCATION_REQUIRED_ACTIONS = ['deliver', 'receive_empty'];
+  if (LOCATION_REQUIRED_ACTIONS.includes(actionType) && !(details?.location || '').trim()) {
+    return res.status(400).json({ error: 'Location is required.' });
+  }
+
   // Guard against an empty/blank destination being "assigned" - without
   // this, submitting the form blank would silently succeed (a logged
   // event with no actual effect) while ALSO moving the keg to

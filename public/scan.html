@@ -149,7 +149,7 @@ const ROLE_ACTIONS = {
     delivered_from_dispatched: {
       action: 'deliver', label: 'Log delivery',
       fields: [
-        { name: 'location', label: 'Delivery location (confirm)', type: 'text', geo: true },
+        { name: 'location', label: 'Delivery location (confirm)', type: 'text', geo: true, required: true },
         { name: 'customer_signature', label: 'Customer name (signature)', type: 'text' },
       ],
     },
@@ -175,7 +175,7 @@ const ROLE_ACTIONS = {
     receive_from_empty_at_customer: {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
-        { name: 'location', label: 'Storage zone', type: 'text', geo: true },
+        { name: 'location', label: 'Storage zone', type: 'text', geo: true, required: true },
       ],
     },
     mark_repaired: {
