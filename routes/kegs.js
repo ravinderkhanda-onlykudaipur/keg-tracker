@@ -47,6 +47,30 @@ router.post('/', requireRole('admin'), async (req, res) => {
   res.status(201).json({ id, manufacturing_number: mfgNumber });
 });
 
+// CSV data export - Admin/Manager only, matches the other oversight-level
+// features (Reports, Devices, Users). Registered before GET /:id so
+// Express doesn't try to match "export.csv" as a keg id.
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+}
+router.get('/export.csv', requireRole('admin', 'manager'), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM kegs ORDER BY created_at DESC');
+  const headers = [
+    'id', 'manufacturing_number', 'size_liters', 'material', 'status',
+    'current_location', 'destination', 'destination_address', 'destination_phone',
+    'customer_id', 'created_at',
+  ];
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map((h) => csvEscape(row[h])).join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="kegs-export.csv"');
+  res.send(lines.join('\n'));
+});
+
 router.get('/:id', async (req, res) => {
   const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [req.params.id]);
   let keg = kegRows[0];

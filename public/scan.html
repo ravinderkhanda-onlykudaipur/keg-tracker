@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <title>Keg Scan</title>
 
 <!-- PWA installability: lets "Add to Home Screen" create a real app icon
@@ -64,7 +64,7 @@
   button:hover { background: var(--primary-hover); }
 
   .app-header { margin-bottom: 8px; }
-  .keg-logo { display: block; margin: 4px auto 10px; }
+  .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
   .header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .header-left { font-size: 13px; color: var(--text-secondary); }
   .header-left b { color: var(--text); font-weight: 500; }
@@ -90,6 +90,8 @@
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
   .destination-line { background: var(--primary-tint-bg); border-radius: 10px; padding: 12px 16px; margin: 10px 0; font-size: 14px; color: var(--primary-tint-text-dark); }
   .destination-line .address { display: block; color: var(--primary-tint-text-mid); font-size: 13px; margin-top: 3px; }
+  .btn-danger-outline { background: #FFFFFF; color: var(--error-text); border: 1px solid var(--error-text); }
+  .btn-danger-outline:hover { background: var(--error-bg); }
 </style>
 </head>
 <body>
@@ -100,11 +102,7 @@
   <div id="pendingBanner" class="pending-banner" style="display:none"></div>
 
   <div id="loginBlock" class="card">
-    <svg class="keg-logo" width="56" height="64" viewBox="0 0 56 64" aria-label="Keg logo">
-      <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#2FA8F5" stroke="#1E8FDB" stroke-width="2"/>
-      <path d="M8 20 Q28 26 48 20" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-      <path d="M7 44 Q28 50 49 44" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-    </svg>
+    <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
     <h2>Who are you?</h2>
     <label>User</label>
     <select id="userSelect"></select>
@@ -116,11 +114,7 @@
 
   <div id="appBlock" style="display:none">
     <div class="app-header">
-      <svg class="keg-logo" width="56" height="64" viewBox="0 0 56 64" aria-label="Keg logo">
-        <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#2FA8F5" stroke="#1E8FDB" stroke-width="2"/>
-        <path d="M8 20 Q28 26 48 20" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-        <path d="M7 44 Q28 50 49 44" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-      </svg>
+      <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
       <div class="header-row">
         <div class="header-left">
           Logged in as <b id="whoami"></b>
@@ -138,9 +132,14 @@
     </div>
     <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
 
+    <div id="homeScreenBlock" class="card" style="display:none">
+      <h2 id="homeGreeting" style="margin-top:0"></h2>
+      <p class="muted">Scan a keg's QR code to get started.</p>
+    </div>
+
     <div class="card" id="formCard"></div>
 
-    <div class="card">
+    <div class="card" id="historyCard">
       <h3 style="margin-top:0">History</h3>
       <div id="history"></div>
     </div>
@@ -308,14 +307,37 @@ function showApp() {
   document.getElementById('loginBlock').style.display = 'none';
   document.getElementById('appBlock').style.display = 'block';
   document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
-  loadKeg();
   loadMyAlerts();
+
+  // No keg in the URL - this page was opened directly (e.g. from an
+  // installed home-screen icon), not via a QR scan. Show a
+  // personalized landing screen instead of erroring out trying to
+  // fetch a keg that was never specified.
+  if (!kegId) {
+    showHomeScreen();
+    return;
+  }
+
+  loadKeg();
+}
+
+function showHomeScreen() {
+  document.getElementById('formCard').style.display = 'none';
+  document.getElementById('historyCard').style.display = 'none';
+  document.getElementById('homeScreenBlock').style.display = 'block';
+
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const firstName = currentUser.name.split(' ')[0];
+  document.getElementById('homeGreeting').textContent = `${timeGreeting}, ${firstName}!`;
 }
 
 async function loadMyAlerts() {
-  // Shows how many OTHER kegs (not necessarily this one) are overdue for
-  // this person's role - a general heads-up, separate from whatever
-  // specific keg they scanned to get here.
+  // Shows how many kegs are overdue for this person's role - on a
+  // specific keg's page, phrased as "other" (separate from whatever
+  // keg they scanned to get here); on the home screen (no keg in
+  // context), phrased without "other" since there's no "this one" to
+  // be other than.
   try {
     const res = await fetch('/api/alerts', { credentials: 'include' });
     if (!res.ok) return;
@@ -324,7 +346,8 @@ async function loadMyAlerts() {
     const banner = document.getElementById('myAlertsBanner');
     if (mine.length > 0) {
       banner.style.display = 'block';
-      banner.textContent = `\u26A0 ${mine.length} other keg${mine.length > 1 ? 's are' : ' is'} overdue for your role.`;
+      const otherWord = kegId ? 'other ' : '';
+      banner.textContent = `\u26A0 ${mine.length} ${otherWord}keg${mine.length > 1 ? 's are' : ' is'} overdue for your role.`;
     } else {
       banner.style.display = 'none';
     }
@@ -673,6 +696,17 @@ async function renderForm() {
     <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
     <div id="submitMsg"></div>
   `;
+
+  // Damage reporting: a separate, secondary action available to a
+  // driver at any point while they physically have the keg (before or
+  // after handing it off), alongside whatever their normal next step
+  // is - not folded into the main form above, since it's an exception
+  // path, not the expected next action.
+  if (currentUser.role === 'driver' && (keg.status === 'dispatched' || keg.status === 'delivered')) {
+    card.innerHTML += `
+      <button type="button" class="btn-danger-outline" onclick="reportDamage()" style="margin-top:14px">&#9888; Report damage instead</button>
+    `;
+  }
 }
 
 // Checks any `requiredWhen` conditions on the current form's fields
@@ -733,6 +767,50 @@ function useMyLocation(fieldName) {
 }
 
 let isSubmitting = false; // guards against double-submit (double-tap, slow network + impatient re-tap)
+
+// Damage reporting is a secondary, exception-path action for Driver -
+// not built through the generic field-rendering system above (that's
+// for a role's expected next action), just a direct prompt + submit,
+// sharing the same offline-queue and error-handling shape as
+// submitEvent() below rather than duplicating it wholesale.
+async function reportDamage() {
+  if (isSubmitting) return;
+
+  const notes = prompt('Describe the damage (required):');
+  if (notes === null) return; // cancelled
+  if (!notes.trim()) { alert('A description is required to report damage.'); return; }
+
+  isSubmitting = true;
+  try {
+    const details = { notes: notes.trim() };
+    let res;
+    try {
+      res = await fetch(`/api/kegs/${kegId}/events`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ actionType: 'report_damage', details }),
+      });
+    } catch (err) {
+      if (!OfflineQueue.canQueueFor(kegId)) {
+        alert('There is already a queued action for this keg on this device - sync that one before adding another.');
+        return;
+      }
+      OfflineQueue.enqueue({ kegId, actionType: 'report_damage', details });
+      renderForm();
+      updatePendingBanner();
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Could not report damage.');
+      return;
+    }
+    await loadKeg(); // re-renders - keg is now needs_repair, driver's form will show "not your turn" until Warehouse resolves it
+  } finally {
+    isSubmitting = false;
+  }
+}
 
 async function submitEvent(action) {
   if (isSubmitting) return; // ignore a second click while the first is still in flight

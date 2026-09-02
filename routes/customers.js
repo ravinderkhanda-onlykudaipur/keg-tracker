@@ -37,4 +37,26 @@ router.post('/', requireRole('admin', 'warehouse'), async (req, res) => {
   res.status(201).json({ id, name: trimmedName, address: trimmedAddress, phone: trimmedPhone });
 });
 
+// Editing is Admin only - unlike creation (which Warehouse also does
+// mid-workflow for a brand-new customer), correcting an existing
+// customer's details is management-level, not an operational task.
+router.put('/:id', requireRole('admin'), async (req, res) => {
+  const { name, address, phone } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Customer name is required.' });
+  }
+
+  const trimmedName = name.trim();
+  const trimmedAddress = typeof address === 'string' && address.trim() ? address.trim() : null;
+  const trimmedPhone = typeof phone === 'string' && phone.trim() ? phone.trim() : null;
+
+  const result = await pool.query(
+    'UPDATE customers SET name = $1, address = $2, phone = $3 WHERE id = $4',
+    [trimmedName, trimmedAddress, trimmedPhone, req.params.id]
+  );
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Customer not found.' });
+
+  res.json({ id: req.params.id, name: trimmedName, address: trimmedAddress, phone: trimmedPhone });
+});
+
 module.exports = router;

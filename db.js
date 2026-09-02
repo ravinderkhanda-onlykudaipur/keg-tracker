@@ -77,20 +77,19 @@ async function init() {
 
     CREATE TABLE IF NOT EXISTS device_registrations (
       id SERIAL PRIMARY KEY,
-      role TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
       device_id TEXT NOT NULL,
       device_label TEXT,
       registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(role, device_id)
+      UNIQUE(user_id, device_id)
     );
 
     CREATE TABLE IF NOT EXISTS device_approval_requests (
       id SERIAL PRIMARY KEY,
-      role TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
       device_id TEXT NOT NULL,
-      requested_by_user_id TEXT,
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(role, device_id)
+      UNIQUE(user_id, device_id)
     );
   `);
 
@@ -105,6 +104,43 @@ async function init() {
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS destination_address TEXT;`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS destination_phone TEXT;`);
   await pool.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS phone TEXT;`);
+
+  // Device registration moved from per-ROLE to per-USER: a device
+  // approved for one washer no longer automatically works for a
+  // different washer sharing that role - each individual now needs
+  // their own device approved. Existing role-keyed rows can't be
+  // attributed to a specific person under the old model (it never
+  // tracked who, only which role), so they're removed rather than kept
+  // as meaningless data - everyone's device just needs approving once
+  // more under the new system. All of this is safe to run on every
+  // boot: each step either uses IF EXISTS/IF NOT EXISTS, or (for the
+  // UNIQUE constraint, which has no such shorthand in Postgres) is
+  // wrapped in a existence check first.
+  await pool.query(`ALTER TABLE device_registrations ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);`);
+  await pool.query(`ALTER TABLE device_approval_requests ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id);`);
+  await pool.query(`DELETE FROM device_registrations WHERE user_id IS NULL;`);
+  await pool.query(`DELETE FROM device_approval_requests WHERE user_id IS NULL;`);
+  await pool.query(`ALTER TABLE device_registrations ALTER COLUMN user_id SET NOT NULL;`);
+  await pool.query(`ALTER TABLE device_approval_requests ALTER COLUMN user_id SET NOT NULL;`);
+  await pool.query(`ALTER TABLE device_registrations DROP CONSTRAINT IF EXISTS device_registrations_role_device_id_key;`);
+  await pool.query(`ALTER TABLE device_approval_requests DROP CONSTRAINT IF EXISTS device_approval_requests_role_device_id_key;`);
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'device_registrations_user_id_device_id_key') THEN
+        ALTER TABLE device_registrations ADD CONSTRAINT device_registrations_user_id_device_id_key UNIQUE (user_id, device_id);
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'device_approval_requests_user_id_device_id_key') THEN
+        ALTER TABLE device_approval_requests ADD CONSTRAINT device_approval_requests_user_id_device_id_key UNIQUE (user_id, device_id);
+      END IF;
+    END $$;
+  `);
+  await pool.query(`ALTER TABLE device_registrations DROP COLUMN IF EXISTS role;`);
+  await pool.query(`ALTER TABLE device_approval_requests DROP COLUMN IF EXISTS role;`);
+  await pool.query(`ALTER TABLE device_approval_requests DROP COLUMN IF EXISTS requested_by_user_id;`); // superseded by user_id itself
 }
 
 // Runs fn with a dedicated client, wrapped in BEGIN/COMMIT/ROLLBACK,

@@ -42,6 +42,39 @@ router.post('/', requireRole('admin'), async (req, res) => {
   res.status(201).json({ id, name: name.trim(), role, active: true });
 });
 
+// Editing name/role - password changes stay on their own dedicated
+// reset-password endpoint below, not folded in here.
+router.put('/:id', requireRole('admin'), async (req, res) => {
+  const { name, role } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Name is required.' });
+  }
+  if (typeof role !== 'string' || !VALID_ROLES.includes(role)) {
+    return res.status(400).json({ error: 'A valid role is required.' });
+  }
+
+  const { rows: targetRows } = await pool.query('SELECT role, active FROM users WHERE id = $1', [req.params.id]);
+  const target = targetRows[0];
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+
+  // Same lockout-avoidance as deactivate: changing the last active
+  // admin's role AWAY from admin has the exact same effect as
+  // deactivating them - nobody left who could undo it.
+  if (target.role === 'admin' && role !== 'admin' && target.active) {
+    const { rows: countRows } = await pool.query(
+      "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND active = true"
+    );
+    if (Number(countRows[0].c) <= 1) {
+      return res.status(400).json({
+        error: 'Cannot change the last active admin to another role - this would lock everyone out of admin access.',
+      });
+    }
+  }
+
+  await pool.query('UPDATE users SET name = $1, role = $2 WHERE id = $3', [name.trim(), role, req.params.id]);
+  res.json({ id: req.params.id, name: name.trim(), role });
+});
+
 router.post('/:id/reset-password', requireRole('admin'), async (req, res) => {
   const { newPassword } = req.body || {};
   if (typeof newPassword !== 'string' || newPassword.length < 6) {

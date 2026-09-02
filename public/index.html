@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <title>Keg Tracker - Admin</title>
 
 <!-- PWA installability - see the matching comment in scan.html for why
@@ -82,11 +82,7 @@
 </head>
 <body>
   <h1>
-    <svg width="34" height="40" viewBox="0 0 56 64" aria-label="Keg logo">
-      <path d="M10 8 Q6 32 10 56 Q28 62 46 56 Q50 32 46 8 Q28 2 10 8 Z" fill="#2FA8F5" stroke="#1E8FDB" stroke-width="2"/>
-      <path d="M8 20 Q28 26 48 20" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-      <path d="M7 44 Q28 50 49 44" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.55"/>
-    </svg>
+    <img src="/icon-192.png" width="34" height="34" alt="Only K logo" style="border-radius:50%">
     Keg Tracker &mdash; Admin
   </h1>
 
@@ -146,6 +142,7 @@
           <option value="empty_at_customer">Empty at customer</option>
           <option value="needs_repair">Needs repair</option>
         </select>
+        <a href="/api/kegs/export.csv" id="exportCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export CSV</button></a>
         <table id="kegTable">
           <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
           <tbody></tbody>
@@ -225,6 +222,9 @@
 <script>
 let isAdmin = false;
 let canSeeMfgNumber = false; // admin or manager only - see routes/kegs.js for the matching backend enforcement
+let customersCache = [];
+let productsCache = [];
+let usersCache = [];
 
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((el) => el.classList.remove('active'));
@@ -304,7 +304,7 @@ function showMain(user) {
   // Reports/Users/Devices tabs are Admin/Manager oversight only - the
   // backend already rejects the request for any other role, so the tab
   // button itself is hidden for them rather than showing a tab that
-  // would just error.
+  // would just error. CSV export follows the same restriction.
   if (user.role === 'admin' || user.role === 'manager') {
     document.getElementById('tabBtn-reports').style.display = '';
     loadReports();
@@ -314,6 +314,7 @@ function showMain(user) {
     document.getElementById('tabBtn-users').style.display = '';
     if (isAdmin) document.getElementById('addUserCard').style.display = 'block';
     loadUsers();
+    document.getElementById('exportCsvLink').style.display = 'inline-block';
   }
 
   loadKegs();
@@ -351,20 +352,6 @@ async function createKeg() {
     `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
   loadKegs();
   loadAlerts();
-}
-
-// Caps a list to the N most recent/most relevant entries for display,
-// so the dashboard doesn't grow unbounded and become a long scroll as
-// data accumulates - each section already fetches everything it needs
-// for its own logic (e.g. alert counts elsewhere), this only trims what
-// actually renders on screen.
-function capList(items, n) {
-  return { shown: items.slice(0, n), total: items.length, hasMore: items.length > n };
-}
-function moreNote(capped) {
-  return capped.hasMore
-    ? `<p class="muted" style="color:#777;font-size:12px;margin-top:6px">Showing ${capped.shown.length} most recent of ${capped.total} total.</p>`
-    : '';
 }
 
 async function loadKegs() {
@@ -429,17 +416,16 @@ async function loadAlerts() {
     el.innerHTML = '<p class="muted">Nothing overdue right now.</p>';
     return;
   }
-  // Worst-overdue first, so if the list is long, the most urgent ones
-  // are what actually stays visible.
+  // Worst-overdue first - no cap, shows every overdue keg (per request:
+  // no more "7 most recent" limiting anywhere in the app).
   const sorted = alerts.slice().sort((a, b) => b.hoursOverdue - a.hoursOverdue);
-  const capped = capList(sorted, 7);
-  el.innerHTML = capped.shown.map(a => `
+  el.innerHTML = sorted.map(a => `
     <div class="alert-item">
       <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a> &mdash; ${a.label}
       <span class="alert-badge">${a.hoursOverdue}h overdue</span>
-      <br><span class="muted" style="color:#777">waiting on: ${a.role}</span>
+      <br><span class="muted">waiting on: ${a.role}</span>
     </div>
-  `).join('') + moreNote(capped);
+  `).join('');
 }
 
 // rows: [{ label, value, displayValue }] - renders a simple horizontal
@@ -503,18 +489,44 @@ async function loadCustomers() {
   const el = document.getElementById('customersList');
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load customers.</p>'; return; }
   const customers = await res.json();
+  customersCache = customers; // cached so editCustomer(id) can look up by id, avoiding
+                              // the need to embed raw data (with possible apostrophes,
+                              // quotes, etc.) directly into an inline onclick attribute
   if (!customers.length) {
     el.innerHTML = '<p class="muted">No customers yet.</p>';
     return;
   }
   el.innerHTML = `
     <table>
-      <thead><tr><th>Name</th><th>Address</th><th>Mobile</th></tr></thead>
+      <thead><tr><th>Name</th><th>Address</th><th>Mobile</th><th></th></tr></thead>
       <tbody>
-        ${customers.map(c => `<tr><td>${c.name}</td><td>${c.address || '-'}</td><td>${c.phone || '-'}</td></tr>`).join('')}
+        ${customers.map(c => `<tr><td>${c.name}</td><td>${c.address || '-'}</td><td>${c.phone || '-'}</td><td>${isAdmin ? `<button onclick="editCustomer('${c.id}')" style="font-size:13px;padding:4px 10px">Edit</button>` : ''}</td></tr>`).join('')}
       </tbody>
     </table>
   `;
+}
+
+async function editCustomer(id) {
+  const c = customersCache.find((x) => x.id === id);
+  if (!c) return;
+  const newName = prompt('Customer name:', c.name);
+  if (newName === null) return;
+  if (!newName.trim()) { alert('Name is required.'); return; }
+  const newAddress = prompt('Address (optional):', c.address || '');
+  if (newAddress === null) return;
+  const newPhone = prompt('Mobile number (optional):', c.phone || '');
+  if (newPhone === null) return;
+
+  const res = await fetch(`/api/customers/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ name: newName, address: newAddress, phone: newPhone }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Could not update customer.');
+    return;
+  }
+  loadCustomers();
 }
 
 async function addCustomer() {
@@ -546,15 +558,37 @@ async function loadProducts() {
   const el = document.getElementById('productsList');
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load products.</p>'; return; }
   const products = await res.json();
+  productsCache = products; // see loadCustomers() comment - avoids embedding raw data in onclick
   if (!products.length) { el.innerHTML = '<p class="muted">No products yet.</p>'; return; }
   el.innerHTML = `
     <table>
-      <thead><tr><th>Beer</th><th>Typical ABV</th></tr></thead>
+      <thead><tr><th>Beer</th><th>Typical ABV</th><th></th></tr></thead>
       <tbody>
-        ${products.map(p => `<tr><td>${p.name}</td><td>${p.default_abv != null ? p.default_abv + '%' : '-'}</td></tr>`).join('')}
+        ${products.map(p => `<tr><td>${p.name}</td><td>${p.default_abv != null ? p.default_abv + '%' : '-'}</td><td>${isAdmin ? `<button onclick="editProduct('${p.id}')" style="font-size:13px;padding:4px 10px">Edit</button>` : ''}</td></tr>`).join('')}
       </tbody>
     </table>
   `;
+}
+
+async function editProduct(id) {
+  const p = productsCache.find((x) => x.id === id);
+  if (!p) return;
+  const newName = prompt('Beer name:', p.name);
+  if (newName === null) return;
+  if (!newName.trim()) { alert('Name is required.'); return; }
+  const newAbv = prompt('Typical ABV % (optional):', p.default_abv != null ? String(p.default_abv) : '');
+  if (newAbv === null) return;
+
+  const res = await fetch(`/api/products/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ name: newName, default_abv: newAbv || null }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Could not update product.');
+    return;
+  }
+  loadProducts();
 }
 
 async function addProduct() {
@@ -585,59 +619,57 @@ async function loadDevices() {
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load devices.</p>'; return; }
   const { registered, pending } = await res.json();
 
-  const cappedPending = capList(pending, 7); // already newest-first from the server
   let html = '<h4>Pending approval</h4>';
   if (isAdmin && pending.length > 1) {
     html += `<button onclick="dismissAllDevices()" style="background:#888;margin-bottom:8px">Dismiss all pending (${pending.length})</button>`;
   }
-  html += cappedPending.shown.length
-    ? cappedPending.shown.map(p => `
+  html += pending.length
+    ? pending.map(p => `
         <div class="device-item">
-          <b>${p.role}</b> &mdash; requested by ${p.requested_by_name || 'unknown user'}
+          <b>${p.user_name}</b> (${p.user_role})
           <br><span class="device-id-code">${p.device_id}</span>
           ${isAdmin ? `
-            <br><button onclick="approveDevice('${p.role}','${p.device_id}')">Approve</button>
-            <button onclick="dismissDevice('${p.role}','${p.device_id}')" style="background:#888">Dismiss</button>
+            <br><button onclick="approveDevice('${p.user_id}','${p.device_id}')">Approve</button>
+            <button onclick="dismissDevice('${p.user_id}','${p.device_id}')" style="background:#888">Dismiss</button>
           ` : ''}
         </div>
-      `).join('') + moreNote(cappedPending)
+      `).join('')
     : '<p class="muted">No pending requests.</p>';
 
-  const cappedRegistered = capList(registered, 7); // already newest-first from the server
   html += '<h4>Approved devices</h4>';
-  html += cappedRegistered.shown.length
-    ? cappedRegistered.shown.map(d => `
+  html += registered.length
+    ? registered.map(d => `
         <div class="device-item">
-          <b>${d.role}</b>${d.device_label ? ' &mdash; ' + d.device_label : ''}
+          <b>${d.user_name}</b> (${d.user_role})${d.device_label ? ' &mdash; ' + d.device_label : ''}
           <br><span class="device-id-code">${d.device_id}</span>
-          ${isAdmin ? `<br><button class="btn-danger" onclick="revokeDevice('${d.role}','${d.device_id}')">Revoke</button>` : ''}
+          ${isAdmin ? `<br><button class="btn-danger" onclick="revokeDevice('${d.user_id}','${d.device_id}')">Revoke</button>` : ''}
         </div>
-      `).join('') + moreNote(cappedRegistered)
+      `).join('')
     : '<p class="muted">No devices approved yet.</p>';
 
   el.innerHTML = html;
 }
 
-async function approveDevice(role, deviceId) {
+async function approveDevice(userId, deviceId) {
   await fetch('/api/devices/approve', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+    credentials: 'include', body: JSON.stringify({ userId, deviceId }),
   });
   loadDevices();
 }
 
-async function revokeDevice(role, deviceId) {
+async function revokeDevice(userId, deviceId) {
   await fetch('/api/devices/revoke', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+    credentials: 'include', body: JSON.stringify({ userId, deviceId }),
   });
   loadDevices();
 }
 
-async function dismissDevice(role, deviceId) {
+async function dismissDevice(userId, deviceId) {
   await fetch('/api/devices/dismiss', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ role, deviceId }),
+    credentials: 'include', body: JSON.stringify({ userId, deviceId }),
   });
   loadDevices();
 }
@@ -645,7 +677,7 @@ async function dismissDevice(role, deviceId) {
 async function dismissAllDevices() {
   await fetch('/api/devices/dismiss-all', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({}), // no role = clears every pending request
+    credentials: 'include', body: JSON.stringify({}), // no userId = clears every pending request
   });
   loadDevices();
 }
@@ -655,11 +687,13 @@ async function loadUsers() {
   const el = document.getElementById('usersList');
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load users.</p>'; return; }
   const users = await res.json();
+  usersCache = users; // see loadCustomers() comment - avoids embedding raw data in onclick
   el.innerHTML = users.map(u => `
     <div class="device-item${u.active ? '' : ' user-inactive'}">
       <b>${u.name}</b> (${u.role})${!u.active ? '<span class="badge-inactive">deactivated</span>' : ''}
       ${isAdmin ? `
         <br>
+        <button onclick="editUser('${u.id}')" style="font-size:12px;padding:4px 10px">Edit</button>
         <button onclick="promptResetPassword('${u.id}','${u.name}')" style="font-size:12px;padding:4px 10px">Reset password</button>
         ${u.active
           ? `<button onclick="deactivateUser('${u.id}','${u.name}')" class="btn-danger" style="font-size:12px;padding:4px 10px">Deactivate</button>`
@@ -667,6 +701,32 @@ async function loadUsers() {
       ` : ''}
     </div>
   `).join('');
+}
+
+async function editUser(id) {
+  const u = usersCache.find((x) => x.id === id);
+  if (!u) return;
+  const newName = prompt('Full name:', u.name);
+  if (newName === null) return;
+  if (!newName.trim()) { alert('Name is required.'); return; }
+  const newRole = prompt('Role (filler, washer, driver, warehouse, admin, manager):', u.role);
+  if (newRole === null) return;
+  const validRoles = ['filler', 'washer', 'driver', 'warehouse', 'admin', 'manager'];
+  if (!validRoles.includes(newRole.trim())) {
+    alert('Role must be one of: ' + validRoles.join(', '));
+    return;
+  }
+
+  const res = await fetch(`/api/users/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ name: newName, role: newRole.trim() }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || 'Could not update user.');
+    return;
+  }
+  loadUsers();
 }
 
 async function createUser() {

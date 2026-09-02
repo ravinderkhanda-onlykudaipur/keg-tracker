@@ -42,4 +42,32 @@ router.post('/', requireRole('admin', 'filler'), async (req, res) => {
   res.status(201).json({ id, name: trimmedName, default_abv: abv });
 });
 
+// Editing is Admin only - same reasoning as customers.js: creating is
+// operational (Filler adds a beer they need mid-workflow), correcting
+// an existing one is management-level.
+router.put('/:id', requireRole('admin'), async (req, res) => {
+  const { name, default_abv } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Product name is required.' });
+  }
+
+  let abv = null;
+  if (default_abv !== undefined && default_abv !== null && default_abv !== '') {
+    const parsed = Number(default_abv);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      return res.status(400).json({ error: 'ABV must be a number between 0 and 100.' });
+    }
+    abv = parsed;
+  }
+
+  const trimmedName = name.trim();
+  const result = await pool.query(
+    'UPDATE products SET name = $1, default_abv = $2 WHERE id = $3',
+    [trimmedName, abv, req.params.id]
+  );
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Product not found.' });
+
+  res.json({ id: req.params.id, name: trimmedName, default_abv: abv });
+});
+
 module.exports = router;
