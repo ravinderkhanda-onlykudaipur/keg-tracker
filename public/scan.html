@@ -107,6 +107,7 @@
   .status-next-value { font-size: 16px; font-weight: 500; margin-top: 4px; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
+  .status-next-role { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
   .status-next-arrow { color: var(--text-muted); font-size: 20px; padding: 0 10px; flex-shrink: 0; }
 
   .keg-id-hero { text-align: center; font-size: 26px; font-weight: 700; color: var(--text); margin: 4px 0 18px; letter-spacing: 0.3px; }
@@ -116,6 +117,11 @@
   .detail-icon { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-tint-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; }
   .detail-col-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; }
   .detail-col-value { font-size: 16px; font-weight: 500; color: var(--text); margin-top: 3px; word-break: break-word; }
+  /* Destination card's own background is already the same light blue
+     used for .detail-icon elsewhere - reusing that here would make the
+     icon circles invisible against it, so these get a white circle
+     with the same blue icon color instead, for contrast. */
+  .destination-line .detail-icon { background: #FFFFFF; }
 
   /* Bottom-middle floating scan button, fixed above everything else -
      the easy-access entry point requested for the operational roles,
@@ -171,9 +177,37 @@
     <div class="card" id="formCard"></div>
 
     <div id="kegDestinationLine" class="destination-line" style="display:none">
-      <div class="lv-row"><span class="lv-label">Name</span><span class="lv-value" id="kegDestination"></span></div>
-      <div class="lv-row"><span class="lv-label">Address</span><span class="lv-value" id="kegDestinationAddress"></span></div>
-      <div class="lv-row"><span class="lv-label">Phone</span><span class="lv-value" id="kegDestinationPhone"></span></div>
+      <div class="detail-cols">
+        <div class="detail-col">
+          <div class="detail-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="detail-col-label">Name</div>
+          <div class="detail-col-value" id="kegDestination"></div>
+        </div>
+        <div class="detail-col">
+          <div class="detail-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+          </div>
+          <div class="detail-col-label">Address</div>
+          <div class="detail-col-value" id="kegDestinationAddress"></div>
+        </div>
+        <div class="detail-col">
+          <div class="detail-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </div>
+          <div class="detail-col-label">Phone</div>
+          <div class="detail-col-value" id="kegDestinationPhone"></div>
+        </div>
+      </div>
     </div>
 
     <div class="card" id="historyCard" style="display:none">
@@ -337,6 +371,15 @@ const STATUS_NEXT = {
 function formatStatus(status) {
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+// Display-only rename: the backend role value stays 'warehouse'
+// everywhere (database, API, permissions, all unchanged) - this only
+// changes what text a user actually sees for that role, consistently
+// across every place a role name is shown.
+function roleLabel(role) {
+  if (!role) return role;
+  const label = role === 'warehouse' ? 'Mover' : role;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 async function init() {
   // If a session cookie is already valid (e.g. page refresh), skip the
@@ -363,7 +406,7 @@ async function init() {
   const res = await fetch('/api/auth/users');
   const users = await res.json();
   document.getElementById('userSelect').innerHTML =
-    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+    users.map(u => `<option value="${u.id}">${u.name} (${roleLabel(u.role)})</option>`).join('');
 }
 
 async function login() {
@@ -395,7 +438,7 @@ async function logout() {
 function showApp() {
   document.getElementById('loginBlock').style.display = 'none';
   document.getElementById('appBlock').style.display = 'block';
-  document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
+  document.getElementById('whoami').textContent = `${currentUser.name} (${roleLabel(currentUser.role)})`;
   loadMyAlerts();
 
   // The scan button is available to everyone logged in - it's just
@@ -727,7 +770,7 @@ async function renderForm() {
     const expectedRole = STATUS_EXPECTED_ROLE[keg.status];
     card.innerHTML = `
       <div class="wrong-turn-banner">
-        Keg is pending on: <span class="pending-role">${expectedRole || 'unknown'}</span>
+        Keg is pending on: <span class="pending-role">${roleLabel(expectedRole) || 'unknown'}</span>
       </div>
     `;
     return;
@@ -1009,7 +1052,7 @@ async function renderHistory() {
     if (!keg.history.length) { el.innerHTML = '<p class="muted">No events yet.</p>'; return; }
     el.innerHTML = keg.history.slice().reverse().map(h => `
       <div class="history-item">
-        <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${h.role})<br>
+        <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${roleLabel(h.role)})<br>
         <span class="muted">${formatIST(h.created_at)}</span>
         ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
       </div>
@@ -1026,8 +1069,9 @@ async function renderHistory() {
   const statusNextHtml = `
     <div class="status-next-row">
       <div class="status-next-col">
-        <div class="status-next-label">Current status</div>
+        <div class="status-next-label">Now</div>
         <div class="status-next-value current">${formatStatus(keg.status)}</div>
+        <div class="status-next-role">${roleLabel(STATUS_EXPECTED_ROLE[keg.status]) || ''}</div>
       </div>
       <div class="status-next-arrow">&#8594;</div>
       <div class="status-next-col">

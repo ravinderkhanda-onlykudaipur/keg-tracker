@@ -199,7 +199,7 @@
             <option value="filler">Filler</option>
             <option value="washer">Washer</option>
             <option value="driver">Driver</option>
-            <option value="warehouse">Warehouse</option>
+            <option value="warehouse">Mover</option>
             <option value="admin">Admin</option>
             <option value="manager">Manager</option>
           </select>
@@ -227,6 +227,17 @@ let customersCache = [];
 let productsCache = [];
 let usersCache = [];
 
+// Display-only rename: the backend role value stays 'warehouse'
+// everywhere (database, API, permission checks - all unchanged, and
+// every `user.role === 'warehouse'` comparison in this file stays as
+// literal 'warehouse') - this only changes what text is actually shown
+// for that role, consistently across every display site.
+function roleLabel(role) {
+  if (!role) return role;
+  const label = role === 'warehouse' ? 'Mover' : role;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((el) => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach((el) => el.classList.remove('active'));
@@ -242,7 +253,7 @@ async function init() {
   const res = await fetch('/api/auth/users');
   const users = await res.json();
   document.getElementById('userSelect').innerHTML =
-    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+    users.map(u => `<option value="${u.id}">${u.name} (${roleLabel(u.role)})</option>`).join('');
 }
 
 async function login() {
@@ -269,7 +280,7 @@ async function logout() {
 function showMain(user) {
   document.getElementById('loginCard').style.display = 'none';
   document.getElementById('mainBlock').style.display = 'block';
-  document.getElementById('whoami').textContent = `${user.name} (${user.role})`;
+  document.getElementById('whoami').textContent = `${user.name} (${roleLabel(user.role)})`;
 
   // Only admins can create kegs - everyone else (including the new
   // 'manager' role) gets a read-only view of everything below instead.
@@ -425,7 +436,7 @@ async function loadAlerts() {
     <div class="alert-item">
       <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
       <span class="alert-badge">${a.hoursOverdue}h overdue</span>
-      <br><span class="muted">waiting on: ${a.role}</span>
+      <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
     </div>
   `).join('');
 }
@@ -628,7 +639,7 @@ async function loadDevices() {
   html += pending.length
     ? pending.map(p => `
         <div class="device-item">
-          <b>${p.user_name}</b> (${p.user_role})
+          <b>${p.user_name}</b> (${roleLabel(p.user_role)})
           <br><span class="device-id-code">${p.device_id}</span>
           ${isAdmin ? `
             <br><button onclick="approveDevice('${p.user_id}','${p.device_id}')">Approve</button>
@@ -642,7 +653,7 @@ async function loadDevices() {
   html += registered.length
     ? registered.map(d => `
         <div class="device-item">
-          <b>${d.user_name}</b> (${d.user_role})${d.device_label ? ' &mdash; ' + d.device_label : ''}
+          <b>${d.user_name}</b> (${roleLabel(d.user_role)})${d.device_label ? ' &mdash; ' + d.device_label : ''}
           <br><span class="device-id-code">${d.device_id}</span>
           ${isAdmin ? `<br><button class="btn-danger" onclick="revokeDevice('${d.user_id}','${d.device_id}')">Revoke</button>` : ''}
         </div>
@@ -692,7 +703,7 @@ async function loadUsers() {
   usersCache = users; // see loadCustomers() comment - avoids embedding raw data in onclick
   el.innerHTML = users.map(u => `
     <div class="device-item${u.active ? '' : ' user-inactive'}">
-      <b>${u.name}</b> (${u.role})${!u.active ? '<span class="badge-inactive">deactivated</span>' : ''}
+      <b>${u.name}</b> (${roleLabel(u.role)})${!u.active ? '<span class="badge-inactive">deactivated</span>' : ''}
       ${isAdmin ? `
         <br>
         <button onclick="editUser('${u.id}')" style="font-size:12px;padding:4px 10px">Edit</button>
@@ -711,17 +722,20 @@ async function editUser(id) {
   const newName = prompt('Full name:', u.name);
   if (newName === null) return;
   if (!newName.trim()) { alert('Name is required.'); return; }
-  const newRole = prompt('Role (filler, washer, driver, warehouse, admin, manager):', u.role);
-  if (newRole === null) return;
+  const newRoleInput = prompt('Role (filler, washer, driver, warehouse/mover, admin, manager):', u.role);
+  if (newRoleInput === null) return;
+  // "mover" is accepted as a friendly alias for the backend's literal
+  // "warehouse" value (see roleLabel() above) - typing either works.
+  const normalizedRole = newRoleInput.trim().toLowerCase() === 'mover' ? 'warehouse' : newRoleInput.trim().toLowerCase();
   const validRoles = ['filler', 'washer', 'driver', 'warehouse', 'admin', 'manager'];
-  if (!validRoles.includes(newRole.trim())) {
-    alert('Role must be one of: ' + validRoles.join(', '));
+  if (!validRoles.includes(normalizedRole)) {
+    alert('Role must be one of: filler, washer, driver, warehouse (mover), admin, manager');
     return;
   }
 
   const res = await fetch(`/api/users/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', body: JSON.stringify({ name: newName, role: newRole.trim() }),
+    credentials: 'include', body: JSON.stringify({ name: newName, role: normalizedRole }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
