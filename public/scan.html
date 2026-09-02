@@ -45,48 +45,56 @@
     --warn-text: #8A5700;
   }
   /* Two weights only, per spec: 400 (regular) and 500 (medium) - never
-     600/700/800. Sizes follow the spec's scale: 20px/500 greeting name,
-     16px/500 app name & section titles, 14px/500 list-item titles,
-     13px/400 secondary/meta text, 12px/400 nav labels and timestamps.
-     Sentence case throughout - no uppercase transforms anywhere below. */
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 14px; line-height: 1.5; }
-  h2 { font-size: 20px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
-  h3 { font-size: 16px; font-weight: 500; color: var(--text); margin: 0 0 4px; }
-  .muted { color: var(--text-secondary); font-size: 13px; font-weight: 400; }
+     600/700/800 (Fill Details' Keg ID value is a deliberate, flagged
+     exception - see the design-system note in README.md). Sizes below
+     are the original spec's scale increased ~15% proportionally
+     (20/16/14/13/12 -> 23/18/16/15/14), keeping the same ratios between
+     tiers rather than bumping any one size arbitrarily. Sentence case
+     throughout - no uppercase transforms anywhere below except
+     .pending-role, which is intentional (see its own comment). */
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
+  h2 { font-size: 23px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+  h3 { font-size: 18px; font-weight: 500; color: var(--text); margin: 0 0 4px; }
+  .muted { color: var(--text-secondary); font-size: 15px; font-weight: 400; }
   .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px; margin: 16px 0; }
-  label { display: block; font-size: 13px; margin: 12px 0 5px; font-weight: 500; color: var(--text); }
+  label { display: block; font-size: 15px; margin: 12px 0 5px; font-weight: 500; color: var(--text); }
   /* Inputs stay at 16px regardless of the type scale above - anything
      smaller triggers iOS Safari's auto-zoom-on-focus, which is worse
-     for usability than a one-off exception to the scale. */
+     for usability than a one-off exception to the scale. Buttons don't
+     have that constraint, so their text scales normally with everything else. */
   input, select { width: 100%; box-sizing: border-box; font-size: 16px; font-weight: 400; padding: 13px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
   input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47,168,245,0.18); }
-  button { width: 100%; margin-top: 18px; font-size: 16px; font-weight: 500; padding: 14px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
+  button { width: 100%; margin-top: 18px; font-size: 18px; font-weight: 500; padding: 14px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
   button:hover { background: var(--primary-hover); }
 
   .app-header { margin-bottom: 8px; }
   .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
   .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .user-chip, .logout-btn { display: inline-block; padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+  .user-chip, .logout-btn { display: inline-block; padding: 7px 14px; border-radius: 20px; font-size: 15px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
   .logout-btn { cursor: pointer; width: auto; margin: 0; }
   .logout-btn:hover { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
-  .keg-title-row { font-size: 16px; font-weight: 500; color: var(--text); margin: 10px 0 6px; }
-  .status-pill { display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 14px; font-weight: 500; }
+  .keg-title-row { font-size: 18px; font-weight: 500; color: var(--text); margin: 10px 0 6px; }
+  .status-pill { display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 16px; font-weight: 500; }
 
-  .error { color: var(--error-text); font-size: 13px; margin-top: 10px; font-weight: 400; }
-  .success { color: var(--success-text); font-size: 13px; margin-top: 10px; font-weight: 400; }
-  .history-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 13px; }
+  .error { color: var(--error-text); font-size: 15px; margin-top: 10px; font-weight: 400; }
+  .success { color: var(--success-text); font-size: 15px; margin-top: 10px; font-weight: 400; }
+  .history-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 15px; }
   .history-item b { font-weight: 500; }
-  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; }
-  .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; }
-  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; font-weight: 500; }
-  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 13px; }
-  .wrong-turn-banner { font-size: 15px; }
+  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
+  .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
+  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; font-weight: 500; }
+  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 15px; }
+  .wrong-turn-banner { font-size: 17px; }
   .pending-role { color: var(--success-text); font-weight: 500; text-transform: uppercase; }
-  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 13px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
+  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 15px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .geo-btn:hover { background: #D6E9F9; }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
-  .destination-line { background: var(--primary-tint-bg); border-radius: 10px; padding: 12px 16px; margin: 10px 0; font-size: 14px; color: var(--primary-tint-text-dark); }
-  .destination-line .address { display: block; color: var(--primary-tint-text-mid); font-size: 13px; margin-top: 3px; }
+  .destination-line { background: var(--primary-tint-bg); border-radius: 10px; padding: 14px 16px; margin: 10px 0; font-size: 16px; color: var(--primary-tint-text-dark); }
+  /* Label/value two-column rows, used by both the Destination card and
+     Fill Details - label on the left, actual data on the right. */
+  .lv-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; }
+  .lv-label { color: var(--primary-tint-text-mid); font-weight: 400; flex-shrink: 0; }
+  .lv-value { text-align: right; font-weight: 500; }
   .btn-danger-outline { background: #FFFFFF; color: var(--error-text); border: 1px solid var(--error-text); }
   .btn-danger-outline:hover { background: var(--error-bg); }
 
@@ -140,19 +148,14 @@
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
     </div>
-    <div id="kegDestinationLine" class="destination-line" style="display:none">
-      Destination: <b id="kegDestination"></b>
-      <span class="address" id="kegDestinationAddress"></span>
-      <span class="address" id="kegDestinationPhone"></span>
-    </div>
-    <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
-
-    <div id="homeScreenBlock" class="card" style="display:none">
-      <h2 id="homeGreeting" style="margin-top:0"></h2>
-      <p class="muted">Scan a keg's QR code to get started.</p>
-    </div>
 
     <div class="card" id="formCard"></div>
+
+    <div id="kegDestinationLine" class="destination-line" style="display:none">
+      <div class="lv-row"><span class="lv-label">Name</span><span class="lv-value" id="kegDestination"></span></div>
+      <div class="lv-row"><span class="lv-label">Address</span><span class="lv-value" id="kegDestinationAddress"></span></div>
+      <div class="lv-row"><span class="lv-label">Phone</span><span class="lv-value" id="kegDestinationPhone"></span></div>
+    </div>
 
     <div class="card" id="historyCard" style="display:none">
       <h3 style="margin-top:0">History</h3>
@@ -162,6 +165,13 @@
     <div class="card" id="fillDetailsCard" style="display:none">
       <div id="fillDetailsContent"></div>
     </div>
+
+    <div id="homeScreenBlock" class="card" style="display:none">
+      <h2 id="homeGreeting" style="margin-top:0"></h2>
+      <p class="muted">Scan a keg's QR code to get started.</p>
+    </div>
+
+    <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
   </div>
 
   <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg's QR code">
@@ -469,11 +479,11 @@ function updateDestinationLine() {
     // just who they're delivering to (this was confusing before: name
     // alone doesn't tell you a location or how to reach someone).
     const addressEl = document.getElementById('kegDestinationAddress');
-    addressEl.textContent = keg.destination_address ? keg.destination_address : '';
+    addressEl.textContent = keg.destination_address ? keg.destination_address : '-';
     const phoneEl = document.getElementById('kegDestinationPhone');
     phoneEl.innerHTML = keg.destination_phone
-      ? `<a href="tel:${keg.destination_phone.replace(/\s+/g, '')}" style="color:inherit;text-decoration:underline">\u260E ${keg.destination_phone}</a>`
-      : '';
+      ? `<a href="tel:${keg.destination_phone.replace(/\s+/g, '')}" style="color:inherit;text-decoration:underline">${keg.destination_phone}</a>`
+      : '-';
     line.style.display = 'block';
   } else {
     line.style.display = 'none';
@@ -973,17 +983,17 @@ async function renderHistory() {
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
-  const kegIdLine = `<p style="text-align:center;font-weight:700">${keg.id}</p>`;
+  const kegIdRow = `<div class="lv-row"><span class="lv-label">Keg ID</span><span class="lv-value" style="font-weight:700">${keg.id}</span></div>`;
   if (!fillEvent) {
-    el.innerHTML = kegIdLine + '<p class="muted">Not filled yet.</p>';
+    el.innerHTML = kegIdRow + '<p class="muted">Not filled yet.</p>';
     return;
   }
   const d = fillEvent.details || {};
   el.innerHTML = `
-    ${kegIdLine}
-    <p><b>Beer:</b> ${d.product || '-'}</p>
-    <p><b>Batch number:</b> ${d.batch_number || '-'}</p>
-    <p><b>ABV:</b> ${d.abv ? d.abv + '%' : '-'}</p>
+    ${kegIdRow}
+    <div class="lv-row"><span class="lv-label">Beer Name</span><span class="lv-value">${d.product || '-'}</span></div>
+    <div class="lv-row"><span class="lv-label">Batch Number</span><span class="lv-value">${d.batch_number || '-'}</span></div>
+    <div class="lv-row"><span class="lv-label">ABV</span><span class="lv-value">${d.abv ? d.abv + '%' : '-'}</span></div>
   `;
 }
 
