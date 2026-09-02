@@ -50,8 +50,7 @@
      are the original spec's scale increased ~15% proportionally
      (20/16/14/13/12 -> 23/18/16/15/14), keeping the same ratios between
      tiers rather than bumping any one size arbitrarily. Sentence case
-     throughout - no uppercase transforms anywhere below except
-     .pending-role, which is intentional (see its own comment). */
+     throughout - no uppercase transforms anywhere below. */
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; max-width: 480px; margin: 0 auto; padding: 20px 16px; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.5; }
   h2 { font-size: 23px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
   h3 { font-size: 18px; font-weight: 500; color: var(--text); margin: 0 0 4px; }
@@ -84,8 +83,6 @@
   .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
   .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; font-weight: 500; }
   .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 15px; }
-  .wrong-turn-banner { font-size: 17px; }
-  .pending-role { color: var(--success-text); font-weight: 500; text-transform: uppercase; }
   .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 15px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .geo-btn:hover { background: #D6E9F9; }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
@@ -107,6 +104,9 @@
   .status-next-value { font-size: 16px; font-weight: 500; margin-top: 4px; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
+  .role-icon-wrap { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 6px auto 0; }
+  .role-icon-wrap.current { background: var(--success-bg); color: var(--success-text); }
+  .role-icon-wrap.next { background: var(--primary-tint-bg); color: var(--primary); }
   .status-next-arrow { color: var(--text-muted); font-size: 20px; padding: 0 10px; flex-shrink: 0; }
 
   .keg-id-hero { text-align: center; font-size: 26px; font-weight: 700; color: var(--text); margin: 4px 0 18px; letter-spacing: 0.3px; }
@@ -171,6 +171,10 @@
         <span class="user-chip" id="whoami"></span>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
+    </div>
+
+    <div class="card" id="nowNextCard" style="display:none">
+      <div id="nowNextContent"></div>
     </div>
 
     <div class="card" id="formCard"></div>
@@ -381,6 +385,21 @@ function roleLabel(role) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+// Small icon per operational role, shown next to the role name on the
+// Now/Next card - purely decorative/recognition, no meaning attached
+// beyond "this is what that role's job looks like at a glance".
+const ROLE_ICON_PATHS = {
+  washer: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+  filler: '<path d="M18 8h1a3 3 0 0 1 0 6h-1M18 8H5v9a3 3 0 0 0 3 3h7a3 3 0 0 0 3-3V8z"/><line x1="9" y1="12" x2="9" y2="16"/>',
+  driver: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+  warehouse: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+};
+function roleIcon(role) {
+  const paths = ROLE_ICON_PATHS[role];
+  if (!paths) return '';
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+
 async function init() {
   // If a session cookie is already valid (e.g. page refresh), skip the
   // login screen entirely.
@@ -459,6 +478,7 @@ function showApp() {
 }
 
 function showHomeScreen() {
+  document.getElementById('nowNextCard').style.display = 'none';
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('historyCard').style.display = 'none';
   document.getElementById('fillDetailsCard').style.display = 'none';
@@ -526,6 +546,7 @@ async function loadKeg() {
   }
   keg = await res.json();
   OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
+  renderNowNext();
   updateDestinationLine();
   await renderForm();
   renderHistory();
@@ -533,6 +554,7 @@ async function loadKeg() {
 }
 
 function renderOfflineFallback() {
+  renderNowNext();
   updateDestinationLine();
   renderForm();
 
@@ -767,12 +789,21 @@ async function renderForm() {
 
   const cfg = getActionConfig();
   if (!cfg) {
-    const expectedRole = STATUS_EXPECTED_ROLE[keg.status];
-    card.innerHTML = `
-      <div class="wrong-turn-banner">
-        Keg is pending on: <span class="pending-role">${roleLabel(expectedRole) || 'unknown'}</span>
-      </div>
-    `;
+    // "Keg is pending on: X" removed - that info is already shown on
+    // the Now/Next card above. In its place: a compact summary of the
+    // most recent action logged, so there's still something useful
+    // here rather than an empty gap. keg.history is already present in
+    // the API response for every role (only manufacturing_number is
+    // role-restricted) - just not rendered as a full list except for
+    // Admin/Manager, so reading the last entry here needs no new fetch.
+    const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
+    card.innerHTML = lastEvent
+      ? `
+        <h3 style="margin-top:0">Details filled by ${lastEvent.user_name}</h3>
+        <p class="muted">${roleLabel(lastEvent.role)} &middot; ${lastEvent.action_type.replace(/_/g,' ')}</p>
+        <p class="muted">${formatIST(lastEvent.created_at)}</p>
+      `
+      : `<h3 style="margin-top:0">No actions logged yet</h3><p class="muted">This keg hasn't been scanned before.</p>`;
     return;
   }
 
@@ -1038,6 +1069,31 @@ function formatIST(dateVal) {
   }) + ' IST';
 }
 
+// Standalone "Now / Next" card, shown first on the page - who currently
+// has the keg's job, and who's next in the role-handoff cycle (see
+// STATUS_ROLE_FLOW above). Each role gets a small icon for quick
+// recognition. Rendered on its own now, previously embedded inside the
+// Fill Details card.
+function renderNowNext() {
+  const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
+  document.getElementById('nowNextCard').style.display = 'block';
+  document.getElementById('nowNextContent').innerHTML = `
+    <div class="status-next-row">
+      <div class="status-next-col">
+        <div class="status-next-label">Now</div>
+        <div class="role-icon-wrap current">${roleIcon(roleFlow.now)}</div>
+        <div class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</div>
+      </div>
+      <div class="status-next-arrow">&#8594;</div>
+      <div class="status-next-col">
+        <div class="status-next-label">Next</div>
+        <div class="role-icon-wrap next">${roleIcon(roleFlow.next)}</div>
+        <div class="status-next-value next">${roleLabel(roleFlow.next) || '-'}</div>
+      </div>
+    </div>
+  `;
+}
+
 async function renderHistory() {
   // Full event history is Admin/Manager only - everyone else sees just
   // the current fill's details (what beer is actually in this keg)
@@ -1062,33 +1118,14 @@ async function renderHistory() {
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
-
-  // Now/Next shows WHO handles the keg, purely a display label (see
-  // STATUS_ROLE_FLOW above) - shown regardless of whether it's this
-  // person's turn to act, same as the rest of this card.
-  const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
-  const statusNextHtml = `
-    <div class="status-next-row">
-      <div class="status-next-col">
-        <div class="status-next-label">Now</div>
-        <div class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</div>
-      </div>
-      <div class="status-next-arrow">&#8594;</div>
-      <div class="status-next-col">
-        <div class="status-next-label">Next</div>
-        <div class="status-next-value next">${roleLabel(roleFlow.next) || '-'}</div>
-      </div>
-    </div>
-  `;
   const kegIdHtml = `<div class="keg-id-hero">${keg.id}</div>`;
 
   if (!fillEvent) {
-    el.innerHTML = statusNextHtml + kegIdHtml + '<p class="muted" style="text-align:center">Not filled yet.</p>';
+    el.innerHTML = kegIdHtml + '<p class="muted" style="text-align:center">Not filled yet.</p>';
     return;
   }
   const d = fillEvent.details || {};
   el.innerHTML = `
-    ${statusNextHtml}
     ${kegIdHtml}
     <div class="detail-cols">
       <div class="detail-col">
