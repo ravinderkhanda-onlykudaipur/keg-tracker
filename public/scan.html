@@ -373,12 +373,15 @@ function showHomeScreen() {
 }
 
 async function loadMyAlerts() {
-  // Shows which kegs are overdue for this person's role - on a specific
-  // keg's page, phrased as "other" (separate from whatever keg they
-  // scanned to get here); on the home screen (no keg in context),
-  // phrased without "other" since there's no "this one" to be other
-  // than. Each overdue keg's ID is a real link to that keg's own page,
-  // so tapping it is how you actually check its status.
+  // Shows how many kegs are overdue for this person's role - a count
+  // only, deliberately no keg IDs or links here. Showing individual
+  // IDs with a one-tap shortcut straight to the action form would make
+  // it too easy to log a wash/fill/dispatch without actually being
+  // physically at that keg to scan it - which defeats the point of
+  // QR-based verification in the first place. (Admin/Manager's alerts
+  // list on the admin page is different - they're not the ones
+  // performing these physical actions, so that list keeps its
+  // clickable keg IDs for oversight purposes.)
   try {
     const res = await fetch('/api/alerts', { credentials: 'include' });
     if (!res.ok) return;
@@ -388,11 +391,7 @@ async function loadMyAlerts() {
     if (mine.length > 0) {
       banner.style.display = 'block';
       const otherWord = kegId ? 'other ' : '';
-      const summary = `\u26A0 ${mine.length} ${otherWord}keg${mine.length > 1 ? 's are' : ' is'} overdue for your role:`;
-      const links = mine.map((a) =>
-        `<a href="/scan.html?keg=${a.kegId}" style="color:inherit;font-weight:600;text-decoration:underline">${a.kegId}</a>`
-      ).join(', ');
-      banner.innerHTML = `${summary}<br>${links}`;
+      banner.textContent = `\u26A0 ${mine.length} ${otherWord}keg${mine.length > 1 ? 's are' : ' is'} overdue for your role.`;
     } else {
       banner.style.display = 'none';
     }
