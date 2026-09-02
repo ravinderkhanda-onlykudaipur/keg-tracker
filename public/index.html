@@ -143,6 +143,7 @@
           <option value="needs_repair">Needs repair</option>
         </select>
         <a href="/api/kegs/export.csv" id="exportCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export CSV</button></a>
+        <a href="/api/kegs/export-history.csv" id="exportHistoryCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export full history CSV</button></a>
         <table id="kegTable">
           <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
           <tbody></tbody>
@@ -315,6 +316,7 @@ function showMain(user) {
     if (isAdmin) document.getElementById('addUserCard').style.display = 'block';
     loadUsers();
     document.getElementById('exportCsvLink').style.display = 'inline-block';
+    document.getElementById('exportHistoryCsvLink').style.display = 'inline-block';
   }
 
   loadKegs();

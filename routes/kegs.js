@@ -71,6 +71,37 @@ router.get('/export.csv', requireRole('admin', 'manager'), async (req, res) => {
   res.send(lines.join('\n'));
 });
 
+// Full event-by-event history with timestamps - a genuine audit trail
+// export, not just the current-status snapshot above. One row per
+// event, across every keg, in keg then chronological order. Registered
+// before GET /:id for the same reason as export.csv above.
+router.get('/export-history.csv', requireRole('admin', 'manager'), async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT e.keg_id, k.manufacturing_number, e.created_at, e.action_type, e.role,
+           u.name AS user_name, e.details
+    FROM events e
+    JOIN kegs k ON k.id = e.keg_id
+    JOIN users u ON u.id = e.user_id
+    ORDER BY e.keg_id ASC, e.created_at ASC
+  `);
+  const headers = ['keg_id', 'manufacturing_number', 'timestamp', 'action_type', 'role', 'user_name', 'details'];
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push([
+      csvEscape(row.keg_id),
+      csvEscape(row.manufacturing_number),
+      csvEscape(row.created_at),
+      csvEscape(row.action_type),
+      csvEscape(row.role),
+      csvEscape(row.user_name),
+      csvEscape(row.details), // already a JSON string in the database - kept as-is, just CSV-escaped
+    ].join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="keg-history-export.csv"');
+  res.send(lines.join('\n'));
+});
+
 router.get('/:id', async (req, res) => {
   const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [req.params.id]);
   let keg = kegRows[0];

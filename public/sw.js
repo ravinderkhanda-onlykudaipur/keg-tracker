@@ -6,15 +6,29 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v3'; // bumped: manifest.json + icons added, for PWA installability
+const CACHE_NAME = 'keg-tracker-shell-v4'; // bumped: jsQR (in-app scanner) added
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
 ];
+// The in-app QR scanner's library - cached separately (not in SHELL_FILES)
+// since cache.addAll() is all-or-nothing: if this external CDN happened
+// to be unreachable during install, it would otherwise fail caching the
+// entire app shell, not just the scanner. Best-effort here instead - the
+// scanner works offline once this has been fetched successfully once;
+// until then it just needs a connection the first time it's opened.
+const JSQR_CDN_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(SHELL_FILES); // core shell - must succeed for the install to count as successful
+      try {
+        await cache.add(JSQR_CDN_URL);
+      } catch (err) {
+        // Not fatal - see comment above. The rest of the app still works.
+      }
+    })
   );
   self.skipWaiting();
 });

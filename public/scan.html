@@ -65,12 +65,10 @@
 
   .app-header { margin-bottom: 8px; }
   .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
-  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .header-left { font-size: 13px; color: var(--text-secondary); }
-  .header-left b { color: var(--text); font-weight: 500; }
-  .header-left a { color: var(--primary); text-decoration: none; }
-  .logout-btn { width: auto; margin-top: 0; padding: 9px 16px; font-size: 13px; font-weight: 500; background: var(--error-text); color: #FFFFFF; }
-  .logout-btn:hover { opacity: 0.85; background: var(--error-text); }
+  .header-row { display: flex; justify-content: flex-start; align-items: center; gap: 8px; }
+  .user-chip, .logout-btn { display: inline-block; padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+  .logout-btn { cursor: pointer; width: auto; margin: 0; }
+  .logout-btn:hover { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .keg-title-row { font-size: 16px; font-weight: 500; color: var(--text); margin: 10px 0 6px; }
   .status-row { margin: 8px 0 14px; }
   .status-pill { display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 14px; font-weight: 500; }
@@ -84,7 +82,6 @@
   .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; font-weight: 500; }
   .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 13px; }
   .wrong-turn-banner { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 10px; padding: 16px; font-size: 14px; font-weight: 500; }
-  .wrong-turn-banner .detail { font-weight: 400; display: block; margin-top: 8px; }
   .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 13px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .geo-btn:hover { background: #D6E9F9; }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
@@ -92,6 +89,26 @@
   .destination-line .address { display: block; color: var(--primary-tint-text-mid); font-size: 13px; margin-top: 3px; }
   .btn-danger-outline { background: #FFFFFF; color: var(--error-text); border: 1px solid var(--error-text); }
   .btn-danger-outline:hover { background: var(--error-bg); }
+
+  /* Bottom-middle floating scan button, fixed above everything else -
+     the easy-access entry point requested for the operational roles,
+     also available to everyone else since it's just quick navigation
+     to a different keg, not a permission-sensitive action. */
+  .scan-fab {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    width: auto; padding: 16px 34px; border-radius: 30px; font-size: 16px;
+    font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100;
+    margin: 0;
+  }
+  body { padding-bottom: 90px; } /* keeps page content from hiding behind the fixed button */
+
+  .scanner-overlay {
+    display: none; position: fixed; inset: 0; background: #000000;
+    z-index: 200; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .scanner-overlay video { width: 100%; max-width: 480px; }
+  .scanner-overlay .scanner-msg { color: #FFFFFF; font-size: 14px; padding: 14px 20px; text-align: center; }
+  .scanner-overlay button { width: auto; margin-top: 20px; padding: 12px 28px; }
 </style>
 </head>
 <body>
@@ -116,9 +133,7 @@
     <div class="app-header">
       <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
       <div class="header-row">
-        <div class="header-left">
-          Logged in as <b id="whoami"></b>
-        </div>
+        <span class="user-chip" id="whoami"></span>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
       <div class="status-row">
@@ -139,14 +154,29 @@
 
     <div class="card" id="formCard"></div>
 
-    <div class="card" id="historyCard">
+    <div class="card" id="historyCard" style="display:none">
       <h3 style="margin-top:0">History</h3>
       <div id="history"></div>
     </div>
+
+    <div class="card" id="fillDetailsCard" style="display:none">
+      <h3 style="margin-top:0">Fill details</h3>
+      <div id="fillDetailsContent"></div>
+    </div>
+  </div>
+
+  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none">&#128247; Scan</button>
+
+  <div id="scannerOverlay" class="scanner-overlay">
+    <video id="scannerVideo" autoplay playsinline muted></video>
+    <canvas id="scannerCanvas" style="display:none"></canvas>
+    <div id="scannerMsg" class="scanner-msg"></div>
+    <button onclick="closeScanner()">Cancel</button>
   </div>
 
 <script src="/offline-queue.js"></script>
 <script src="/device-id.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 const kegId = new URLSearchParams(location.search).get('keg');
 let currentUser = null;
@@ -309,6 +339,11 @@ function showApp() {
   document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
   loadMyAlerts();
 
+  // The scan button is available to everyone logged in - it's just
+  // quick navigation to a different keg, not a permission-sensitive
+  // action, so no role restriction here (unlike most other features).
+  document.getElementById('scanFab').style.display = 'block';
+
   // No keg in the URL - this page was opened directly (e.g. from an
   // installed home-screen icon), not via a QR scan. Show a
   // personalized landing screen instead of erroring out trying to
@@ -324,6 +359,7 @@ function showApp() {
 function showHomeScreen() {
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('historyCard').style.display = 'none';
+  document.getElementById('fillDetailsCard').style.display = 'none';
   document.getElementById('homeScreenBlock').style.display = 'block';
 
   const hour = new Date().getHours();
@@ -395,8 +431,17 @@ function renderOfflineFallback() {
   document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
   updateDestinationLine();
   renderForm();
-  document.getElementById('history').innerHTML =
-    '<p class="muted">History unavailable while offline.</p>';
+
+  // Same Admin/Manager-only history split as renderHistory() above, but
+  // without real history data available offline - just says so, in
+  // whichever card this role would normally see.
+  const isOversight = currentUser.role === 'admin' || currentUser.role === 'manager';
+  document.getElementById('historyCard').style.display = isOversight ? 'block' : 'none';
+  document.getElementById('fillDetailsCard').style.display = isOversight ? 'none' : 'block';
+  const targetId = isOversight ? 'history' : 'fillDetailsContent';
+  document.getElementById(targetId).innerHTML =
+    '<p class="muted">Unavailable while offline.</p>';
+
   updatePendingBanner();
 }
 
@@ -616,16 +661,10 @@ async function renderForm() {
 
   const cfg = getActionConfig();
   if (!cfg) {
-    // Tell them not just "not your turn" but whose turn it actually is,
-    // so they know who to hand the keg off to instead of guessing.
     const expectedRole = STATUS_EXPECTED_ROLE[keg.status];
     card.innerHTML = `
       <div class="wrong-turn-banner">
-        &#9888; No details need to be filled by you right now.
-        <span class="detail">
-          Role "${currentUser.role}" has nothing to do while this keg is "${keg.status.replace(/_/g,' ')}".
-          ${expectedRole ? `This keg is currently waiting on: <b>${expectedRole}</b>.` : ''}
-        </span>
+        &#9888; Keg is pending on: <b>${expectedRole || 'unknown'}</b>
       </div>
     `;
     return;
@@ -894,15 +933,39 @@ function formatIST(dateVal) {
 }
 
 async function renderHistory() {
-  const el = document.getElementById('history');
-  if (!keg.history.length) { el.innerHTML = '<p class="muted">No events yet.</p>'; return; }
-  el.innerHTML = keg.history.slice().reverse().map(h => `
-    <div class="history-item">
-      <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${h.role})<br>
-      <span class="muted">${formatIST(h.created_at)}</span>
-      ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
-    </div>
-  `).join('');
+  // Full event history is Admin/Manager only - everyone else sees just
+  // the current fill's details (what beer is actually in this keg)
+  // instead, which is what they'd realistically need day-to-day rather
+  // than the complete audit trail.
+  const isOversight = currentUser.role === 'admin' || currentUser.role === 'manager';
+  document.getElementById('historyCard').style.display = isOversight ? 'block' : 'none';
+  document.getElementById('fillDetailsCard').style.display = isOversight ? 'none' : 'block';
+
+  if (isOversight) {
+    const el = document.getElementById('history');
+    if (!keg.history.length) { el.innerHTML = '<p class="muted">No events yet.</p>'; return; }
+    el.innerHTML = keg.history.slice().reverse().map(h => `
+      <div class="history-item">
+        <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${h.role})<br>
+        <span class="muted">${formatIST(h.created_at)}</span>
+        ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
+      </div>
+    `).join('');
+    return;
+  }
+
+  const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
+  const el = document.getElementById('fillDetailsContent');
+  if (!fillEvent) {
+    el.innerHTML = '<p class="muted">Not filled yet.</p>';
+    return;
+  }
+  const d = fillEvent.details || {};
+  el.innerHTML = `
+    <p><b>Beer:</b> ${d.product || '-'}</p>
+    <p><b>Batch number:</b> ${d.batch_number || '-'}</p>
+    <p><b>ABV:</b> ${d.abv ? d.abv + '%' : '-'}</p>
+  `;
 }
 
 // ---- Offline / sync UI -----------------------------------------------
@@ -962,6 +1025,103 @@ if ('serviceWorker' in navigator) {
     // Non-fatal: app still works online-only if the service worker fails
     // to register (e.g. unsupported browser) - just no offline app-shell caching.
   });
+}
+
+// ---- In-app QR scanner ------------------------------------------------
+// Uses the device camera directly (getUserMedia) + jsQR (a small,
+// dependency-free QR decoder loaded via CDN, cached by the service
+// worker after first use - see sw.js) rather than relying on the
+// phone's own Camera app. Requires HTTPS (or localhost) - same
+// requirement as the GPS location buttons elsewhere on this page.
+
+let scannerStream = null;
+let scannerRafId = null;
+
+async function openScanner() {
+  const overlay = document.getElementById('scannerOverlay');
+  const video = document.getElementById('scannerVideo');
+  const msg = document.getElementById('scannerMsg');
+  overlay.style.display = 'flex';
+  msg.textContent = 'Loading scanner...';
+
+  if (typeof jsQR === 'undefined') {
+    msg.textContent = 'Scanner failed to load - check your connection and try again, or use your phone\'s camera app instead.';
+    return;
+  }
+
+  if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
+    msg.textContent = 'Camera access isn\'t available on this browser - use your phone\'s camera app instead.';
+    return;
+  }
+
+  msg.textContent = 'Requesting camera access...';
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (err) {
+    msg.textContent = err.name === 'NotAllowedError'
+      ? 'Camera permission denied - check your browser/device settings and try again.'
+      : 'Could not access the camera - use your phone\'s camera app instead.';
+    return;
+  }
+
+  video.srcObject = scannerStream;
+  msg.textContent = 'Point the camera at a keg\'s QR code.';
+  scanLoop();
+}
+
+function scanLoop() {
+  const video = document.getElementById('scannerVideo');
+  const canvas = document.getElementById('scannerCanvas');
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code && code.data) {
+      handleScanResult(code.data);
+      return; // stop the loop - handleScanResult closes the scanner
+    }
+  }
+  scannerRafId = requestAnimationFrame(scanLoop);
+}
+
+function handleScanResult(text) {
+  closeScanner();
+
+  // The QR code encodes a full URL (e.g.
+  // https://yourapp.onrender.com/scan.html?keg=KEG-XXXX) - pull the
+  // keg id out of it. Falls back to treating the scanned text as a
+  // raw keg id directly, in case a QR was ever generated without the
+  // full URL wrapper.
+  let newKegId = null;
+  try {
+    const url = new URL(text);
+    newKegId = url.searchParams.get('keg');
+  } catch (err) {
+    newKegId = text.trim();
+  }
+
+  if (!newKegId) {
+    alert('Could not read a keg ID from that QR code - try again.');
+    return;
+  }
+
+  // Full page navigation, same as scanning with the phone's own camera
+  // app always has - keeps this one consistent code path for "a keg
+  // was scanned" rather than trying to hot-swap state in place.
+  window.location.href = `/scan.html?keg=${encodeURIComponent(newKegId)}`;
+}
+
+function closeScanner() {
+  if (scannerRafId) { cancelAnimationFrame(scannerRafId); scannerRafId = null; }
+  if (scannerStream) {
+    scannerStream.getTracks().forEach((t) => t.stop());
+    scannerStream = null;
+  }
+  document.getElementById('scannerOverlay').style.display = 'none';
 }
 
 updateOfflineBanner();
