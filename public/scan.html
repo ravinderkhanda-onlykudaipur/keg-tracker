@@ -65,12 +65,11 @@
 
   .app-header { margin-bottom: 8px; }
   .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
-  .header-row { display: flex; justify-content: flex-start; align-items: center; gap: 8px; }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .user-chip, .logout-btn { display: inline-block; padding: 7px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
   .logout-btn { cursor: pointer; width: auto; margin: 0; }
   .logout-btn:hover { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .keg-title-row { font-size: 16px; font-weight: 500; color: var(--text); margin: 10px 0 6px; }
-  .status-row { margin: 8px 0 14px; }
   .status-pill { display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 14px; font-weight: 500; }
 
   .error { color: var(--error-text); font-size: 13px; margin-top: 10px; font-weight: 400; }
@@ -81,7 +80,8 @@
   .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; }
   .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; font-weight: 500; }
   .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 13px; }
-  .wrong-turn-banner { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 10px; padding: 16px; font-size: 14px; font-weight: 500; }
+  .wrong-turn-banner { font-size: 15px; }
+  .pending-role { color: var(--success-text); font-weight: 500; text-transform: uppercase; }
   .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 13px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .geo-btn:hover { background: #D6E9F9; }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
@@ -93,12 +93,13 @@
   /* Bottom-middle floating scan button, fixed above everything else -
      the easy-access entry point requested for the operational roles,
      also available to everyone else since it's just quick navigation
-     to a different keg, not a permission-sensitive action. */
+     to a different keg, not a permission-sensitive action. Icon-only,
+     styled after iOS's viewfinder scan icon rather than a text label. */
   .scan-fab {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    width: auto; padding: 16px 34px; border-radius: 30px; font-size: 16px;
-    font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100;
-    margin: 0;
+    width: 62px; height: 62px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100; margin: 0;
   }
   body { padding-bottom: 90px; } /* keeps page content from hiding behind the fixed button */
 
@@ -136,9 +137,6 @@
         <span class="user-chip" id="whoami"></span>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
-      <div class="status-row">
-        <span id="kegStatus" class="status-pill"></span>
-      </div>
     </div>
     <div id="kegDestinationLine" class="destination-line" style="display:none">
       Destination: <b id="kegDestination"></b>
@@ -165,7 +163,14 @@
     </div>
   </div>
 
-  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none">&#128247; Scan</button>
+  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7V4a1 1 0 0 1 1-1h3"/>
+      <path d="M17 3h3a1 1 0 0 1 1 1v3"/>
+      <path d="M21 17v3a1 1 0 0 1-1 1h-3"/>
+      <path d="M7 21H4a1 1 0 0 1-1-1v-3"/>
+    </svg>
+  </button>
 
   <div id="scannerOverlay" class="scanner-overlay">
     <video id="scannerVideo" autoplay playsinline muted></video>
@@ -420,7 +425,6 @@ async function loadKeg() {
   }
   keg = await res.json();
   OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
-  document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ');
   updateDestinationLine();
   await renderForm();
   renderHistory();
@@ -428,7 +432,6 @@ async function loadKeg() {
 }
 
 function renderOfflineFallback() {
-  document.getElementById('kegStatus').textContent = keg.status.replace(/_/g, ' ') + ' (last known - offline)';
   updateDestinationLine();
   renderForm();
 
@@ -664,7 +667,7 @@ async function renderForm() {
     const expectedRole = STATUS_EXPECTED_ROLE[keg.status];
     card.innerHTML = `
       <div class="wrong-turn-banner">
-        &#9888; Keg is pending on: <b>${expectedRole || 'unknown'}</b>
+        Keg is pending on: <span class="pending-role">${expectedRole || 'unknown'}</span>
       </div>
     `;
     return;
@@ -956,12 +959,14 @@ async function renderHistory() {
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
+  const kegIdLine = `<p style="text-align:center;font-weight:500">${keg.id}</p>`;
   if (!fillEvent) {
-    el.innerHTML = '<p class="muted">Not filled yet.</p>';
+    el.innerHTML = kegIdLine + '<p class="muted">Not filled yet.</p>';
     return;
   }
   const d = fillEvent.details || {};
   el.innerHTML = `
+    ${kegIdLine}
     <p><b>Beer:</b> ${d.product || '-'}</p>
     <p><b>Batch number:</b> ${d.batch_number || '-'}</p>
     <p><b>ABV:</b> ${d.abv ? d.abv + '%' : '-'}</p>
