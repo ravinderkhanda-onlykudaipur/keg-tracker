@@ -107,7 +107,6 @@
   .status-next-value { font-size: 16px; font-weight: 500; margin-top: 4px; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
-  .status-next-role { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
   .status-next-arrow { color: var(--text-muted); font-size: 20px; padding: 0 10px; flex-shrink: 0; }
 
   .keg-id-hero { text-align: center; font-size: 26px; font-weight: 700; color: var(--text); margin: 4px 0 18px; letter-spacing: 0.3px; }
@@ -355,22 +354,23 @@ const STATUS_EXPECTED_ROLE = {
   needs_repair: 'warehouse',
 };
 
-// Where this status leads next in the real lifecycle - purely a display
-// label for the "Current status -> Next" card, mirrors
-// lib/stateMachine.js's TRANSITIONS but doesn't drive any actual logic
-// or validation (that stays entirely server-side, as always).
-const STATUS_NEXT = {
-  empty_returned: 'Washed',
-  washed: 'Filled',
-  filled: 'Dispatched',
-  dispatched: 'Delivered',
-  delivered: 'Empty at customer',
-  empty_at_customer: 'Empty returned',
-  needs_repair: 'Empty returned',
+// "Now" and "Next" show WHO handles the keg, not the status text - the
+// role currently responsible, and the role who takes over after them.
+// "now" always matches STATUS_EXPECTED_ROLE above for that same status
+// (verified directly before this was written); "next" reflects the
+// real role-handoff cycle: Washer -> Filler -> Mover -> Driver -> Mover
+// -> Washer. Driver owns two consecutive statuses (dispatched,
+// delivered) before handing off, so both point to the same next role
+// (Mover) rather than "next" flipping mid-Driver's-own-phase.
+const STATUS_ROLE_FLOW = {
+  empty_returned:    { now: 'washer',    next: 'filler' },
+  washed:            { now: 'filler',    next: 'warehouse' },
+  filled:            { now: 'warehouse', next: 'driver' },
+  dispatched:        { now: 'driver',    next: 'warehouse' },
+  delivered:         { now: 'driver',    next: 'warehouse' },
+  empty_at_customer: { now: 'warehouse', next: 'washer' },
+  needs_repair:      { now: 'warehouse', next: 'washer' },
 };
-function formatStatus(status) {
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
 // Display-only rename: the backend role value stays 'warehouse'
 // everywhere (database, API, permissions, all unchanged) - this only
 // changes what text a user actually sees for that role, consistently
@@ -1063,20 +1063,20 @@ async function renderHistory() {
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
 
-  // Current status -> next status, purely a display label (see
-  // STATUS_NEXT above) - shown regardless of whether it's this
+  // Now/Next shows WHO handles the keg, purely a display label (see
+  // STATUS_ROLE_FLOW above) - shown regardless of whether it's this
   // person's turn to act, same as the rest of this card.
+  const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
   const statusNextHtml = `
     <div class="status-next-row">
       <div class="status-next-col">
         <div class="status-next-label">Now</div>
-        <div class="status-next-value current">${formatStatus(keg.status)}</div>
-        <div class="status-next-role">${roleLabel(STATUS_EXPECTED_ROLE[keg.status]) || ''}</div>
+        <div class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</div>
       </div>
       <div class="status-next-arrow">&#8594;</div>
       <div class="status-next-col">
         <div class="status-next-label">Next</div>
-        <div class="status-next-value next">${STATUS_NEXT[keg.status] || '-'}</div>
+        <div class="status-next-value next">${roleLabel(roleFlow.next) || '-'}</div>
       </div>
     </div>
   `;
