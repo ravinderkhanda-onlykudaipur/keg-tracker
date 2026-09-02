@@ -94,14 +94,16 @@
      the easy-access entry point requested for the operational roles,
      also available to everyone else since it's just quick navigation
      to a different keg, not a permission-sensitive action. Icon-only,
-     styled after iOS's viewfinder scan icon rather than a text label. */
+     explicitly matched to the app logo's blue (not just inherited from
+     the general button style, in case that ever changes independently). */
   .scan-fab {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    width: 62px; height: 62px; padding: 0; border-radius: 50%;
+    width: 76px; height: 76px; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
+    background: var(--primary); color: #FFFFFF;
     box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100; margin: 0;
   }
-  body { padding-bottom: 90px; } /* keeps page content from hiding behind the fixed button */
+  body { padding-bottom: 104px; } /* keeps page content from hiding behind the larger fixed button */
 
   .scanner-overlay {
     display: none; position: fixed; inset: 0; background: #000000;
@@ -162,12 +164,19 @@
     </div>
   </div>
 
-  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg's QR code">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <!-- viewfinder corner brackets -->
       <path d="M3 7V4a1 1 0 0 1 1-1h3"/>
       <path d="M17 3h3a1 1 0 0 1 1 1v3"/>
       <path d="M21 17v3a1 1 0 0 1-1 1h-3"/>
       <path d="M7 21H4a1 1 0 0 1-1-1v-3"/>
+      <!-- small QR-pattern grid inside, so this reads as "QR scan"
+           specifically rather than a generic camera viewfinder -->
+      <rect x="8" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+      <rect x="13" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+      <rect x="8" y="13" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+      <rect x="13" y="13" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" opacity="0.45"/>
     </svg>
   </button>
 
