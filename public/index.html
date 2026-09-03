@@ -83,60 +83,110 @@
      the reasoning on staying compact rather than a full hero section. */
   .top-banner { margin: 0 -16px 16px -16px; height: 140px; position: relative; overflow: hidden; }
   .top-banner svg { display: block; width: 100%; height: 140px; }
-  .top-banner .banner-logo { position: absolute; left: 50%; top: 60px; transform: translate(-50%, -50%); width: 52px; height: 52px; border-radius: 50%; }
+  .top-banner .banner-logo { position: absolute; left: 50%; top: 34px; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; }
 </style>
 </head>
 <body>
   <div class="top-banner">
-    <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="bannerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#2FA8F5"/>
-          <stop offset="100%" stop-color="#1E6FC7"/>
+        <linearGradient id="bannerSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0759D9"/>
+          <stop offset="55%" stop-color="#168CEB"/>
+          <stop offset="100%" stop-color="#4AA9E9"/>
         </linearGradient>
-        <radialGradient id="bannerGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
-          <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
-        </radialGradient>
-        <clipPath id="bannerClip">
-          <path d="M0,0 H480 V110 Q240,140 0,110 Z"/>
-        </clipPath>
+        <linearGradient id="bannerLand" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#2185D4"/>
+          <stop offset="100%" stop-color="#0755B6"/>
+        </linearGradient>
+        <linearGradient id="bannerLogoBg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#18A0EA"/>
+          <stop offset="100%" stop-color="#0875D7"/>
+        </linearGradient>
+        <filter id="bannerGlow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="bannerShadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity=".25"/>
+        </filter>
       </defs>
-      <g clip-path="url(#bannerClip)">
-        <rect width="480" height="140" fill="url(#bannerGrad)"/>
-        <g fill="#FFFFFF" opacity="0.12">
-          <rect x="10" y="70" width="14" height="45"/>
-          <rect x="28" y="55" width="16" height="60"/>
-          <rect x="48" y="80" width="12" height="35"/>
-          <rect x="64" y="45" width="18" height="70"/>
-          <rect x="86" y="65" width="14" height="50"/>
-        </g>
-        <path d="M20,95 Q75,60 130,70 T230,88 T340,60" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="4,5" fill="none" opacity="0.4"/>
-        <!-- Route start: microbrewery (two fermentation tanks on a base) -->
-        <g transform="translate(6,72)" stroke="#FFFFFF" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
-          <rect x="0" y="10" width="20" height="14" rx="1"/>
-          <path d="M4 10V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v6"/>
-          <path d="M12 10V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v6"/>
-          <line x1="0" y1="17" x2="20" y2="17"/>
-        </g>
-        <!-- Two plain waypoints in between -->
-        <circle cx="130" cy="70" r="3" fill="#FFFFFF" opacity="0.5"/>
-        <circle cx="230" cy="88" r="3" fill="#FFFFFF" opacity="0.5"/>
-        <!-- Route end: bar (glass) -->
-        <g transform="translate(332,46)" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
-          <path d="M2 0h12l-2 14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
-          <line x1="8" y1="16" x2="8" y2="20"/>
-          <line x1="4" y1="20" x2="12" y2="20"/>
-        </g>
-        <g transform="translate(370,72)" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.22" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="0" y="0" width="46" height="30"/>
-          <polygon points="46,10 62,10 72,20 72,30 46,30"/>
-          <circle cx="15" cy="34" r="6"/>
-          <circle cx="58" cy="34" r="6"/>
+      <rect x="0" y="0" width="480" height="140" fill="url(#bannerSky)"/>
+      <g fill="#BFE3FF" opacity=".25">
+        <path d="M8 25 C12 19 19 19 23 23 C28 16 39 17 44 24 C51 22 57 26 60 31 H8Z"/>
+        <path d="M370 24 C375 18 383 18 388 23 C393 15 405 17 410 24 C417 22 425 26 429 31 H370Z"/>
+      </g>
+      <path d="M0 72 L37 51 L72 73 L105 53 L145 76 L183 55 L220 77 L260 51 L300 76 L342 49 L383 74 L420 53 L455 73 L480 58 V110 H0Z" fill="#66AFE8" opacity=".38"/>
+      <path d="M0 88 C45 72 78 78 116 91 C153 103 189 81 225 91 C263 102 296 79 333 88 C375 99 414 77 480 66 V118 H0Z" fill="#1971C9" opacity=".55"/>
+      <g fill="#0759B5" opacity=".25">
+        <rect x="280" y="69" width="9" height="37"/><rect x="293" y="59" width="12" height="47"/>
+        <rect x="310" y="72" width="9" height="34"/><rect x="324" y="49" width="14" height="57"/>
+        <rect x="343" y="64" width="11" height="42"/><rect x="358" y="56" width="14" height="50"/>
+        <rect x="378" y="68" width="10" height="38"/>
+      </g>
+      <g fill="#0755A9" opacity=".65">
+        <path d="M78 103 L85 87 L92 103Z"/><path d="M88 106 L96 84 L104 106Z"/>
+        <path d="M395 106 L403 84 L411 106Z"/><path d="M407 108 L416 80 L425 108Z"/>
+      </g>
+      <path d="M0 96 C60 87 110 104 163 99 C220 94 270 105 322 99 C375 93 430 104 480 91 V140 H0Z" fill="url(#bannerLand)"/>
+      <path d="M63 94 C82 94 91 79 108 79 C128 79 139 96 159 96 C179 96 192 77 212 77 C232 77 241 97 263 97 C284 97 295 79 314 79 C334 79 344 96 365 96 C383 96 395 84 414 87 C424 89 430 92 438 94" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 5" opacity=".95"/>
+      <!-- Simple waypoint dots along the route, brewery-to-bar, no numbers -->
+      <circle cx="108" cy="79" r="4" fill="#FFFFFF" opacity="0.6"/>
+      <circle cx="212" cy="77" r="4" fill="#FFFFFF" opacity="0.6"/>
+      <circle cx="314" cy="79" r="4" fill="#FFFFFF" opacity="0.6"/>
+      <g transform="translate(3 42)" filter="url(#bannerShadow)">
+        <rect x="0" y="31" width="58" height="62" rx="2" fill="#063F8D"/>
+        <path d="M-4 31 L29 10 L62 31 Z" fill="#032F70"/>
+        <ellipse cx="17" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
+        <rect x="9" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
+        <ellipse cx="17" cy="63" rx="8" ry="3" fill="#2278B9"/>
+        <ellipse cx="39" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
+        <rect x="31" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
+        <ellipse cx="39" cy="63" rx="8" ry="3" fill="#2278B9"/>
+        <rect x="46" y="9" width="6" height="23" fill="#064083"/>
+        <rect x="3" y="45" width="52" height="14" rx="2" fill="#05316B"/>
+        <text x="29" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="5.1" font-weight="800" fill="#FFFFFF">MICROBREWERY</text>
+        <rect x="23" y="67" width="12" height="26" rx="2" fill="#6BC5EC"/>
+        <rect x="5" y="68" width="11" height="13" fill="#74CDF2"/>
+        <rect x="42" y="68" width="11" height="13" fill="#74CDF2"/>
+        <g transform="translate(5 77)">
+          <ellipse cx="5" cy="2" rx="5" ry="2" fill="#D4EFF9"/>
+          <rect x="0" y="2" width="10" height="12" rx="3" fill="#8ACBE8"/>
+          <ellipse cx="5" cy="14" rx="5" ry="2" fill="#5CA1CC"/>
         </g>
       </g>
-      <circle cx="240" cy="60" r="46" fill="url(#bannerGlow)"/>
-      <circle cx="240" cy="60" r="32" fill="#FFFFFF"/>
+      <g transform="translate(240 34)" filter="url(#bannerGlow)">
+        <circle r="29" fill="url(#bannerLogoBg)" stroke="#FFFFFF" stroke-width="3"/>
+      </g>
+      <g transform="translate(381 58)" filter="url(#bannerShadow)">
+        <rect x="0" y="12" width="32" height="29" rx="2" fill="#0754B5"/>
+        <g transform="translate(5 7)">
+          <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
+          <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
+          <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
+        </g>
+        <g transform="translate(17 7)">
+          <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
+          <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
+          <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
+        </g>
+        <path d="M32 20 H42 L51 28 V42 H32Z" fill="#0869C8"/>
+        <path d="M35 23 H41 L47 29 H35Z" fill="#A4E0F7"/>
+        <circle cx="9" cy="43" r="6" fill="#043A84"/><circle cx="41" cy="43" r="6" fill="#043A84"/>
+        <circle cx="9" cy="43" r="2.5" fill="#80CDEE"/><circle cx="41" cy="43" r="2.5" fill="#80CDEE"/>
+      </g>
+      <g transform="translate(435 43)" filter="url(#bannerShadow)">
+        <rect x="0" y="24" width="45" height="67" rx="2" fill="#073F83"/>
+        <path d="M-5 24 L22 8 L50 24 Z" fill="#032F6F"/>
+        <rect x="4" y="30" width="37" height="17" rx="2" fill="#062F67"/>
+        <text x="22.5" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="8" font-weight="900" letter-spacing=".8" fill="#FFD84D">BAR</text>
+        <path d="M2 48 H43 L40 55 H5Z" fill="#FFFFFF"/>
+        <rect x="5" y="58" width="10" height="18" fill="#74C9F0"/>
+        <rect x="18" y="58" width="10" height="18" fill="#74C9F0"/>
+        <rect x="31" y="58" width="9" height="18" fill="#74C9F0"/>
+        <rect x="17" y="77" width="12" height="14" fill="#07519B"/>
+      </g>
+      <path d="M0 106 C78 117 151 125 230 122 C317 119 401 105 480 95 V140 H0Z" fill="#FFFFFF"/>
     </svg>
     <img class="banner-logo" src="/icon-192.png" alt="Only K logo">
   </div>
