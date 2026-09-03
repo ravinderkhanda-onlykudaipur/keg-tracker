@@ -214,6 +214,12 @@
         <path d="M395 106 L403 84 L411 106Z"/><path d="M407 108 L416 80 L425 108Z"/>
       </g>
       <path d="M0 96 C60 87 110 104 163 99 C220 94 270 105 322 99 C375 93 430 104 480 91 V140 H0Z" fill="url(#bannerLand)"/>
+      <!-- Foreground scene (route, pins, brewery) compressed 25% horizontally
+           around the center, so brewery/bar stay visible on phones narrower
+           than this design's native 480px - preserveAspectRatio="slice"
+           crops from the edges on narrower screens, and these elements sat
+           too close to the extreme edges to survive that safely. -->
+      <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
       <path d="M63 94 C82 94 91 79 108 79 C128 79 139 96 159 96 C179 96 192 77 212 77 C232 77 241 97 263 97 C284 97 295 79 314 79 C334 79 344 96 365 96 C383 96 395 84 414 87 C424 89 430 92 438 94" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 5" opacity=".95"/>
       <!-- Location pins along the route, brewery-to-bar - pin shape kept, number labels removed per request -->
       <g transform="translate(108 79)">
@@ -261,9 +267,14 @@
           <ellipse cx="5" cy="14" rx="5" ry="2" fill="#5CA1CC"/>
         </g>
       </g>
-      <g transform="translate(240 34)" filter="url(#bannerGlow)">
-        <circle r="29" fill="url(#bannerLogoBg)" stroke="#FFFFFF" stroke-width="3"/>
       </g>
+      <!-- Logo: soft glow only, no separate hard circle behind it - the
+           uploaded logo image already has its own solid white circular
+           background baked in (no transparency), so a second circle here
+           just created a visible double-ring. Left OUTSIDE the compression
+           transform above so it stays perfectly circular, not stretched. -->
+      <circle cx="240" cy="34" r="42" fill="url(#bannerGlow)"/>
+      <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
       <g transform="translate(381 58)" filter="url(#bannerShadow)">
         <rect x="0" y="12" width="32" height="29" rx="2" fill="#0754B5"/>
         <g transform="translate(5 7)">
@@ -292,7 +303,8 @@
         <rect x="31" y="58" width="9" height="18" fill="#74C9F0"/>
         <rect x="17" y="77" width="12" height="14" fill="#07519B"/>
       </g>
-      <path d="M0 106 C78 117 151 125 230 122 C317 119 401 105 480 95 V140 H0Z" fill="#FFFFFF"/>
+      </g>
+      <path d="M0 115 C70 122 145 130 225 128 C315 126 405 112 480 101 V140 H0Z" fill="#FFFFFF"/>
     </svg>
     <img class="banner-logo" src="/icon-192.png" alt="Only K logo">
   </div>
