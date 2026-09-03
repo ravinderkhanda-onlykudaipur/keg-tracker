@@ -71,7 +71,6 @@
   button:hover { background: var(--primary-hover); }
 
   .app-header { margin-bottom: 8px; }
-  .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
   .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .user-chip, .logout-btn { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
   .alert-count-badge { display: none; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--error-text); color: #FFFFFF; font-size: 10px; font-weight: 600; margin-left: 6px; }
@@ -165,7 +164,7 @@
      section, since this is a tool people use to move fast (scanning
      kegs), not a marketing page - the goal is brand presence without
      pushing the actual work content further down the screen. */
-  .top-banner { margin: -18px -16px 16px -16px; height: 140px; position: relative; overflow: hidden; }
+  .top-banner { margin: -18px -16px 8px -16px; height: 140px; position: relative; overflow: hidden; }
   .top-banner svg { display: block; width: 100%; height: 140px; }
   .top-banner .banner-logo { position: absolute; left: 50%; top: 60px; transform: translate(-50%, -50%); width: 52px; height: 52px; border-radius: 50%; }
 </style>
@@ -219,7 +218,6 @@
   <div id="pendingBanner" class="pending-banner" style="display:none"></div>
 
   <div id="loginBlock" class="card">
-    <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
     <h2>Who are you?</h2>
     <label>User</label>
     <select id="userSelect"></select>
@@ -231,7 +229,6 @@
 
   <div id="appBlock" style="display:none">
     <div class="app-header">
-      <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
       <div class="header-row">
         <span class="user-chip"><span id="whoami"></span><span class="alert-count-badge" id="alertCountBadge"></span></span>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
