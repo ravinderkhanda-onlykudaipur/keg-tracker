@@ -382,7 +382,7 @@ async function loadKegs() {
   const tbody = document.querySelector('#kegTable tbody');
   tbody.innerHTML = kegs.map(k => `
     <tr>
-      <td><a href="/scan.html?keg=${k.id}" onclick="window.open('/api/kegs/${k.id}/qrcode.png', '_blank')">${k.id}</a></td>
+      <td><a href="#" onclick="window.open('/api/kegs/${k.id}/qrcode.png', '_blank'); return false;">${k.id}</a></td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
       <td><span class="status">${k.status.replace(/_/g,' ')}</span></td>
       <td>${k.current_location || '-'}</td>
