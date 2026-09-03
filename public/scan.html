@@ -98,12 +98,12 @@
   .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
   .status-next-col:first-child { border-right: 1px solid var(--card-border); }
   .status-next-label { font-size: 12px; color: var(--text-secondary); }
-  .status-next-value { font-size: 15px; font-weight: 500; }
+  .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
-  .role-icon-wrap { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .role-icon-wrap { width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  .keg-id-hero { text-align: center; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin: 4px 0 14px; letter-spacing: 0.3px; }
+  .keg-id-hero { text-align: center; font-size: 17px; font-weight: 500; color: var(--primary); margin: 4px 0 14px; letter-spacing: 0.3px; }
 
   .detail-cols { display: flex; justify-content: space-between; gap: 6px; }
   .detail-col { flex: 1; text-align: center; }
@@ -112,30 +112,30 @@
      default (which the Destination card's icons also use, at their own
      smaller size) - .detail-cols only wraps Fill Details, so this
      doesn't affect the Destination card. */
-  .detail-cols .detail-icon { width: 44px; height: 44px; margin: 0 auto 8px; background: transparent; }
-  .detail-col-value { font-size: 13px; font-weight: 500; color: var(--text); margin-top: 3px; word-break: break-word; }
+  .detail-cols .detail-icon { width: 48px; height: 48px; margin: 0 auto 8px; background: transparent; }
+  .detail-col-value { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 3px; word-break: break-word; }
 
   /* Destination card - white background with a "Customer" header, then
      a two-column row split by a vertical divider: Name+Address on the
-     left, Call+phone number on the right. Matches the provided
-     reference image (previously this was a blue-tinted card with three
-     equal icon columns instead). */
+     left (2 parts), a call-icon-only column on the right (1 part) -
+     the phone number itself isn't shown as text, only reachable by
+     tapping the icon (or the number's aria-label for screen readers). */
   .destination-card { background: #FFFFFF; border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin: 14px 0; }
-  .dest-header-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 10px; text-align: center; }
+  .dest-header-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; text-align: center; }
   .dest-row { display: flex; align-items: center; }
   /* Icon sits centered against the whole name+address text block next
      to it (which may run to 2-3 lines once address wraps) rather than
      against just the name - align-items:center on this flex row
      handles that regardless of how many lines the address ends up
      being, without needing to hardcode a height. */
-  .dest-col-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
-  .dest-col-right { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dest-col-left { flex: 2; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .dest-col-right { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
   .dest-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 14px; }
   .dest-icon { margin: 0; flex-shrink: 0; width: 34px; height: 34px; color: #2699E6; }
   .dest-text-block { min-width: 0; }
   .dest-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; }
-  .dest-address { font-size: 11px; color: var(--text-secondary); word-break: break-word; margin-top: 3px; }
-  .dest-phone { font-size: 14px; font-weight: 600; color: #2699E6; word-break: break-word; }
+  .dest-address { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; margin-top: 3px; }
+  .dest-phone-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
   /* Bottom-middle floating scan button, fixed above everything else -
      the easy-access entry point requested for the operational roles,
@@ -210,13 +210,17 @@
           </div>
         </div>
         <div class="dest-divider"></div>
-        <a class="dest-col-right" id="kegDestinationPhoneLink" style="text-decoration:none;color:inherit">
+        <a class="dest-col-right" id="kegDestinationPhoneLink" style="text-decoration:none;color:inherit" aria-label="Call customer">
           <div class="detail-icon dest-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
           </div>
-          <span class="dest-phone" id="kegDestinationPhone"></span>
+          <!-- Number itself isn't shown visually (per request) - kept
+               in the DOM only for screen readers via this visually-
+               hidden span, so the actual digits are still announced to
+               anyone relying on one. -->
+          <span class="dest-phone-hidden" id="kegDestinationPhone"></span>
         </a>
       </div>
     </div>
@@ -401,7 +405,7 @@ function roleIcon(role, variant) {
   const file = ROLE_ICON_FILE[role];
   if (!file) return '';
   const src = variant === 'green' ? `/icons/${file}-green.svg` : `/icons/${file}.svg`;
-  return `<img src="${src}" width="48" height="48" alt="">`;
+  return `<img src="${src}" width="54" height="54" alt="">`;
 }
 
 async function init() {
@@ -1134,10 +1138,7 @@ async function renderHistory() {
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
-  const kegIdHtml = `
-    <div class="keg-id-hero">
-      <img src="/icons/keg.svg" width="20" height="20" alt="" style="vertical-align:-4px;margin-right:6px">${keg.id}
-    </div>`;
+  const kegIdHtml = `<div class="keg-id-hero">${keg.id}</div>`;
 
   if (!fillEvent) {
     el.innerHTML = kegIdHtml + '<p class="muted" style="text-align:center">Not filled yet.</p>';
@@ -1148,15 +1149,15 @@ async function renderHistory() {
     ${kegIdHtml}
     <div class="detail-cols">
       <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/beer.svg" width="44" height="44" alt=""></div>
+        <div class="detail-icon"><img src="/icons/beer.svg" width="48" height="48" alt=""></div>
         <div class="detail-col-value">${d.product || '-'}</div>
       </div>
       <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/batch.svg" width="44" height="44" alt=""></div>
+        <div class="detail-icon"><img src="/icons/batch.svg" width="48" height="48" alt=""></div>
         <div class="detail-col-value">${d.batch_number || '-'}</div>
       </div>
       <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/abv.svg" width="44" height="44" alt=""></div>
+        <div class="detail-icon"><img src="/icons/abv.svg" width="48" height="48" alt=""></div>
         <div class="detail-col-value">${d.abv ? d.abv + '%' : '-'}</div>
       </div>
     </div>
