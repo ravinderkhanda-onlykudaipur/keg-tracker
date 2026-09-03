@@ -65,9 +65,9 @@
      smaller triggers iOS Safari's auto-zoom-on-focus, which is worse
      for usability than a one-off exception to the scale. Buttons don't
      have that constraint, so their text scales normally with everything else. */
-  input, select { width: 100%; box-sizing: border-box; font-size: 16px; font-weight: 400; padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
+  input, select { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 16px; font-weight: 400; padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
   input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47,168,245,0.18); }
-  button { width: 100%; margin-top: 16px; font-size: 16px; font-weight: 500; padding: 13px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
+  button { width: 100%; margin-top: 16px; font-family: inherit; font-size: 16px; font-weight: 500; padding: 13px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
   button:hover { background: var(--primary-hover); }
 
   .app-header { margin-bottom: 8px; }
