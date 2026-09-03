@@ -96,17 +96,18 @@
      presentation-only, same underlying data as before. */
   .status-next-row { display: flex; align-items: stretch; }
   .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
-  .status-next-col:first-child { border-right: 1px solid var(--card-border); }
+  .status-next-arrow-mid { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; padding: 0 6px; }
   .status-next-label { font-size: 12px; color: var(--text-secondary); }
   .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
   .role-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  .keg-id-hero { text-align: center; font-size: 12px; font-weight: 400; color: var(--text-secondary); margin: 4px 0 14px; }
+  .keg-id-hero { text-align: center; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin: 4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--card-border); }
 
   .detail-cols { display: flex; justify-content: space-between; gap: 6px; }
   .detail-col { flex: 1; text-align: center; }
+  .detail-col + .detail-col { border-left: 1px solid var(--card-border); }
   .detail-icon { width: 30px; height: 30px; border-radius: 50%; background: var(--primary-tint-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; flex-shrink: 0; }
   /* Beer/Batch/ABV icons scoped larger than the shared .detail-icon
      default (which the Destination card's icons also use, at their own
@@ -122,18 +123,18 @@
      tapping the icon (or the number's aria-label for screen readers). */
   .destination-card { background: #FFFFFF; border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin: 14px 0; }
   .dest-header-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; text-align: center; }
-  .dest-row { display: flex; align-items: center; }
+  .dest-row { display: flex; align-items: flex-start; }
   /* Icon sits centered against the whole name+address text block next
      to it (which may run to 2-3 lines once address wraps) rather than
      against just the name - align-items:center on this flex row
      handles that regardless of how many lines the address ends up
      being, without needing to hardcode a height. */
-  .dest-col-left { flex: 3; min-width: 0; display: flex; align-items: center; gap: 10px; }
-  .dest-col-right { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
+  .dest-col-left { flex: 4; min-width: 0; display: flex; align-items: flex-start; gap: 10px; }
+  .dest-col-right { flex: 1; display: flex; align-items: flex-start; justify-content: center; min-width: 0; }
   .dest-icon { margin: 0; flex-shrink: 0; width: 34px; height: 34px; color: #2699E6; }
   .dest-text-block { min-width: 0; }
-  .dest-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; }
-  .dest-address { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; margin-top: 3px; }
+  .dest-name { font-size: 13px; font-weight: 700; color: var(--text); word-break: break-word; }
+  .dest-address { font-size: 11.7px; font-weight: 600; color: var(--text); word-break: break-word; margin-top: 3px; }
   .dest-phone-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
   /* Bottom-middle floating scan button, fixed above everything else -
@@ -198,7 +199,7 @@
       <div class="dest-row">
         <div class="dest-col-left">
           <div class="detail-icon dest-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.32" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
               <circle cx="12" cy="10" r="3"/>
             </svg>
@@ -210,7 +211,7 @@
         </div>
         <a class="dest-col-right" id="kegDestinationPhoneLink" style="text-decoration:none;color:inherit" aria-label="Call customer">
           <div class="detail-icon dest-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.32" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
           </div>
@@ -1103,6 +1104,7 @@ function renderNowNext() {
         <span class="role-icon-wrap">${roleIcon(roleFlow.now, 'green')}</span>
         <span class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</span>
       </div>
+      <div class="status-next-arrow-mid">&#8594;</div>
       <div class="status-next-col">
         <span class="status-next-label">Next</span>
         <span class="role-icon-wrap">${roleIcon(roleFlow.next, 'blue')}</span>
