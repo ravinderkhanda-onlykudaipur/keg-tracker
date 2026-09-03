@@ -1079,8 +1079,19 @@ function formatIST(dateVal) {
 // recognition. Rendered on its own now, previously embedded inside the
 // Fill Details card.
 function renderNowNext() {
+  // Hidden entirely when it's the current viewer's own turn to act -
+  // if the keg is pending with them, "Now: [their own role]" is
+  // redundant with the action form they're already looking at. Shown
+  // only when it's genuinely someone else's turn, where "who has it
+  // right now" is actually useful context.
+  const nowNextCard = document.getElementById('nowNextCard');
+  if (getActionConfig()) {
+    nowNextCard.style.display = 'none';
+    return;
+  }
+
   const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
-  document.getElementById('nowNextCard').style.display = 'block';
+  nowNextCard.style.display = 'block';
   document.getElementById('nowNextContent').innerHTML = `
     <div class="status-next-row">
       <div class="status-next-col">
