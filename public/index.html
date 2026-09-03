@@ -111,10 +111,23 @@
           <rect x="64" y="45" width="18" height="70"/>
           <rect x="86" y="65" width="14" height="50"/>
         </g>
-        <path d="M20,95 Q120,50 200,85 T340,60" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="4,5" fill="none" opacity="0.35"/>
-        <circle cx="20" cy="95" r="3" fill="#FFFFFF" opacity="0.5"/>
-        <circle cx="200" cy="85" r="3" fill="#FFFFFF" opacity="0.5"/>
-        <circle cx="340" cy="60" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <path d="M20,95 Q75,60 130,70 T230,88 T340,60" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="4,5" fill="none" opacity="0.4"/>
+        <!-- Route start: microbrewery (two fermentation tanks on a base) -->
+        <g transform="translate(6,72)" stroke="#FFFFFF" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+          <rect x="0" y="10" width="20" height="14" rx="1"/>
+          <path d="M4 10V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v6"/>
+          <path d="M12 10V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v6"/>
+          <line x1="0" y1="17" x2="20" y2="17"/>
+        </g>
+        <!-- Two plain waypoints in between -->
+        <circle cx="130" cy="70" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <circle cx="230" cy="88" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <!-- Route end: bar (glass) -->
+        <g transform="translate(332,46)" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+          <path d="M2 0h12l-2 14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
+          <line x1="8" y1="16" x2="8" y2="20"/>
+          <line x1="4" y1="20" x2="12" y2="20"/>
+        </g>
         <g transform="translate(370,72)" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.22" stroke-linecap="round" stroke-linejoin="round">
           <rect x="0" y="0" width="46" height="30"/>
           <polygon points="46,10 62,10 72,20 72,30 46,30"/>
