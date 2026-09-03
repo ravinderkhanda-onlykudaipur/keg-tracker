@@ -434,7 +434,7 @@ async function loadAlerts() {
   const sorted = alerts.slice().sort((a, b) => b.hoursOverdue - a.hoursOverdue);
   el.innerHTML = sorted.map(a => `
     <div class="alert-item">
-      <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
+      <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
       <span class="alert-badge">${a.hoursOverdue}h overdue</span>
       <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
     </div>
