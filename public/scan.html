@@ -159,9 +159,59 @@
   .scanner-overlay video { width: 100%; max-width: 480px; }
   .scanner-overlay .scanner-msg { color: #FFFFFF; font-size: 14px; padding: 14px 20px; text-align: center; }
   .scanner-overlay button { width: auto; margin-top: 20px; padding: 12px 28px; }
+
+  /* Top banner - decorative, sits above everything else including the
+     login screen. Deliberately compact (140px) rather than a full hero
+     section, since this is a tool people use to move fast (scanning
+     kegs), not a marketing page - the goal is brand presence without
+     pushing the actual work content further down the screen. */
+  .top-banner { margin: -18px -16px 16px -16px; height: 140px; position: relative; overflow: hidden; }
+  .top-banner svg { display: block; width: 100%; height: 140px; }
+  .top-banner .banner-logo { position: absolute; left: 50%; top: 60px; transform: translate(-50%, -50%); width: 52px; height: 52px; border-radius: 50%; }
 </style>
 </head>
 <body>
+
+  <div class="top-banner">
+    <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bannerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#2FA8F5"/>
+          <stop offset="100%" stop-color="#1E6FC7"/>
+        </linearGradient>
+        <radialGradient id="bannerGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+          <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+        </radialGradient>
+        <clipPath id="bannerClip">
+          <path d="M0,0 H480 V110 Q240,140 0,110 Z"/>
+        </clipPath>
+      </defs>
+      <g clip-path="url(#bannerClip)">
+        <rect width="480" height="140" fill="url(#bannerGrad)"/>
+        <g fill="#FFFFFF" opacity="0.12">
+          <rect x="10" y="70" width="14" height="45"/>
+          <rect x="28" y="55" width="16" height="60"/>
+          <rect x="48" y="80" width="12" height="35"/>
+          <rect x="64" y="45" width="18" height="70"/>
+          <rect x="86" y="65" width="14" height="50"/>
+        </g>
+        <path d="M20,95 Q120,50 200,85 T340,60" stroke="#FFFFFF" stroke-width="1.5" stroke-dasharray="4,5" fill="none" opacity="0.35"/>
+        <circle cx="20" cy="95" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <circle cx="200" cy="85" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <circle cx="340" cy="60" r="3" fill="#FFFFFF" opacity="0.5"/>
+        <g transform="translate(370,72)" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.22" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="0" y="0" width="46" height="30"/>
+          <polygon points="46,10 62,10 72,20 72,30 46,30"/>
+          <circle cx="15" cy="34" r="6"/>
+          <circle cx="58" cy="34" r="6"/>
+        </g>
+      </g>
+      <circle cx="240" cy="60" r="46" fill="url(#bannerGlow)"/>
+      <circle cx="240" cy="60" r="32" fill="#FFFFFF"/>
+    </svg>
+    <img class="banner-logo" src="/icon-192.png" alt="Only K logo">
+  </div>
 
   <div id="offlineBanner" class="offline-banner" style="display:none">
     &#128246; No connection &mdash; you can still log an action below; it'll be saved on this device and sent automatically once you're back online.
