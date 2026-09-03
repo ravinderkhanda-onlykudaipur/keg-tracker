@@ -69,7 +69,8 @@
   .app-header { margin-bottom: 8px; }
   .keg-logo { display: block; margin: 4px auto 10px; border-radius: 50%; }
   .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .user-chip, .logout-btn { display: inline-block; padding: 7px 14px; border-radius: 20px; font-size: 15px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+  .user-chip, .logout-btn { display: inline-flex; align-items: center; padding: 7px 14px; border-radius: 20px; font-size: 15px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+  .alert-count-badge { display: none; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--error-text); color: #FFFFFF; font-size: 11px; font-weight: 600; margin-left: 6px; }
   .logout-btn { cursor: pointer; width: auto; margin: 0; }
   .logout-btn:hover { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
 
@@ -79,17 +80,10 @@
   .history-item b { font-weight: 500; }
   .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
   .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; }
-  .my-alerts-banner { background: var(--error-bg); color: var(--error-text); border-radius: 10px; padding: 12px 16px; font-size: 15px; margin-bottom: 14px; font-weight: 500; }
   .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 8px 14px; font-size: 15px; }
   .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 9px 14px; font-size: 15px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
   .geo-btn:hover { background: #D6E9F9; }
   .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
-  .destination-line { background: var(--primary-tint-bg); border-radius: 10px; padding: 14px 16px; margin: 10px 0; color: var(--primary-tint-text-dark); }
-  /* Label/value two-column rows, used by both the Destination card and
-     Fill Details - label on the left, actual data on the right. */
-  .lv-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; }
-  .lv-label { color: var(--primary-tint-text-mid); font-weight: 400; flex-shrink: 0; }
-  .lv-value { text-align: right; font-weight: 500; }
   .btn-danger-outline { background: #FFFFFF; color: var(--error-text); border: 1px solid var(--error-text); }
   .btn-danger-outline:hover { background: var(--error-bg); }
 
@@ -114,19 +108,25 @@
   .detail-col { flex: 1; text-align: center; }
   .detail-icon { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-tint-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; flex-shrink: 0; }
   .detail-col-value { font-size: 16px; font-weight: 500; color: var(--text); margin-top: 3px; word-break: break-word; }
-  /* Destination card: icon-left, value-right horizontal rows - a
-     different arrangement from Fill Details' icon-above-value columns
-     above, per explicit request. Reuses .detail-icon (same circle
-     style) but not .detail-col/.detail-col-value (those center text
-     under the icon, which doesn't fit a left-icon/right-text row). */
-  .lv-icon-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
-  .lv-icon-row .detail-icon { margin: 0; }
-  .lv-icon-value { flex: 1; text-align: left; font-size: 14px; font-weight: 500; color: var(--text); word-break: break-word; }
-  /* Destination card's own background is already the same light blue
-     used for .detail-icon elsewhere - reusing that here would make the
-     icon circles invisible against it, so these get a white circle
-     with the same blue icon color instead, for contrast. */
-  .destination-line .detail-icon { background: #FFFFFF; }
+
+  /* Destination card - white background with a "Customer" header, then
+     a two-column row split by a vertical divider: Name+Address on the
+     left, Call+phone number on the right. Matches the provided
+     reference image (previously this was a blue-tinted card with three
+     equal icon columns instead). */
+  .destination-card { background: #FFFFFF; border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; margin: 16px 0; }
+  .dest-header-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 10px; }
+  .dest-row { display: flex; align-items: center; }
+  .dest-col-left { flex: 1.4; min-width: 0; }
+  .dest-col-right { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dest-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 16px; }
+  .dest-icon { margin: 0; flex-shrink: 0; }
+  .dest-name-row { display: flex; align-items: center; gap: 10px; }
+  .dest-name { font-size: 15px; font-weight: 600; color: var(--text); word-break: break-word; }
+  .dest-address-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .dest-address { font-size: 12px; color: var(--text-secondary); word-break: break-word; }
+  .dest-call-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; }
+  .dest-phone { font-size: 15px; font-weight: 600; color: var(--primary); word-break: break-word; }
 
   /* Bottom-middle floating scan button, fixed above everything else -
      the easy-access entry point requested for the operational roles,
@@ -136,12 +136,12 @@
      the general button style, in case that ever changes independently). */
   .scan-fab {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    width: 76px; height: 76px; padding: 0; border-radius: 50%;
+    width: 56px; height: 56px; padding: 0; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     background: var(--primary); color: #FFFFFF;
     box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100; margin: 0;
   }
-  body { padding-bottom: 104px; } /* keeps page content from hiding behind the larger fixed button */
+  body { padding-bottom: 84px; } /* keeps page content from hiding behind the fixed button */
 
   .scanner-overlay {
     display: none; position: fixed; inset: 0; background: #000000;
@@ -174,7 +174,7 @@
     <div class="app-header">
       <img class="keg-logo" src="/icon-192.png" width="56" height="56" alt="Only K logo">
       <div class="header-row">
-        <span class="user-chip" id="whoami"></span>
+        <span class="user-chip"><span id="whoami"></span><span class="alert-count-badge" id="alertCountBadge"></span></span>
         <button class="logout-btn" onclick="logout();return false;">Log out</button>
       </div>
     </div>
@@ -185,32 +185,41 @@
 
     <div class="card" id="formCard"></div>
 
-    <div id="kegDestinationLine" class="destination-line" style="display:none">
-      <div class="lv-icon-row">
-        <div class="detail-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+    <div id="kegDestinationLine" class="destination-card" style="display:none">
+      <div class="dest-header-label">Customer</div>
+      <div class="dest-row">
+        <div class="dest-col-left">
+          <div class="dest-name-row">
+            <div class="detail-icon dest-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <span class="dest-name" id="kegDestination"></span>
+          </div>
+          <div class="dest-address-row">
+            <div class="detail-icon dest-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <span class="dest-address" id="kegDestinationAddress"></span>
+          </div>
         </div>
-        <div class="lv-icon-value" id="kegDestination"></div>
-      </div>
-      <div class="lv-icon-row">
-        <div class="detail-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-            <circle cx="12" cy="10" r="3"/>
-          </svg>
+        <div class="dest-divider"></div>
+        <div class="dest-col-right">
+          <div class="detail-icon dest-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="dest-call-label">Call</div>
+            <span class="dest-phone" id="kegDestinationPhone"></span>
+          </div>
         </div>
-        <div class="lv-icon-value" id="kegDestinationAddress"></div>
-      </div>
-      <div class="lv-icon-row">
-        <div class="detail-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-          </svg>
-        </div>
-        <div class="lv-icon-value" id="kegDestinationPhone"></div>
       </div>
     </div>
 
@@ -227,12 +236,10 @@
       <h2 id="homeGreeting" style="margin-top:0"></h2>
       <p class="muted">Scan a keg's QR code to get started.</p>
     </div>
-
-    <div id="myAlertsBanner" class="my-alerts-banner" style="display:none"></div>
   </div>
 
   <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg's QR code">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <!-- viewfinder corner brackets -->
       <path d="M3 7V4a1 1 0 0 1 1-1h3"/>
       <path d="M17 3h3a1 1 0 0 1 1 1v3"/>
@@ -388,17 +395,19 @@ function roleLabel(role) {
 
 // Small icon per operational role, shown next to the role name on the
 // Now/Next card - purely decorative/recognition, no meaning attached
-// beyond "this is what that role's job looks like at a glance".
+// beyond "this is what that role's job looks like at a glance". Each
+// was rendered and visually checked (both at preview size and at the
+// actual ~34px size it displays at) before being finalized here.
 const ROLE_ICON_PATHS = {
-  washer: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
-  filler: '<path d="M18 8h1a3 3 0 0 1 0 6h-1M18 8H5v9a3 3 0 0 0 3 3h7a3 3 0 0 0 3-3V8z"/><line x1="9" y1="12" x2="9" y2="16"/>',
-  driver: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
-  warehouse: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  washer: '<rect x="5" y="11" width="14" height="11" rx="1.5"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="5" y1="18" x2="19" y2="18"/><path d="M3 3l1 2M10 1l1 2.5M17 3l1 2M14 5l1 2" stroke-width="1.5"/>',
+  filler: '<rect x="4" y="13" width="16" height="11" rx="1.5"/><line x1="4" y1="17" x2="20" y2="17"/><line x1="4" y1="20" x2="20" y2="20"/><path d="M12 13V7h5v3"/><circle cx="17" cy="4" r="1.7"/><path d="M12 9l-1 3a1 1 0 0 0 2 0z" fill="currentColor" stroke="none"/>',
+  driver: '<rect x="0.5" y="2" width="15" height="11" rx="1"/><polygon points="15.5 6 20 6 23 9.5 23 13 15.5 13"/><circle cx="5.5" cy="15" r="2"/><circle cx="18" cy="15" r="2"/><rect x="5" y="5" width="5.5" height="6" rx="0.7"/><line x1="5" y1="7" x2="10.5" y2="7"/>',
+  warehouse: '<circle cx="6" cy="3" r="2.1" fill="currentColor" stroke="none"/><path d="M6 7v7"/><path d="M6 9.5l7 1.5"/><path d="M6 14l-3 6"/><path d="M6 14l4 6"/><line x1="15" y1="8" x2="15" y2="20"/><rect x="15" y="8" width="8" height="9" rx="1"/><line x1="15" y1="11.5" x2="23" y2="11.5"/><line x1="15" y1="15" x2="23" y2="15"/><circle cx="15" cy="21" r="1.8" fill="currentColor" stroke="none"/>',
 };
 function roleIcon(role) {
   const paths = ROLE_ICON_PATHS[role];
   if (!paths) return '';
-  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
 
 async function init() {
@@ -492,30 +501,29 @@ function showHomeScreen() {
 }
 
 async function loadMyAlerts() {
-  // Shows how many kegs are overdue for this person's role - a count
-  // only, deliberately no keg IDs or links here. Showing individual
-  // IDs with a one-tap shortcut straight to the action form would make
-  // it too easy to log a wash/fill/dispatch without actually being
-  // physically at that keg to scan it - which defeats the point of
-  // QR-based verification in the first place. (Admin/Manager's alerts
-  // list on the admin page is different - they're not the ones
-  // performing these physical actions, so that list keeps its
-  // clickable keg IDs for oversight purposes.)
+  // Shows how many kegs are overdue for this person's role - just the
+  // count, as a small badge on the user chip (no bottom banner anymore,
+  // no keg IDs or links here). Showing individual IDs with a one-tap
+  // shortcut straight to the action form would make it too easy to log
+  // a wash/fill/dispatch without actually being physically at that keg
+  // to scan it - which defeats the point of QR-based verification in
+  // the first place. (Admin/Manager's alerts list on the admin page is
+  // different - they're not the ones performing these physical
+  // actions, so that list keeps its clickable keg IDs for oversight.)
   try {
     const res = await fetch('/api/alerts', { credentials: 'include' });
     if (!res.ok) return;
     const alerts = await res.json();
     const mine = alerts.filter(a => a.role === currentUser.role);
-    const banner = document.getElementById('myAlertsBanner');
+    const badge = document.getElementById('alertCountBadge');
     if (mine.length > 0) {
-      banner.style.display = 'block';
-      const otherWord = kegId ? 'other ' : '';
-      banner.textContent = `\u26A0 ${mine.length} ${otherWord}keg${mine.length > 1 ? 's are' : ' is'} overdue for your role.`;
+      badge.style.display = 'inline-flex';
+      badge.textContent = mine.length;
     } else {
-      banner.style.display = 'none';
+      badge.style.display = 'none';
     }
   } catch (err) {
-    // Offline or alerts fetch failed - not critical, just skip the banner silently.
+    // Offline or alerts fetch failed - not critical, just skip the badge silently.
   }
 }
 
@@ -584,7 +592,7 @@ function updateDestinationLine() {
     addressEl.textContent = keg.destination_address ? keg.destination_address : '-';
     const phoneEl = document.getElementById('kegDestinationPhone');
     phoneEl.innerHTML = keg.destination_phone
-      ? `<a href="tel:${keg.destination_phone.replace(/\s+/g, '')}" style="color:inherit;text-decoration:underline">${keg.destination_phone}</a>`
+      ? `<a href="tel:${keg.destination_phone.replace(/\s+/g, '')}" style="color:inherit;text-decoration:none">${keg.destination_phone}</a>`
       : '-';
     line.style.display = 'block';
   } else {
@@ -1117,7 +1125,18 @@ async function renderHistory() {
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
   const el = document.getElementById('fillDetailsContent');
-  const kegIdHtml = `<div class="keg-id-hero">${keg.id}</div>`;
+  const kegIdHtml = `
+    <div class="keg-id-hero">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:6px">
+        <rect x="6" y="8" width="12" height="14" rx="2"/>
+        <line x1="6" y1="12" x2="18" y2="12"/>
+        <line x1="6" y1="18" x2="18" y2="18"/>
+        <line x1="9" y1="8" x2="9" y2="4"/>
+        <circle cx="9" cy="2.7" r="1.3"/>
+        <line x1="15" y1="8" x2="15" y2="4"/>
+        <circle cx="15" cy="2.7" r="1.3"/>
+      </svg>${keg.id}
+    </div>`;
 
   if (!fillEvent) {
     el.innerHTML = kegIdHtml + '<p class="muted" style="text-align:center">Not filled yet.</p>';
@@ -1129,26 +1148,33 @@ async function renderHistory() {
     <div class="detail-cols">
       <div class="detail-col">
         <div class="detail-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8h1a3 3 0 0 1 0 6h-1M18 8H5v9a3 3 0 0 0 3 3h7a3 3 0 0 0 3-3V8z"/>
-            <line x1="9" y1="12" x2="9" y2="16"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 1h4v5l2.5 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 7.5 19.5V8.5L10 6z"/>
+            <line x1="7.5" y1="12" x2="16.5" y2="12"/>
+            <line x1="7.5" y1="16" x2="16.5" y2="16"/>
           </svg>
         </div>
         <div class="detail-col-value">${d.product || '-'}</div>
       </div>
       <div class="detail-col">
         <div class="detail-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="8" y1="13" x2="16" y2="13"/>
-            <line x1="8" y1="17" x2="13" y2="17"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="3" width="16" height="19" rx="1.5"/>
+            <rect x="9" y="1" width="6" height="4" rx="1"/>
+            <line x1="7.5" y1="10" x2="16.5" y2="10"/>
+            <line x1="7.5" y1="14" x2="16.5" y2="14"/>
+            <line x1="7.5" y1="18" x2="12" y2="18"/>
           </svg>
         </div>
         <div class="detail-col-value">${d.batch_number || '-'}</div>
       </div>
       <div class="detail-col">
-        <div class="detail-icon" style="font-weight:700;font-size:15px">%</div>
+        <div class="detail-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2c4 5.5 7 9.5 7 13.5A7 7 0 1 1 5 15.5C5 11.5 8 7.5 12 2z"/>
+            <text x="12" y="18.5" font-size="5.5" font-weight="700" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">%</text>
+          </svg>
+        </div>
         <div class="detail-col-value">${d.abv ? d.abv + '%' : '-'}</div>
       </div>
     </div>

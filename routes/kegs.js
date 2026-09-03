@@ -55,6 +55,20 @@ function csvEscape(value) {
   const str = String(value);
   return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
 }
+// Converts a stored UTC/GMT timestamp into IST (matching how times are
+// shown elsewhere in the app - see formatIST() in scan.html) and
+// formats it as "YYYY-MM-DD HH:MM:SS". Excel reliably auto-recognizes
+// this shape as a real sortable/filterable date-time value when opening
+// the CSV, unlike the raw GMT ISO string (with a literal "T" and "Z")
+// previously exported, which some Excel versions treat as plain text.
+function formatForExcel(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return String(dateVal);
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000); // UTC+5:30
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+}
 router.get('/export.csv', requireRole('admin', 'manager'), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM kegs ORDER BY created_at DESC');
   const headers = [
@@ -64,7 +78,7 @@ router.get('/export.csv', requireRole('admin', 'manager'), async (req, res) => {
   ];
   const lines = [headers.join(',')];
   for (const row of rows) {
-    lines.push(headers.map((h) => csvEscape(row[h])).join(','));
+    lines.push(headers.map((h) => csvEscape(h === 'created_at' ? formatForExcel(row[h]) : row[h])).join(','));
   }
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="kegs-export.csv"');
@@ -90,7 +104,7 @@ router.get('/export-history.csv', requireRole('admin', 'manager'), async (req, r
     lines.push([
       csvEscape(row.keg_id),
       csvEscape(row.manufacturing_number),
-      csvEscape(row.created_at),
+      csvEscape(formatForExcel(row.created_at)),
       csvEscape(row.action_type),
       csvEscape(row.role),
       csvEscape(row.user_name),
