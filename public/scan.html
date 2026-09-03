@@ -101,9 +101,9 @@
   .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
   .status-next-value.next { color: var(--primary); }
-  .role-icon-wrap { width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .role-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  .keg-id-hero { text-align: center; font-size: 17px; font-weight: 500; color: var(--primary); margin: 4px 0 14px; letter-spacing: 0.3px; }
+  .keg-id-hero { text-align: center; font-size: 12px; font-weight: 400; color: var(--text-secondary); margin: 4px 0 14px; }
 
   .detail-cols { display: flex; justify-content: space-between; gap: 6px; }
   .detail-col { flex: 1; text-align: center; }
@@ -128,9 +128,8 @@
      against just the name - align-items:center on this flex row
      handles that regardless of how many lines the address ends up
      being, without needing to hardcode a height. */
-  .dest-col-left { flex: 2; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .dest-col-left { flex: 3; min-width: 0; display: flex; align-items: center; gap: 10px; }
   .dest-col-right { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
-  .dest-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 14px; }
   .dest-icon { margin: 0; flex-shrink: 0; width: 34px; height: 34px; color: #2699E6; }
   .dest-text-block { min-width: 0; }
   .dest-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; }
@@ -209,7 +208,6 @@
             <div class="dest-address" id="kegDestinationAddress"></div>
           </div>
         </div>
-        <div class="dest-divider"></div>
         <a class="dest-col-right" id="kegDestinationPhoneLink" style="text-decoration:none;color:inherit" aria-label="Call customer">
           <div class="detail-icon dest-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
@@ -405,7 +403,7 @@ function roleIcon(role, variant) {
   const file = ROLE_ICON_FILE[role];
   if (!file) return '';
   const src = variant === 'green' ? `/icons/${file}-green.svg` : `/icons/${file}.svg`;
-  return `<img src="${src}" width="54" height="54" alt="">`;
+  return `<img src="${src}" width="56" height="56" alt="">`;
 }
 
 async function init() {
