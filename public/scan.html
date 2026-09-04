@@ -96,8 +96,9 @@
   .status-next-row { display: flex; align-items: stretch; }
   .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
   .status-next-arrow-mid { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; padding: 0 6px; }
+  .status-next-arrow-mid.pending { padding: 0 4px; }
   .days-with-customer { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
-  .pending-receipt-badge { display: block; margin-top: 4px; font-size: 11px; font-weight: 500; color: var(--warn-text); background: var(--warn-bg); padding: 2px 8px; border-radius: 8px; }
+  .pending-receipt-badge { font-size: 10px; font-weight: 600; color: var(--warn-text); background: var(--warn-bg); padding: 4px 7px; border-radius: 8px; text-align: center; line-height: 1.2; white-space: nowrap; }
 
   /* Home-screen dashboard lists - shown per role instead of just the
      plain greeting, so someone can actually find which physical keg
@@ -614,34 +615,44 @@ const ROLE_ACTIONS = {
 // any staff member, and showing a role there would be misleading about
 // where the keg physically is.
 const STATUS_ROLE_FLOW = {
-  // Mover is now the central hub: allots returned kegs to Washer,
-  // allots clean-stored kegs to Filler, assigns dispatch to Driver,
-  // and receives kegs back at the end - see lib/stateMachine.js for
-  // the full rationale behind each new status. Each role's "notified"
-  // and "received" pair (e.g. allotted_washer/received_washer) shows
-  // the same now/next - both are still that role's overall phase,
-  // same pattern already used for Driver owning two consecutive
-  // statuses (dispatched/delivered) before handing off.
-  empty_returned:       { now: 'warehouse', next: 'washer' },
-  allotted_washer:      { now: 'washer',    next: 'filler' },
-  received_washer:      { now: 'washer',    next: 'filler' },
-  washed:               { now: 'filler',    next: 'warehouse' },
-  received_filler:      { now: 'filler',    next: 'warehouse' },
-  clean_storage:          { now: 'warehouse', next: 'filler' },
-  received_from_washer:   { now: 'warehouse', next: 'filler' },
-  filled:                 { now: 'warehouse', next: 'driver' },
-  received_from_filler:   { now: 'warehouse', next: 'driver' },
-  dispatched:            { now: 'driver',    next: 'warehouse' },
-  received_driver:      { now: 'driver',    next: 'warehouse' },
-  delivered:            { now: 'customer',  next: 'warehouse' },
-  // 'now: driver' here, not 'customer' - marking a keg empty means the
-  // driver has ALREADY received it back from the customer (per the
-  // "driver carries it back to Mover" redesign), so the keg is
-  // physically with the driver at this point, in transit, not still
-  // sitting at the customer's premises.
-  empty_at_customer:    { now: 'driver',    next: 'warehouse' },
-  received_from_driver: { now: 'warehouse', next: 'washer' },
-  needs_repair:         { now: 'warehouse', next: 'washer' },
+  // Possession-based: "now" shows whoever last actually CONFIRMED
+  // holding the keg (via a receive_* action) - not whoever's merely
+  // been notified/allotted it. Until the receiving party scans to
+  // confirm, the PREVIOUS holder still shows in "now", with
+  // pending:true marking that a handoff is awaiting confirmation.
+  // Mover is the central hub: allots returned kegs to Washer, allots
+  // clean-stored kegs to Filler, assigns dispatch to Driver, and
+  // receives kegs back at the end - see lib/stateMachine.js for the
+  // full rationale behind each status.
+  empty_returned:        { now: 'warehouse', next: 'washer',    pending: false },
+  allotted_washer:       { now: 'warehouse', next: 'washer',    pending: true },
+  received_washer:       { now: 'washer',    next: 'filler',    pending: false },
+  washed:                { now: 'washer',    next: 'filler',    pending: true },
+  received_filler:       { now: 'filler',    next: 'warehouse', pending: false },
+  clean_storage:         { now: 'washer',    next: 'warehouse', pending: true },
+  received_from_washer:  { now: 'warehouse', next: 'filler',    pending: false },
+  filled:                { now: 'filler',    next: 'warehouse', pending: true },
+  received_from_filler:  { now: 'warehouse', next: 'driver',    pending: false },
+  dispatched:            { now: 'warehouse', next: 'driver',    pending: true },
+  received_driver:       { now: 'driver',    next: 'customer',  pending: false },
+  // Once delivered, the keg's physical possession genuinely passes to
+  // the customer - Driver isn't holding it anymore. Next is Driver
+  // (not Warehouse/Mover directly) since Driver is who actually comes
+  // back to collect it - the customer never hands off straight to Mover.
+  delivered:             { now: 'customer',  next: 'driver',    pending: false },
+  // Driver's own "Received from Customer" action (mark_empty) already
+  // IS the confirmation of them taking possession back - there's no
+  // separate receive step for that specific handoff (the customer
+  // isn't an app user who could scan to hand it off), so this shows
+  // pending:false even though Mover hasn't confirmed *their* end yet.
+  empty_at_customer:     { now: 'driver',    next: 'warehouse', pending: false },
+  // Mover has confirmed receiving the returned keg, but hasn't yet
+  // decided where it goes (Uncleaned storage vs. straight to Washer -
+  // see lib/stateMachine.js's receive_empty). "Next" shows the eventual
+  // destination either way, since a keg sent to storage still ends up
+  // with Washer once Mover later allots it.
+  received_from_driver:  { now: 'warehouse', next: 'washer',    pending: false },
+  needs_repair:          { now: 'warehouse', next: 'washer',    pending: false },
 };
 // Display-only rename: the backend role value stays 'warehouse'
 // everywhere (database, API, permissions, all unchanged) - this only
@@ -1605,19 +1616,6 @@ function renderNowNext() {
   const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
   nowNextCard.style.display = 'block';
 
-  // Every "notified, not yet received" status (as opposed to its
-  // "received" counterpart) gets a small badge on the Now column - the
-  // role shown is correct either way (same person owns both stages),
-  // but this distinguishes "told about it" from "actually holding it
-  // right now", which matters to anyone checking on a keg that isn't
-  // their own (Mover checking whether Washer has actually picked
-  // something up yet, Admin/Manager's oversight view, etc.) - someone
-  // viewing their OWN pending keg sees the "Confirm received" action
-  // form instead of this card at all, per the early return above.
-  const pendingReceiptStatuses = ['allotted_washer', 'clean_storage', 'washed', 'filled', 'dispatched', 'empty_at_customer'];
-  const pendingReceiptBadge = pendingReceiptStatuses.includes(keg.status)
-    ? '<span class="pending-receipt-badge">Pending for receipt</span>' : '';
-
   // For a keg currently with the customer, show how long it's been out
   // there - lets staff eyeball "this one's been out a while" without
   // waiting for a formal overdue-alert threshold to trip.
@@ -1632,15 +1630,25 @@ function renderNowNext() {
     }
   }
 
+  // Sits in the middle of the row, between Now and Next, replacing the
+  // plain arrow whenever a handoff is awaiting confirmation
+  // (roleFlow.pending, driven directly by STATUS_ROLE_FLOW above -
+  // rather than a separate hardcoded status list, so the two can never
+  // drift out of sync with each other). "Now" already shows the
+  // correct previous holder in this case - this badge is what actually
+  // signals that the handoff isn't confirmed yet.
+  const middleHtml = roleFlow.pending
+    ? '<div class="status-next-arrow-mid pending"><span class="pending-receipt-badge">Pending for receipt</span></div>'
+    : '<div class="status-next-arrow-mid">&#8594;</div>';
+
   document.getElementById('nowNextContent').innerHTML = `
     <div class="status-next-row">
       <div class="status-next-col">
         <span class="status-next-label">Now</span>
         <span class="role-icon-wrap">${roleIcon(roleFlow.now, 'green')}</span>
         <span class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</span>
-        ${pendingReceiptBadge}
       </div>
-      <div class="status-next-arrow-mid">&#8594;</div>
+      ${middleHtml}
       <div class="status-next-col">
         <span class="status-next-label">Next</span>
         <span class="role-icon-wrap">${roleIcon(roleFlow.next, 'blue')}</span>

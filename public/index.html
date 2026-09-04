@@ -430,7 +430,22 @@ async function login() {
     document.getElementById('loginError').textContent = data.error || 'Invalid password';
     return;
   }
-  showMain(await res.json());
+  const user = await res.json();
+  // This admin page is genuinely not meant for the four operational
+  // roles (Washer/Filler/Driver/Warehouse) - their actual home is
+  // scan.html, which already has everything they need (including
+  // adding a new customer or product inline, from within the relevant
+  // action form) without the oversight-oriented tabs here (Overview's
+  // Alerts, the full Kegs list, etc.) that showed to every logged-in
+  // user regardless of role until now. Redirecting immediately rather
+  // than just hiding tabs, since hiding tabs would still leave them on
+  // a mostly-blank page that was never their actual destination.
+  const OPERATIONAL_ROLES = ['washer', 'filler', 'driver', 'warehouse'];
+  if (OPERATIONAL_ROLES.includes(user.role)) {
+    location.href = '/scan.html';
+    return;
+  }
+  showMain(user);
 }
 
 async function logout() {
@@ -458,18 +473,21 @@ function showMain(user) {
   canSeeMfgNumber = (user.role === 'admin' || user.role === 'manager');
   document.getElementById('mfgHeaderCell').style.display = canSeeMfgNumber ? '' : 'none';
 
-  // Adding customers is allowed for Admin and Warehouse (matches
-  // routes/customers.js) - Warehouse gets this too since they're the
-  // ones who'd hit a brand-new customer mid-workflow when assigning a
-  // destination; everyone else sees the list read-only.
-  if (user.role === 'admin' || user.role === 'warehouse') {
+  // Adding customers used to also check for Warehouse here, but that
+  // role (along with Filler/Driver) is now redirected to scan.html
+  // before ever reaching this function - see login() above - so this
+  // simplifies to Admin only. Warehouse still has the exact same
+  // "add new customer" capability, just inline on scan.html's own
+  // assign_destination form instead of here.
+  if (user.role === 'admin') {
     document.getElementById('addCustomerCard').style.display = 'block';
   }
   loadCustomers();
 
-  // Adding products is allowed for Admin and Filler (matches
-  // routes/products.js) - same reasoning as customers/Warehouse above.
-  if (user.role === 'admin' || user.role === 'filler') {
+  // Same simplification as addCustomerCard above - Filler is
+  // redirected before reaching here now, and has the equivalent
+  // "add new product" capability inline on scan.html's fill form.
+  if (user.role === 'admin') {
     document.getElementById('addProductCard').style.display = 'block';
   }
   loadProducts();
