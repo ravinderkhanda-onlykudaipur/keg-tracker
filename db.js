@@ -53,7 +53,7 @@ async function init() {
       size_liters REAL,
       material TEXT,
       status TEXT NOT NULL DEFAULT 'empty_returned'
-        CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','washed','received_filler','filled','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair')),
+        CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair')),
       current_location TEXT,
       destination TEXT,
       destination_address TEXT,
@@ -170,6 +170,14 @@ async function init() {
   // rather than the notification and the work being forced into one
   // single action.
   //
+  // Rounded out further still: Mover also gets an explicit receive
+  // step for the two remaining handoffs into their own hands -
+  // 'received_from_filler' (a completed fill, before Mover dispatches
+  // it) and 'received_from_washer' (a keg Washer sent to clean storage
+  // instead of straight to Filler, before Mover releases it onward) -
+  // same reasoning as above, applied consistently everywhere a keg
+  // changes hands, not just some of those places.
+  //
   // Existing kegs already sitting in a status from before either
   // change need no data migration - only the new status values
   // themselves need to become valid, which means dropping and
@@ -179,7 +187,7 @@ async function init() {
   await pool.query(`ALTER TABLE kegs DROP CONSTRAINT IF EXISTS kegs_status_check;`);
   await pool.query(`
     ALTER TABLE kegs ADD CONSTRAINT kegs_status_check
-      CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','washed','received_filler','filled','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair'));
+      CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair'));
   `);
 }
 
