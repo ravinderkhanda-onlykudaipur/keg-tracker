@@ -1037,72 +1037,64 @@ function updateDestinationLine() {
   }
 }
 
+// Single source of truth for "which role's config applies to which
+// status" - built once so getActionConfig() below doesn't need one
+// role-scoped branch per role (which would make a Manager bypass need
+// duplicating the same status list four times). Every entry here must
+// mirror lib/stateMachine.js's TRANSITIONS "from" states exactly - this
+// is what stops (say) a washer from even seeing the wash form while a
+// keg is already filled or dispatched, instead of only finding out
+// after submitting and getting rejected. See renderForm()'s handling
+// of a null return for the actual on-screen warning shown in that case.
+const STATUS_ACTION_MAP = {
+  // Washer: confirm custody of an allotted keg first, then (once
+  // that's done and the status has moved on) wash it whenever ready.
+  allotted_washer:       { role: 'washer',    cfg: () => ROLE_ACTIONS.washer.receive_from_allotted },
+  received_washer:       { role: 'washer',    cfg: () => ROLE_ACTIONS.washer.wash_from_received },
+  // Filler: mirrors washer above.
+  washed:                { role: 'filler',    cfg: () => ROLE_ACTIONS.filler.receive_from_washed },
+  received_filler:       { role: 'filler',    cfg: () => ROLE_ACTIONS.filler.fill_from_received },
+  // Driver: confirm custody once Warehouse has dispatched (Warehouse
+  // assigning a destination dispatches directly - no separate driver-
+  // initiated dispatch step), deliver whenever actually en route/
+  // arrived, then one more scan of their own - returning it to the
+  // warehouse - before Mover can confirm receipt.
+  dispatched:             { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.receive_from_dispatched },
+  received_driver:        { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.delivered_from_received },
+  delivered:              { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.empty_from_delivered },
+  empty_at_customer:      { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.return_to_warehouse_from_empty },
+  // Mover (warehouse role): nine jobs, each tied to one specific
+  // status - allotting a keg to Washer, confirming custody of a clean
+  // keg Washer sent their way, allotting that clean-stored keg to
+  // Filler, confirming custody of a completed fill, assigning a
+  // destination (which also dispatches), confirming custody of an
+  // empty keg Driver brought back, deciding where that keg actually
+  // goes once received, and resolving a keg that failed wash
+  // inspection. Every other status belongs to a different role, so
+  // nothing more is offered here - this used to fall through to a
+  // generic "log location" step, which had no natural stopping point
+  // and re-appeared right after receiving an empty keg (redundant,
+  // since that already asks for a storage zone).
+  empty_returned:         { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.allot_washer },
+  clean_storage:          { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_clean_storage },
+  received_from_washer:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.allot_filler },
+  filled:                 { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_filled },
+  received_from_filler:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.assign_destination },
+  returned_to_warehouse:  { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_empty_at_customer },
+  received_from_driver:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_received },
+  needs_repair:           { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.mark_repaired },
+};
+
 function getActionConfig() {
-  const cfg = ROLE_ACTIONS[currentUser.role];
-  if (!cfg) return null;
-
-  // Every branch below mirrors the "from" states enforced server-side in
-  // lib/stateMachine.js - keeping these in sync matters: this is what
-  // stops (say) a washer from even seeing the wash form while a keg is
-  // already filled or dispatched, instead of only finding out after
-  // submitting and getting rejected. See renderForm()'s handling of a
-  // null return for the actual on-screen warning shown in that case.
-  if (currentUser.role === 'washer') {
-    // Two-step: confirm custody of an allotted keg first, then (once
-    // that's done and the status has moved on) wash it whenever ready.
-    if (keg.status === 'allotted_washer') return cfg.receive_from_allotted;
-    if (keg.status === 'received_washer') return cfg.wash_from_received;
-    return null;
-  }
-
-  if (currentUser.role === 'filler') {
-    if (keg.status === 'washed') return cfg.receive_from_washed;
-    if (keg.status === 'received_filler') return cfg.fill_from_received;
-    return null;
-  }
-
-  if (currentUser.role === 'driver') {
-    // Driver's first involvement is confirming they're actually
-    // holding the keg once Warehouse has already dispatched it (see
-    // warehouse's assign_destination, which dispatches directly - no
-    // separate driver-initiated dispatch step), then delivering it
-    // whenever they're actually en route/arrived. After marking it
-    // empty (received from the customer), Driver has one more scan of
-    // their own - returning it to the warehouse - before Mover can
-    // confirm receipt (see lib/stateMachine.js's return_to_warehouse).
-    if (keg.status === 'dispatched') return cfg.receive_from_dispatched;
-    if (keg.status === 'received_driver') return cfg.delivered_from_received;
-    if (keg.status === 'delivered') return cfg.empty_from_delivered;
-    if (keg.status === 'empty_at_customer') return cfg.return_to_warehouse_from_empty;
-    return null;
-  }
-
-  if (currentUser.role === 'warehouse') {
-    // Mover (warehouse role) has exactly nine active jobs, each tied
-    // to one specific status - allotting a keg to Washer, confirming
-    // custody of a clean keg Washer sent their way, allotting that
-    // clean-stored keg to Filler, confirming custody of a completed
-    // fill, assigning a destination (which also dispatches, see
-    // lib/stateMachine.js), confirming custody of an empty keg Driver
-    // brought back, deciding where that keg actually goes once
-    // received, and resolving a keg that failed wash inspection.
-    // Every other status belongs to a different role, so nothing more
-    // is offered here - this used to fall through to a generic "log
-    // location" step, which had no natural stopping point and
-    // re-appeared right after receiving an empty keg (redundant,
-    // since that already asks for a storage zone).
-    if (keg.status === 'empty_returned') return cfg.allot_washer;
-    if (keg.status === 'clean_storage') return cfg.receive_from_clean_storage;
-    if (keg.status === 'received_from_washer') return cfg.allot_filler;
-    if (keg.status === 'filled') return cfg.receive_from_filled;
-    if (keg.status === 'received_from_filler') return cfg.assign_destination;
-    if (keg.status === 'returned_to_warehouse') return cfg.receive_from_empty_at_customer;
-    if (keg.status === 'received_from_driver') return cfg.receive_from_received;
-    if (keg.status === 'needs_repair') return cfg.mark_repaired;
-    return null;
-  }
-
-  return null;
+  const entry = STATUS_ACTION_MAP[keg.status];
+  if (!entry) return null;
+  // Manager is elevated to perform ANY operational action on ANY keg,
+  // regardless of which role the status normally belongs to - matches
+  // the same bypass in lib/stateMachine.js's validateTransition.
+  // Everyone else (including Mover themselves) only sees the form when
+  // it's genuinely their own role's turn.
+  if (currentUser.role !== 'manager' && currentUser.role !== entry.role) return null;
+  return entry.cfg();
 }
 
 // Cached customer list, so switching between forms doesn't re-fetch every
@@ -1258,33 +1250,17 @@ async function renderForm() {
   }
 
   const cfg = getActionConfig();
-  if (!cfg) {
-    // Mover editing the destination customer on a keg that's already
-    // dispatched is a genuine exception to "nothing shown when it's
-    // not your turn" below - it's not Mover's turn at dispatched/
-    // received_driver (that's Driver's), but Mover still needs a way
-    // to correct a wrong customer before delivery actually happens.
-    // Checked here, before the early return, since that return would
-    // otherwise hide the card entirely and there'd be no form left to
-    // append a button to (unlike Driver's report-damage button below,
-    // which works because Driver always has a primary form to append
-    // to at those same statuses).
-    if (currentUser.role === 'warehouse' && (keg.status === 'dispatched' || keg.status === 'received_driver')) {
-      const customers = await fetchCustomers();
-      card.style.display = 'block';
-      card.innerHTML = `
-        <h3 style="margin-top:0">Edit destination</h3>
-        <p class="muted">Correct the customer this keg was dispatched to, before it's delivered.</p>
-        <label>Delivery destination (customer)</label>
-        <select id="f_edit_customer_id">
-          <option value="">-- select customer --</option>
-          ${customers.map((c) => `<option value="${c.id}" ${c.id === keg.customer_id ? 'selected' : ''}>${c.name}</option>`).join('')}
-        </select>
-        <button id="submitBtn" onclick="submitEditDestination()">Save destination</button>
-        <div id="submitMsg"></div>
-      `;
-      return;
-    }
+  // Mover/Manager editing the destination customer on a keg that's
+  // already dispatched, independent of whatever getActionConfig()
+  // returns - for plain Mover it's not their turn there at all
+  // (Driver's), so cfg is null; for Manager, cfg is Driver's own form
+  // (Manager can act as any role - see getActionConfig() above), which
+  // would otherwise mean this section never gets a chance to show if
+  // it were still nested inside "only when cfg is null" like before.
+  const canEditDestination = (currentUser.role === 'warehouse' || currentUser.role === 'manager')
+    && (keg.status === 'dispatched' || keg.status === 'received_driver');
+
+  if (!cfg && !canEditDestination) {
     // Nothing shown here when it's not this person's turn - the Now/Next
     // card above already covers "who's responsible right now", and a
     // summary of the last action (what was previously shown here) was
@@ -1296,6 +1272,10 @@ async function renderForm() {
   }
 
   card.style.display = 'block';
+
+  if (!cfg) {
+    card.innerHTML = ''; // nothing primary to show - edit_destination below will be the only content
+  } else {
 
   // Prefetch anything a field needs before building the HTML, so the
   // template below can be built synchronously in one pass.
@@ -1370,13 +1350,32 @@ async function renderForm() {
     <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
     <div id="submitMsg"></div>
   `;
+  } // closes "else" for the cfg-present branch above
+
+  if (canEditDestination) {
+    const customers = await fetchCustomers();
+    card.innerHTML += `
+      <div style="${cfg ? 'margin-top:20px; padding-top:20px; border-top:1px solid var(--card-border);' : ''}">
+        <h3 style="margin-top:0">Edit destination</h3>
+        <p class="muted">Correct the customer this keg was dispatched to, before it's delivered.</p>
+        <label>Delivery destination (customer)</label>
+        <select id="f_edit_customer_id">
+          <option value="">-- select customer --</option>
+          ${customers.map((c) => `<option value="${c.id}" ${c.id === keg.customer_id ? 'selected' : ''}>${c.name}</option>`).join('')}
+        </select>
+        <button onclick="submitEditDestination()">Save destination</button>
+        ${cfg ? '' : '<div id="submitMsg"></div>'}
+      </div>
+    `;
+  }
 
   // Damage reporting: a separate, secondary action available to a
-  // driver at any point while they physically have the keg (before or
-  // after handing it off), alongside whatever their normal next step
-  // is - not folded into the main form above, since it's an exception
-  // path, not the expected next action.
-  if (currentUser.role === 'driver' && (keg.status === 'dispatched' || keg.status === 'delivered')) {
+  // driver (or Manager, who can act as any role - see
+  // getActionConfig() above) at any point while they physically have
+  // the keg (before or after handing it off), alongside whatever their
+  // normal next step is - not folded into the main form above, since
+  // it's an exception path, not the expected next action.
+  if ((currentUser.role === 'driver' || currentUser.role === 'manager') && (keg.status === 'received_driver' || keg.status === 'delivered')) {
     card.innerHTML += `
       <button type="button" class="btn-danger-outline" onclick="reportDamage()" style="margin-top:14px">&#9888; Report damage instead</button>
     `;
@@ -1782,16 +1781,22 @@ async function renderHistory() {
     }
   }
 
-  // "Undo last action" - Mover (and Admin) only, and only when the most
-  // recent event was actually done by Washer, Filler, or Driver (an
-  // operational mistake is the scope of this feature, not a general
-  // undo for anyone's action) - matches the same restriction the
-  // backend enforces in routes/events.js, checked here too so the
-  // button doesn't show at all for a case that would just get rejected.
+  // "Undo last action" - Mover, Admin, or Manager, and only when the
+  // most recent event was actually done by a role this viewer is
+  // allowed to revert (an operational mistake is the scope of this
+  // feature, not a general undo for anyone's action) - matches the
+  // same restriction the backend enforces in routes/events.js, checked
+  // here too so the button doesn't show at all for a case that would
+  // just get rejected. Manager gets one further elevation beyond Mover
+  // here too: reverting Warehouse's (Mover's) own actions, not just
+  // Washer/Filler/Driver's.
   const revertCard = document.getElementById('revertCard');
-  const canRevertRole = currentUser.role === 'warehouse' || currentUser.role === 'admin';
+  const canRevertRole = currentUser.role === 'warehouse' || currentUser.role === 'admin' || currentUser.role === 'manager';
+  const revertableRoles = currentUser.role === 'manager'
+    ? ['washer', 'filler', 'driver', 'warehouse']
+    : ['washer', 'filler', 'driver'];
   const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
-  const lastEventRevertable = lastEvent && ['washer', 'filler', 'driver'].includes(lastEvent.role) && lastEvent.action_type !== 'revert';
+  const lastEventRevertable = lastEvent && revertableRoles.includes(lastEvent.role) && lastEvent.action_type !== 'revert';
   if (canRevertRole && lastEventRevertable) {
     revertCard.style.display = 'block';
     document.getElementById('revertDesc').textContent =

@@ -121,21 +121,24 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
   res.status(201).json(updatedRows[0]);
 });
 
-// Lets Mover (or Admin) undo the single most recent action on a keg,
-// but only when that action was performed by Washer, Filler, or
+// Lets Mover (or Admin/Manager) undo the single most recent action on
+// a keg, but only when that action was performed by Washer, Filler, or
 // Driver - matches the explicit scope of this feature: it's for
 // correcting an operational mistake, not a general-purpose undo for
-// any action by anyone. Rolls the keg's status back to whatever it was
-// immediately before that event, by replaying every earlier event
-// through the same resolveNextStatus logic lib/reports.js already uses
-// for turnover-time stats - there's no separate "previous status"
-// column to just read back, so this is the correct way to derive it
-// rather than assuming a single hardcoded fallback for every action.
-// The original event is never deleted or altered - a new 'revert'
-// event is added on top, preserving a genuine, complete audit trail of
-// what happened and who corrected it, not just what the keg's state
-// ended up being.
-router.post('/:kegId/revert', requireRole('admin', 'warehouse'), async (req, res) => {
+// any action by anyone. Manager gets one further elevation beyond
+// Mover: they can also revert Mover's (Warehouse role's) own actions,
+// not just Washer/Filler/Driver's - matches Manager's broader
+// "everything Mover can do, plus more" role. Rolls the keg's status
+// back to whatever it was immediately before that event, by replaying
+// every earlier event through the same resolveNextStatus logic
+// lib/reports.js already uses for turnover-time stats - there's no
+// separate "previous status" column to just read back, so this is the
+// correct way to derive it rather than assuming a single hardcoded
+// fallback for every action. The original event is never deleted or
+// altered - a new 'revert' event is added on top, preserving a
+// genuine, complete audit trail of what happened and who corrected
+// it, not just what the keg's state ended up being.
+router.post('/:kegId/revert', requireRole('admin', 'warehouse', 'manager'), async (req, res) => {
   const { kegId } = req.params;
   const user = req.user;
 
@@ -152,9 +155,15 @@ router.post('/:kegId/revert', requireRole('admin', 'warehouse'), async (req, res
   }
 
   const lastEvent = events[events.length - 1];
-  if (!['washer', 'filler', 'driver'].includes(lastEvent.role)) {
+  // Manager can additionally revert Warehouse's (Mover's) own actions;
+  // everyone else (Mover included, reverting via their own account)
+  // stays limited to Washer/Filler/Driver, same as before.
+  const revertableRoles = user.role === 'manager'
+    ? ['washer', 'filler', 'driver', 'warehouse']
+    : ['washer', 'filler', 'driver'];
+  if (!revertableRoles.includes(lastEvent.role)) {
     return res.status(409).json({
-      error: `The most recent action was performed by ${lastEvent.role}, not Washer/Filler/Driver - reverting it isn't supported here.`,
+      error: `The most recent action was performed by ${lastEvent.role} - reverting it isn't supported here.`,
     });
   }
   if (lastEvent.action_type === 'revert') {
