@@ -277,7 +277,7 @@
           <option value="filled">Filled</option>
           <option value="dispatched">Dispatched</option>
           <option value="delivered">Delivered</option>
-          <option value="empty_at_customer">Empty at customer</option>
+          <option value="empty_at_customer">Pending at driver</option>
           <option value="needs_repair">Needs repair</option>
         </select>
         <a href="/api/kegs/export.csv" id="exportCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export CSV</button></a>
@@ -380,6 +380,17 @@ function roleLabel(role) {
   if (!role) return role;
   const label = role === 'warehouse' ? 'Mover' : role;
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// Same display-only rename pattern as roleLabel above, for a status
+// value - the backend status value stays 'empty_at_customer'
+// everywhere unchanged, this only changes the displayed text, since
+// the keg is now understood to be with the Driver on the way back
+// rather than literally sitting at the customer's premises throughout.
+function statusLabel(status) {
+  if (!status) return status;
+  if (status === 'empty_at_customer') return 'pending at driver';
+  return status.replace(/_/g, ' ');
 }
 
 function showTab(name) {
@@ -528,7 +539,7 @@ async function loadKegs() {
     <tr>
       <td><a href="/scan.html?keg=${k.id}" target="_blank">${k.id}</a></td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
-      <td><span class="status">${k.status.replace(/_/g,' ')}</span></td>
+      <td><span class="status">${statusLabel(k.status)}</span></td>
       <td>${k.current_location || '-'}</td>
       <td><a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
     </tr>
@@ -611,13 +622,13 @@ async function loadReports() {
 
   html += '<h4>Current inventory</h4>';
   html += r.inventory.length
-    ? renderBarChart(r.inventory.map(i => ({ label: i.status.replace(/_/g,' '), value: i.count, displayValue: i.count })))
+    ? renderBarChart(r.inventory.map(i => ({ label: statusLabel(i.status), value: i.count, displayValue: i.count })))
     : '<p class="muted">No kegs yet.</p>';
 
   html += '<h4>Average time per stage</h4>';
   const stageEntries = Object.entries(r.stageDurations);
   html += stageEntries.length
-    ? renderBarChart(stageEntries.map(([status, s]) => ({ label: status.replace(/_/g,' '), value: s.avgHours, displayValue: s.avgHours + 'h' })))
+    ? renderBarChart(stageEntries.map(([status, s]) => ({ label: statusLabel(status), value: s.avgHours, displayValue: s.avgHours + 'h' })))
     : '<p class="muted">Not enough completed stages yet.</p>';
 
   html += '<h4>Full-cycle turnover time</h4>';

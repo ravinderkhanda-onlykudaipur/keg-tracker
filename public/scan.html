@@ -97,6 +97,17 @@
   .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
   .status-next-arrow-mid { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; padding: 0 6px; }
   .days-with-customer { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
+
+  /* Home-screen dashboard lists - shown per role instead of just the
+     plain greeting, so someone can actually find which physical keg
+     they're responsible for instead of it only being visible once
+     they've already scanned that specific keg's QR code. */
+  .dash-list-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+  .dash-list-heading { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .dash-list-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+  .dash-list-items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; color: var(--primary); text-decoration: none; }
+  .dash-list-empty { font-size: 13px; color: var(--text-muted); }
   .status-next-label { font-size: 12px; color: var(--text-secondary); }
   .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
@@ -377,6 +388,7 @@
       <h2 id="homeGreeting" style="margin-top:0"></h2>
       <p class="muted">Scan a keg's QR code to get started.</p>
     </div>
+    <div id="dashboardLists"></div>
   </div>
 
   <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg's QR code">
@@ -501,6 +513,10 @@ const ROLE_ACTIONS = {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
         { name: 'location', label: 'Storage zone', type: 'text', geo: true, required: true },
+        // Mover's choice at the moment of receiving - Uncleaned storage
+        // (default) or straight to Washer, skipping storage. Mirrors
+        // Washer's own "Send to" choice on the wash form.
+        { name: 'next_stop', label: 'Send to', type: 'select', options: ['uncleaned_storage', 'washer'], required: true },
       ],
     },
     mark_repaired: {
@@ -550,6 +566,18 @@ function roleLabel(role) {
   if (!role) return role;
   const label = role === 'warehouse' ? 'Mover' : role;
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// Same display-only rename pattern as roleLabel above, for a status
+// value instead of a role - the backend status value stays
+// 'empty_at_customer' everywhere (database, state machine, alerts, all
+// unchanged), this only changes the text shown for it, since the keg
+// is now understood to be with the Driver on the way back rather than
+// literally sitting at the customer's premises the whole time.
+function statusLabel(status) {
+  if (!status) return status;
+  if (status === 'empty_at_customer') return 'pending at driver';
+  return status.replace(/_/g, ' ');
 }
 
 // Role icon images, one file per role - real uploaded SVG vector
@@ -666,6 +694,65 @@ function showHomeScreen() {
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const firstName = currentUser.name.split(' ')[0];
   document.getElementById('homeGreeting').textContent = `${timeGreeting}, ${firstName}!`;
+
+  loadDashboardLists();
+}
+
+// One list per relevant status, showing the actual keg IDs currently
+// sitting there - this is what makes an allotment/handoff genuinely
+// actionable rather than invisible: without this, there's no way for
+// someone to know WHICH physical keg is theirs to act on until they
+// happen to scan it. Mover sees every stage since they're the hub for
+// almost every handoff; everyone else sees just their own turn.
+async function fetchKegListHtml(status, label) {
+  try {
+    const res = await fetch(`/api/kegs?status=${encodeURIComponent(status)}`, { credentials: 'include' });
+    if (!res.ok) return '';
+    const kegs = await res.json();
+    const itemsHtml = kegs.length
+      ? `<div class="dash-list-items">${kegs.map(k => `<a class="dash-list-item" href="/scan.html?keg=${k.id}">${k.id}</a>`).join('')}</div>`
+      : `<div class="dash-list-empty">None right now.</div>`;
+    return `
+      <div class="dash-list-card">
+        <div class="dash-list-heading">${label} <span class="dash-list-count">${kegs.length}</span></div>
+        ${itemsHtml}
+      </div>
+    `;
+  } catch (err) {
+    return ''; // offline or fetch failed - skip this one list silently, same pattern loadMyAlerts already uses
+  }
+}
+
+async function loadDashboardLists() {
+  const container = document.getElementById('dashboardLists');
+  if (!container) return;
+
+  let statusLabels;
+  if (currentUser.role === 'warehouse') {
+    statusLabels = [
+      ['empty_returned', 'Uncleaned'],
+      ['clean_storage', 'Cleaned'],
+      ['filled', 'Filled'],
+      ['dispatched', 'Pending for Deliver'],
+      ['delivered', 'Pending at Customer'],
+      ['empty_at_customer', 'Pending at Driver'],
+    ];
+  } else if (currentUser.role === 'washer') {
+    statusLabels = [['allotted_washer', 'Allotted to you']];
+  } else if (currentUser.role === 'filler') {
+    statusLabels = [['washed', 'Allotted to you']];
+  } else if (currentUser.role === 'driver') {
+    statusLabels = [
+      ['dispatched', 'To deliver'],
+      ['delivered', 'To mark empty'],
+    ];
+  } else {
+    container.innerHTML = ''; // admin/manager have index.html for this kind of oversight instead
+    return;
+  }
+
+  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchKegListHtml(status, label)));
+  container.innerHTML = parts.join('');
 }
 
 async function loadMyAlerts() {
@@ -696,6 +783,12 @@ async function loadMyAlerts() {
 }
 
 async function loadKeg() {
+  // A specific keg is loaded now (via QR scan or a dashboard list
+  // link) - clear any dashboard lists left over from the home screen
+  // so they don't linger below this keg's own card.
+  const dashEl = document.getElementById('dashboardLists');
+  if (dashEl) dashEl.innerHTML = '';
+
   let res;
   try {
     // credentials: 'include' is required now - the backend
@@ -1224,8 +1317,23 @@ async function submitEvent(action) {
       return;
     }
     msg.className = 'success';
-    msg.textContent = 'Logged. New status: ' + data.status.replace(/_/g, ' ');
-    await loadKeg(); // re-renders the form (or "no action available"), so submitBtn no longer exists to re-enable
+    msg.textContent = 'Logged. New status: ' + statusLabel(data.status);
+    if (submitBtn) submitBtn.style.display = 'none'; // hidden immediately so there's no way to double-submit while the message is showing
+
+    // Now/Next (and the rest of the keg-specific view) should only be
+    // visible right after a QR scan, not linger after the task that
+    // scan was for is done - clears back to the home screen a moment
+    // after the success message appears, long enough to actually read
+    // it. Also drops '?keg=...' from the URL so a refresh or back-nav
+    // doesn't silently reload the same keg's now-stale action view -
+    // kegId itself can't be reassigned (it's a const read once from the
+    // URL at page load), but nothing calls loadKeg() again without a
+    // fresh page load, so leaving its old value alone here is safe.
+    setTimeout(() => {
+      history.replaceState(null, '', location.pathname);
+      showHomeScreen();
+      loadMyAlerts(); // the action just submitted may have changed what's overdue for this role
+    }, 1500);
   } finally {
     isSubmitting = false;
   }
