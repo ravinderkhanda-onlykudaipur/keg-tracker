@@ -108,6 +108,12 @@
   .dash-list-items { display: flex; flex-wrap: wrap; gap: 6px; }
   .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; color: var(--primary); text-decoration: none; }
   .dash-list-empty { font-size: 13px; color: var(--text-muted); }
+  .dash-group { margin: 12px 0; }
+  .dash-group-summary { cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .dash-group-summary::-webkit-details-marker { display: none; }
+  .dash-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
+  .dash-group[open] .dash-group-summary::before { transform: rotate(90deg); }
+  .dash-group-content { padding: 4px 0 0; }
   .status-next-label { font-size: 12px; color: var(--text-secondary); }
   .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
@@ -384,6 +390,12 @@
       <div id="history"></div>
     </div>
 
+    <div class="card" id="revertCard" style="display:none">
+      <h3 style="margin-top:0">Correct a mistake</h3>
+      <p class="muted" id="revertDesc"></p>
+      <button class="btn-danger-outline" onclick="revertLastAction()">Undo last action</button>
+    </div>
+
     <div id="homeScreenBlock" class="card" style="display:none">
       <h2 id="homeGreeting" style="margin-top:0"></h2>
       <p class="muted">Scan a keg's QR code to get started.</p>
@@ -520,12 +532,21 @@ const ROLE_ACTIONS = {
       ],
     },
     mark_repaired: {
-      // A failed wash inspection routes the keg here instead of
-      // 'washed' (see lib/stateMachine.js) - this is what lets someone
-      // confirm it's actually fixed before it re-enters the normal
-      // cycle, rather than a failed inspection having no consequence.
+      // A failed wash inspection or a driver's report_damage both route
+      // the keg here instead of 'washed'/'dispatched' (see
+      // lib/stateMachine.js) - this is what lets someone confirm it's
+      // actually fixed before it re-enters the normal cycle, rather
+      // than a failed inspection or a damage report having no real
+      // consequence. Mover first classifies what the damaged keg
+      // actually was (still had product in it, or already empty) -
+      // this matters for anything downstream that cares about product
+      // loss, and "Empty" additionally asks why, since an empty
+      // damaged keg is more likely to need an actual explanation
+      // (e.g. what happened to it) than one that still had product.
       action: 'mark_repaired', label: 'Mark keg repaired - ready for wash',
       fields: [
+        { name: 'condition', label: 'Was the keg filled or empty when damaged?', type: 'select', options: ['filled', 'empty'], required: true },
+        { name: 'reason', label: 'Reason (why was it empty?)', type: 'text', requiredWhen: { field: 'condition', equals: 'empty', minLength: 10 } },
         { name: 'notes', label: 'Repair notes (optional)', type: 'text' },
       ],
     },
@@ -555,7 +576,12 @@ const STATUS_ROLE_FLOW = {
   filled:            { now: 'warehouse', next: 'driver' },
   dispatched:        { now: 'driver',    next: 'warehouse' },
   delivered:         { now: 'customer',  next: 'warehouse' },
-  empty_at_customer: { now: 'customer',  next: 'warehouse' },
+  // 'now: driver' here, not 'customer' - marking a keg empty means the
+  // driver has ALREADY received it back from the customer (per the
+  // "driver carries it back to Mover" redesign), so the keg is
+  // physically with the driver at this point, in transit, not still
+  // sitting at the customer's premises.
+  empty_at_customer: { now: 'driver',    next: 'warehouse' },
   needs_repair:      { now: 'warehouse', next: 'washer' },
 };
 // Display-only rename: the backend role value stays 'warehouse'
@@ -688,6 +714,13 @@ function showHomeScreen() {
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('historyCard').style.display = 'none';
   document.getElementById('fillDetailsCard').style.display = 'none';
+  // This was missing before - the Destination card (customer name,
+  // address, call button) was never hidden on return to the home
+  // screen, so it kept showing stale info from whatever keg was last
+  // viewed. Likely why completing an action could look like it hadn't
+  // actually done anything - the old customer details just sat there.
+  document.getElementById('kegDestinationLine').style.display = 'none';
+  document.getElementById('revertCard').style.display = 'none';
   document.getElementById('homeScreenBlock').style.display = 'block';
 
   const hour = new Date().getHours();
@@ -727,17 +760,29 @@ async function loadDashboardLists() {
   const container = document.getElementById('dashboardLists');
   if (!container) return;
 
-  let statusLabels;
+  // Mover sees considerably more lists than anyone else (they're the
+  // hub for almost every handoff), so theirs are grouped into two
+  // collapsed <details> sections instead of shown flat - tap "Warehouse"
+  // or "In Transit" to expand. Everyone else only has 1-2 lists, which
+  // don't need grouping.
   if (currentUser.role === 'warehouse') {
-    statusLabels = [
+    const warehouseGroup = await fetchGroupedListsHtml('Warehouse', [
       ['empty_returned', 'Uncleaned'],
       ['clean_storage', 'Cleaned'],
       ['filled', 'Filled'],
-      ['dispatched', 'Pending for Deliver'],
-      ['delivered', 'Pending at Customer'],
-      ['empty_at_customer', 'Pending at Driver'],
-    ];
-  } else if (currentUser.role === 'washer') {
+      ['needs_repair', 'Damaged'],
+    ]);
+    const transitGroup = await fetchGroupedListsHtml('In Transit', [
+      ['dispatched', 'To be delivered'],
+      ['delivered', 'At customer'],
+      ['empty_at_customer', 'To be received'],
+    ]);
+    container.innerHTML = warehouseGroup + transitGroup;
+    return;
+  }
+
+  let statusLabels;
+  if (currentUser.role === 'washer') {
     statusLabels = [['allotted_washer', 'Allotted to you']];
   } else if (currentUser.role === 'filler') {
     statusLabels = [['washed', 'Allotted to you']];
@@ -753,6 +798,23 @@ async function loadDashboardLists() {
 
   const parts = await Promise.all(statusLabels.map(([status, label]) => fetchKegListHtml(status, label)));
   container.innerHTML = parts.join('');
+}
+
+// A collapsed <details>/<summary> section (native HTML, no extra JS
+// needed for expand/collapse) wrapping a few related lists together -
+// used for Mover's two groups above. The overall count badge on the
+// summary is the sum across every list inside, so the number is
+// visible even while the section itself is still collapsed.
+async function fetchGroupedListsHtml(groupLabel, statusLabels) {
+  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchKegListHtml(status, label)));
+  const totalMatch = parts.join('').match(/dash-list-count">(\d+)</g) || [];
+  const total = totalMatch.reduce((sum, m) => sum + Number(m.match(/\d+/)[0]), 0);
+  return `
+    <details class="dash-group">
+      <summary class="dash-group-summary">${groupLabel} <span class="dash-list-count">${total}</span></summary>
+      <div class="dash-group-content">${parts.join('')}</div>
+    </details>
+  `;
 }
 
 async function loadMyAlerts() {
@@ -1138,13 +1200,21 @@ async function renderForm() {
         `;
       }
       const isLocationOptional = f.geo && !f.required;
+      // Fields with requiredWhen start hidden unless the field they
+      // depend on already happens to be at the matching value by
+      // default (a select's default is always its first listed
+      // option) - toggleConditionalFields() below keeps this in sync
+      // as the user changes the field it depends on.
+      const startsHidden = f.requiredWhen && f.requiredWhen.equals !== (cfg.fields.find(o => o.name === f.requiredWhen.field)?.options?.[0]);
       return `
+        <div id="fieldwrap_${f.name}" ${startsHidden ? 'style="display:none"' : ''}>
         <label>${f.label}${isLocationOptional ? ' <span class="muted">(optional)</span>' : ''}</label>
         ${f.type === 'select'
-          ? `<select id="f_${f.name}">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
+          ? `<select id="f_${f.name}" onchange="toggleConditionalFields()">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
           : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
         ${f.geo ? `<button type="button" class="geo-btn" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
         <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
+        </div>
       `;
     }).join('')}
     <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
@@ -1160,6 +1230,26 @@ async function renderForm() {
     card.innerHTML += `
       <button type="button" class="btn-danger-outline" onclick="reportDamage()" style="margin-top:14px">&#9888; Report damage instead</button>
     `;
+  }
+}
+
+// Shows/hides every field with a requiredWhen condition based on the
+// CURRENT value of whatever field it depends on - called on page load
+// (implicitly, via the startsHidden calculation in renderForm above)
+// and again every time a select field changes, so e.g. the wash form's
+// damage notes field only actually appears once "Inspection result" is
+// set to "fail", and mark_repaired's reason field only appears once
+// "condition" is set to "empty", rather than always showing regardless
+// of whether it's currently relevant.
+function toggleConditionalFields() {
+  const cfg = getActionConfig();
+  if (!cfg) return;
+  for (const f of cfg.fields) {
+    if (!f.requiredWhen) continue;
+    const wrap = document.getElementById(`fieldwrap_${f.name}`);
+    const triggerEl = document.getElementById(`f_${f.requiredWhen.field}`);
+    if (!wrap || !triggerEl) continue;
+    wrap.style.display = (triggerEl.value === f.requiredWhen.equals) ? 'block' : 'none';
   }
 }
 
@@ -1266,6 +1356,34 @@ async function reportDamage() {
   }
 }
 
+async function revertLastAction() {
+  const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
+  if (!lastEvent) return;
+  const confirmed = confirm(
+    `Undo "${lastEvent.action_type.replace(/_/g,' ')}" by ${lastEvent.user_name} (${roleLabel(lastEvent.role)})?\n\nKeg ${kegId} will go back to its status before that action. The original entry stays in the record.`
+  );
+  if (!confirmed) return;
+
+  const btn = document.querySelector('#revertCard button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Undoing...'; }
+
+  try {
+    const res = await fetch(`/api/kegs/${kegId}/revert`, {
+      method: 'POST', credentials: 'include',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Could not undo: ' + data.error);
+      if (btn) { btn.disabled = false; btn.textContent = 'Undo last action'; }
+      return;
+    }
+    await loadKeg(); // re-renders everything against the now-reverted status
+  } catch (err) {
+    alert('Could not undo - check your connection and try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Undo last action'; }
+  }
+}
+
 async function submitEvent(action) {
   if (isSubmitting) return; // ignore a second click while the first is still in flight
 
@@ -1280,6 +1398,19 @@ async function submitEvent(action) {
     msg.textContent = requiredError;
     return; // never reaches the network - same guard applies whether online or offline
   }
+
+  // A plain confirm() summarizing what's about to be logged - meant to
+  // catch an accidental submit (someone fills the form, taps the
+  // button without meaning to, or means to change something first) -
+  // not a security measure, just a last chance to notice before it's
+  // logged. Only lists fields that actually have a value, so it stays
+  // short rather than repeating every empty optional field.
+  const confirmSummary = cfg.fields
+    .filter((f) => (details[f.name] || '').toString().trim())
+    .map((f) => `${f.label.replace(/\s*\(.*\)/, '')}: ${details[f.name]}`)
+    .join('\n');
+  const confirmed = confirm(`Confirm: ${cfg.label}\nKeg: ${kegId}${confirmSummary ? '\n\n' + confirmSummary : ''}`);
+  if (!confirmed) return;
 
   isSubmitting = true;
   const submitBtn = document.getElementById('submitBtn');
@@ -1437,6 +1568,24 @@ async function renderHistory() {
         </div>
       `).join('');
     }
+  }
+
+  // "Undo last action" - Mover (and Admin) only, and only when the most
+  // recent event was actually done by Washer, Filler, or Driver (an
+  // operational mistake is the scope of this feature, not a general
+  // undo for anyone's action) - matches the same restriction the
+  // backend enforces in routes/events.js, checked here too so the
+  // button doesn't show at all for a case that would just get rejected.
+  const revertCard = document.getElementById('revertCard');
+  const canRevertRole = currentUser.role === 'warehouse' || currentUser.role === 'admin';
+  const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
+  const lastEventRevertable = lastEvent && ['washer', 'filler', 'driver'].includes(lastEvent.role) && lastEvent.action_type !== 'revert';
+  if (canRevertRole && lastEventRevertable) {
+    revertCard.style.display = 'block';
+    document.getElementById('revertDesc').textContent =
+      `Undoes "${lastEvent.action_type.replace(/_/g,' ')}" by ${lastEvent.user_name} (${roleLabel(lastEvent.role)}), logged ${formatIST(lastEvent.created_at)}. The original entry stays in the record - this adds a correction on top of it.`;
+  } else {
+    revertCard.style.display = 'none';
   }
 
   const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');

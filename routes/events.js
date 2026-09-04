@@ -13,8 +13,8 @@
 
 const express = require('express');
 const { pool, withTransaction } = require('../db');
-const { validateTransition } = require('../lib/stateMachine');
-const { requireAuth } = require('../middleware/requireAuth');
+const { validateTransition, resolveNextStatus } = require('../lib/stateMachine');
+const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { checkCooldown } = require('../lib/cooldown');
 
 const router = express.Router();
@@ -114,6 +114,73 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
 
   const { rows: updatedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
   res.status(201).json(updatedRows[0]);
+});
+
+// Lets Mover (or Admin) undo the single most recent action on a keg,
+// but only when that action was performed by Washer, Filler, or
+// Driver - matches the explicit scope of this feature: it's for
+// correcting an operational mistake, not a general-purpose undo for
+// any action by anyone. Rolls the keg's status back to whatever it was
+// immediately before that event, by replaying every earlier event
+// through the same resolveNextStatus logic lib/reports.js already uses
+// for turnover-time stats - there's no separate "previous status"
+// column to just read back, so this is the correct way to derive it
+// rather than assuming a single hardcoded fallback for every action.
+// The original event is never deleted or altered - a new 'revert'
+// event is added on top, preserving a genuine, complete audit trail of
+// what happened and who corrected it, not just what the keg's state
+// ended up being.
+router.post('/:kegId/revert', requireRole('admin', 'warehouse'), async (req, res) => {
+  const { kegId } = req.params;
+  const user = req.user;
+
+  const { rows: kegRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
+  const keg = kegRows[0];
+  if (!keg) return res.status(404).json({ error: 'Keg not found' });
+
+  const { rows: events } = await pool.query(
+    'SELECT * FROM events WHERE keg_id = $1 ORDER BY created_at ASC, id ASC',
+    [kegId]
+  );
+  if (events.length === 0) {
+    return res.status(409).json({ error: 'This keg has no logged actions to revert.' });
+  }
+
+  const lastEvent = events[events.length - 1];
+  if (!['washer', 'filler', 'driver'].includes(lastEvent.role)) {
+    return res.status(409).json({
+      error: `The most recent action was performed by ${lastEvent.role}, not Washer/Filler/Driver - reverting it isn't supported here.`,
+    });
+  }
+  if (lastEvent.action_type === 'revert') {
+    return res.status(409).json({ error: 'The most recent event on this keg is already a revert - nothing further to undo.' });
+  }
+
+  let statusBeforeLastEvent = 'empty_returned'; // every keg starts here if it had no earlier events at all
+  for (let i = 0; i < events.length - 1; i++) {
+    const ev = events[i];
+    let details = {};
+    try { details = JSON.parse(ev.details || '{}'); } catch { /* leave as {} */ }
+    const next = resolveNextStatus(ev.action_type, details);
+    if (next) statusBeforeLastEvent = next;
+  }
+
+  await withTransaction(async (client) => {
+    await client.query(`
+      INSERT INTO events (keg_id, user_id, role, action_type, details)
+      VALUES ($1, $2, $3, 'revert', $4)
+    `, [kegId, user.id, user.role, JSON.stringify({
+      reverted_action_type: lastEvent.action_type,
+      reverted_role: lastEvent.role,
+      status_before_revert: keg.status,
+      status_restored_to: statusBeforeLastEvent,
+    })]);
+
+    await client.query('UPDATE kegs SET status = $1 WHERE id = $2', [statusBeforeLastEvent, kegId]);
+  });
+
+  const { rows: revertedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
+  res.status(201).json(revertedRows[0]);
 });
 
 module.exports = router;
