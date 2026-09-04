@@ -772,6 +772,22 @@ async function logout() {
 }
 
 function showApp() {
+  // Admin lands here first on a fresh home-screen launch (the PWA's
+  // start_url always points to this page now - see manifest.json's
+  // fix a couple rounds back), but this page has no oversight
+  // functionality for Admin at all (no dashboard lists, no action
+  // forms - Admin is a pure observer, see lib/stateMachine.js) - their
+  // actual home is index.html's Kegs/Alerts/Reports/Customers/Devices
+  // tabs. Redirected here rather than just added to this page, mirroring
+  // the exact same pattern index.html already uses to send the four
+  // operational roles over to this page instead. Skipped when a keg is
+  // already in the URL (someone followed a direct link/scan while
+  // logged in as Admin) - that's a legitimate reason to stay here.
+  if (currentUser.role === 'admin' && !kegId) {
+    location.href = '/index.html';
+    return;
+  }
+
   document.getElementById('loginBlock').style.display = 'none';
   document.getElementById('appBlock').style.display = 'block';
   document.getElementById('whoami').textContent = `${currentUser.name} (${roleLabel(currentUser.role)})`;
