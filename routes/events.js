@@ -70,7 +70,11 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
   let resolvedDestinationAddress = null;
   let resolvedDestinationPhone = null;
   let resolvedCustomerId = null;
-  if (actionType === 'assign_destination') {
+  // edit_destination reuses the exact same customer-lookup logic as
+  // assign_destination - it's Mover correcting a wrong customer on a
+  // keg that's already dispatched, not a new assignment, but the
+  // fields being set are identical either way.
+  if (actionType === 'assign_destination' || actionType === 'edit_destination') {
     const customerId = details?.customer_id;
     if (!customerId) {
       return res.status(400).json({ error: 'A delivery destination (customer) is required.' });
@@ -86,20 +90,21 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
     resolvedCustomerId = customer.id;
   }
 
-  const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (none currently do, but keeps this safe if one's added later)
+  const nextStatus = result.nextStatus || keg.status; // falls back if an action's rule has no status change (edit_destination is exactly this case - see lib/stateMachine.js)
 
-  // 'assign_destination' updates keg.destination + address + phone +
-  // customer_id together; every other action updates keg.current_location
-  // as before. Kept as separate columns since they mean different things
-  // - "where the keg physically is right now" vs "which customer it's
-  // assigned to".
-  const nextLocation = actionType === 'assign_destination'
+  // 'assign_destination'/'edit_destination' update keg.destination +
+  // address + phone + customer_id together; every other action updates
+  // keg.current_location as before. Kept as separate columns since they
+  // mean different things - "where the keg physically is right now" vs
+  // "which customer it's assigned to".
+  const destinationActions = ['assign_destination', 'edit_destination'];
+  const nextLocation = destinationActions.includes(actionType)
     ? keg.current_location
     : (details?.location || keg.current_location);
-  const nextDestination = actionType === 'assign_destination' ? resolvedDestination : keg.destination;
-  const nextDestinationAddress = actionType === 'assign_destination' ? resolvedDestinationAddress : keg.destination_address;
-  const nextDestinationPhone = actionType === 'assign_destination' ? resolvedDestinationPhone : keg.destination_phone;
-  const nextCustomerId = actionType === 'assign_destination' ? resolvedCustomerId : keg.customer_id;
+  const nextDestination = destinationActions.includes(actionType) ? resolvedDestination : keg.destination;
+  const nextDestinationAddress = destinationActions.includes(actionType) ? resolvedDestinationAddress : keg.destination_address;
+  const nextDestinationPhone = destinationActions.includes(actionType) ? resolvedDestinationPhone : keg.destination_phone;
+  const nextCustomerId = destinationActions.includes(actionType) ? resolvedCustomerId : keg.customer_id;
 
   await withTransaction(async (client) => {
     await client.query(`

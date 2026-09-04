@@ -53,7 +53,7 @@ async function init() {
       size_liters REAL,
       material TEXT,
       status TEXT NOT NULL DEFAULT 'empty_returned'
-        CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair')),
+        CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','returned_to_warehouse','received_from_driver','needs_repair')),
       current_location TEXT,
       destination TEXT,
       destination_address TEXT,
@@ -187,7 +187,7 @@ async function init() {
   await pool.query(`ALTER TABLE kegs DROP CONSTRAINT IF EXISTS kegs_status_check;`);
   await pool.query(`
     ALTER TABLE kegs ADD CONSTRAINT kegs_status_check
-      CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair'));
+      CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','received_from_washer','washed','received_filler','filled','received_from_filler','dispatched','received_driver','delivered','empty_at_customer','returned_to_warehouse','received_from_driver','needs_repair'));
   `);
 }
 

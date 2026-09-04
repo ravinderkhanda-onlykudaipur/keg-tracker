@@ -96,9 +96,8 @@
   .status-next-row { display: flex; align-items: stretch; }
   .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
   .status-next-arrow-mid { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; padding: 0 6px; }
-  .status-next-arrow-mid.pending { padding: 0 4px; }
   .days-with-customer { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
-  .pending-receipt-badge { font-size: 10px; font-weight: 600; color: var(--warn-text); background: var(--warn-bg); padding: 4px 7px; border-radius: 8px; text-align: center; line-height: 1.2; white-space: nowrap; }
+  .pending-receipt-line { text-align: center; font-size: 12px; font-weight: 600; color: var(--warn-text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
 
   /* Home-screen dashboard lists - shown per role instead of just the
      plain greeting, so someone can actually find which physical keg
@@ -519,6 +518,15 @@ const ROLE_ACTIONS = {
       action: 'mark_empty', label: 'Received from Customer',
       fields: [],
     },
+    // Driver's own "sender-side" scan for the handoff back to Mover -
+    // without this, driver-to-mover was the only handoff missing a
+    // scan from the sending party, jumping straight from Driver
+    // marking it empty to Mover being able to confirm receipt with no
+    // record of it actually reaching the warehouse in between.
+    return_to_warehouse_from_empty: {
+      action: 'return_to_warehouse', label: 'Return to Warehouse',
+      fields: [],
+    },
   },
   warehouse: {
     // Mover (warehouse role) is the central hub of the whole cycle now -
@@ -641,11 +649,18 @@ const STATUS_ROLE_FLOW = {
   // back to collect it - the customer never hands off straight to Mover.
   delivered:             { now: 'customer',  next: 'driver',    pending: false },
   // Driver's own "Received from Customer" action (mark_empty) already
-  // IS the confirmation of them taking possession back - there's no
-  // separate receive step for that specific handoff (the customer
-  // isn't an app user who could scan to hand it off), so this shows
-  // pending:false even though Mover hasn't confirmed *their* end yet.
+  // IS the confirmation of them taking possession back from the
+  // customer - there's no separate receive step for that specific
+  // handoff (the customer isn't an app user who could scan to hand it
+  // off) - so this shows pending:false. Driver still has one more scan
+  // of their own before Mover's side of the handoff even starts - see
+  // returned_to_warehouse below.
   empty_at_customer:     { now: 'driver',    next: 'warehouse', pending: false },
+  // Driver has scanned to confirm they've brought the keg to the
+  // warehouse (their own "sender-side" scan), but Mover hasn't yet
+  // confirmed receiving it - genuinely pending now, unlike
+  // empty_at_customer above.
+  returned_to_warehouse: { now: 'driver',    next: 'warehouse', pending: true },
   // Mover has confirmed receiving the returned keg, but hasn't yet
   // decided where it goes (Uncleaned storage vs. straight to Washer -
   // see lib/stateMachine.js's receive_empty). "Next" shows the eventual
@@ -847,7 +862,8 @@ async function loadDashboardLists() {
     const transitGroup = await fetchGroupedListsHtml('In Transit', [
       ['dispatched', 'To be delivered'],
       ['delivered', 'At customer'],
-      ['empty_at_customer', 'To be received'],
+      ['empty_at_customer', 'With driver, returning'],
+      ['returned_to_warehouse', 'At warehouse, to be received'],
       // Mover's own received-but-not-yet-routed stage, from Driver's
       // handoff - see lib/stateMachine.js's receive_from_driver.
       ['received_from_driver', 'Received, not yet routed'],
@@ -878,6 +894,7 @@ async function loadDashboardLists() {
       ['dispatched', 'Allotted to you'],
       ['received_driver', 'Received, ready to deliver'],
       ['delivered', 'To mark empty'],
+      ['empty_at_customer', 'To return to warehouse'],
     ];
   } else {
     container.innerHTML = ''; // admin/manager have index.html for this kind of oversight instead
@@ -1049,10 +1066,14 @@ function getActionConfig() {
     // holding the keg once Warehouse has already dispatched it (see
     // warehouse's assign_destination, which dispatches directly - no
     // separate driver-initiated dispatch step), then delivering it
-    // whenever they're actually en route/arrived.
+    // whenever they're actually en route/arrived. After marking it
+    // empty (received from the customer), Driver has one more scan of
+    // their own - returning it to the warehouse - before Mover can
+    // confirm receipt (see lib/stateMachine.js's return_to_warehouse).
     if (keg.status === 'dispatched') return cfg.receive_from_dispatched;
     if (keg.status === 'received_driver') return cfg.delivered_from_received;
     if (keg.status === 'delivered') return cfg.empty_from_delivered;
+    if (keg.status === 'empty_at_customer') return cfg.return_to_warehouse_from_empty;
     return null;
   }
 
@@ -1075,7 +1096,7 @@ function getActionConfig() {
     if (keg.status === 'received_from_washer') return cfg.allot_filler;
     if (keg.status === 'filled') return cfg.receive_from_filled;
     if (keg.status === 'received_from_filler') return cfg.assign_destination;
-    if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
+    if (keg.status === 'returned_to_warehouse') return cfg.receive_from_empty_at_customer;
     if (keg.status === 'received_from_driver') return cfg.receive_from_received;
     if (keg.status === 'needs_repair') return cfg.mark_repaired;
     return null;
@@ -1238,6 +1259,32 @@ async function renderForm() {
 
   const cfg = getActionConfig();
   if (!cfg) {
+    // Mover editing the destination customer on a keg that's already
+    // dispatched is a genuine exception to "nothing shown when it's
+    // not your turn" below - it's not Mover's turn at dispatched/
+    // received_driver (that's Driver's), but Mover still needs a way
+    // to correct a wrong customer before delivery actually happens.
+    // Checked here, before the early return, since that return would
+    // otherwise hide the card entirely and there'd be no form left to
+    // append a button to (unlike Driver's report-damage button below,
+    // which works because Driver always has a primary form to append
+    // to at those same statuses).
+    if (currentUser.role === 'warehouse' && (keg.status === 'dispatched' || keg.status === 'received_driver')) {
+      const customers = await fetchCustomers();
+      card.style.display = 'block';
+      card.innerHTML = `
+        <h3 style="margin-top:0">Edit destination</h3>
+        <p class="muted">Correct the customer this keg was dispatched to, before it's delivered.</p>
+        <label>Delivery destination (customer)</label>
+        <select id="f_edit_customer_id">
+          <option value="">-- select customer --</option>
+          ${customers.map((c) => `<option value="${c.id}" ${c.id === keg.customer_id ? 'selected' : ''}>${c.name}</option>`).join('')}
+        </select>
+        <button id="submitBtn" onclick="submitEditDestination()">Save destination</button>
+        <div id="submitMsg"></div>
+      `;
+      return;
+    }
     // Nothing shown here when it's not this person's turn - the Now/Next
     // card above already covers "who's responsible right now", and a
     // summary of the last action (what was previously shown here) was
@@ -1487,6 +1534,57 @@ async function revertLastAction() {
   }
 }
 
+// A dedicated, simpler counterpart to submitEvent() above - the edit-
+// destination form isn't driven by getActionConfig()/cfg.fields (it's
+// a hand-built exception case for Mover correcting a dispatched keg's
+// customer - see renderForm()'s early-return handling), so it needs
+// its own submit path rather than reusing submitEvent() directly.
+// Mirrors the same overall shape: confirm, disable the button, submit,
+// then return to the home screen on success.
+async function submitEditDestination() {
+  if (isSubmitting) return;
+
+  const customerId = document.getElementById('f_edit_customer_id').value;
+  const msg = document.getElementById('submitMsg');
+  if (!customerId) {
+    msg.className = 'error';
+    msg.textContent = 'Select a customer.';
+    return;
+  }
+
+  const customerName = document.getElementById('f_edit_customer_id').selectedOptions[0]?.textContent || '';
+  const confirmed = confirm(`Confirm: change delivery destination\nKeg: ${kegId}\n\nNew customer: ${customerName}`);
+  if (!confirmed) return;
+
+  isSubmitting = true;
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+
+  try {
+    const res = await fetch(`/api/kegs/${kegId}/events`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ actionType: 'edit_destination', details: { customer_id: customerId } }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.className = 'error';
+      msg.textContent = data.error;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save destination'; }
+      return;
+    }
+    msg.className = 'success';
+    msg.textContent = 'Destination updated.';
+    if (submitBtn) submitBtn.style.display = 'none';
+    setTimeout(() => {
+      history.replaceState(null, '', location.pathname);
+      showHomeScreen();
+    }, 1500);
+  } finally {
+    isSubmitting = false;
+  }
+}
+
 async function submitEvent(action) {
   if (isSubmitting) return; // ignore a second click while the first is still in flight
 
@@ -1630,16 +1728,15 @@ function renderNowNext() {
     }
   }
 
-  // Sits in the middle of the row, between Now and Next, replacing the
-  // plain arrow whenever a handoff is awaiting confirmation
-  // (roleFlow.pending, driven directly by STATUS_ROLE_FLOW above -
-  // rather than a separate hardcoded status list, so the two can never
-  // drift out of sync with each other). "Now" already shows the
-  // correct previous holder in this case - this badge is what actually
-  // signals that the handoff isn't confirmed yet.
-  const middleHtml = roleFlow.pending
-    ? '<div class="status-next-arrow-mid pending"><span class="pending-receipt-badge">Pending for receipt</span></div>'
-    : '<div class="status-next-arrow-mid">&#8594;</div>';
+  // Sits as its own line below the whole row, matching exactly how
+  // "Delivered today" already works below - NOT swapped in for the
+  // arrow anymore. The earlier version replaced the arrow with the
+  // badge, which changed the row's width/layout depending on whether
+  // a handoff was pending or not; keeping the arrow always in the
+  // same place and adding this as an extra line underneath keeps the
+  // row itself completely consistent regardless of state.
+  const pendingReceiptHtml = roleFlow.pending
+    ? '<div class="pending-receipt-line">Pending for receipt</div>' : '';
 
   document.getElementById('nowNextContent').innerHTML = `
     <div class="status-next-row">
@@ -1648,13 +1745,14 @@ function renderNowNext() {
         <span class="role-icon-wrap">${roleIcon(roleFlow.now, 'green')}</span>
         <span class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</span>
       </div>
-      ${middleHtml}
+      <div class="status-next-arrow-mid">&#8594;</div>
       <div class="status-next-col">
         <span class="status-next-label">Next</span>
         <span class="role-icon-wrap">${roleIcon(roleFlow.next, 'blue')}</span>
         <span class="status-next-value next">${roleLabel(roleFlow.next) || '-'}</span>
       </div>
     </div>
+    ${pendingReceiptHtml}
     ${daysWithCustomerHtml}
   `;
 }
