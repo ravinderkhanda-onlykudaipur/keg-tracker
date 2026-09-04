@@ -349,6 +349,11 @@
     </div>
 
     <div class="tab-panel" id="tab-devices">
+      <div class="card" id="devicePauseCard" style="display:none">
+        <h3 style="margin-top:0">Device approval</h3>
+        <p class="muted" id="devicePauseDesc"></p>
+        <button id="devicePauseBtn" onclick="toggleDevicePause()" style="width:auto"></button>
+      </div>
       <div class="card">
         <h3>Devices</h3>
         <p class="muted">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
@@ -361,6 +366,7 @@
 <script>
 let isAdmin = false;
 let canSeeMfgNumber = false; // admin or manager only - see routes/kegs.js for the matching backend enforcement
+let currentDevicePaused = false; // cached from the last /api/devices load, so toggleDevicePause() knows the current value without an extra round-trip
 let customersCache = [];
 let productsCache = [];
 let usersCache = [];
@@ -768,7 +774,27 @@ async function loadDevices() {
   const res = await fetch('/api/devices', { credentials: 'include' });
   const el = document.getElementById('devicesContent');
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load devices.</p>'; return; }
-  const { registered, pending } = await res.json();
+  const { registered, pending, paused } = await res.json();
+  currentDevicePaused = paused; // cached so toggleDevicePause() below doesn't need a second round-trip just to know the current value
+
+  // Pause toggle - Admin only (Manager can't act on anything else on
+  // this page either, same read-only split throughout). Meant for
+  // active testing: while paused, every device is let through for
+  // every operational role, with nothing logged or registered -
+  // switching it back off returns to exactly the normal per-user
+  // approval behavior, unaffected by whatever was used while paused.
+  const pauseCard = document.getElementById('devicePauseCard');
+  if (isAdmin) {
+    pauseCard.style.display = 'block';
+    document.getElementById('devicePauseDesc').textContent = paused
+      ? 'Device approval is currently PAUSED - any device can log in as any operational role, no approval needed. Meant for testing only; turn this back on before relying on this for real.'
+      : 'Normal mode: each operational role\u2019s devices need approval as usual.';
+    const btn = document.getElementById('devicePauseBtn');
+    btn.textContent = paused ? 'Resume device approval' : 'Pause device approval (testing)';
+    btn.className = paused ? '' : 'btn-danger';
+  } else {
+    pauseCard.style.display = 'none';
+  }
 
   let html = '<h4>Pending approval</h4>';
   if (isAdmin && pending.length > 1) {
@@ -799,6 +825,14 @@ async function loadDevices() {
     : '<p class="muted">No devices approved yet.</p>';
 
   el.innerHTML = html;
+}
+
+async function toggleDevicePause() {
+  await fetch('/api/devices/pause', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', body: JSON.stringify({ paused: !currentDevicePaused }),
+  });
+  loadDevices();
 }
 
 async function approveDevice(userId, deviceId) {

@@ -11,6 +11,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { requireRole } = require('../middleware/requireAuth');
 const { DEVICE_GATED_ROLES } = require('../lib/deviceAuth');
+const { getSetting, setSetting } = require('../lib/settings');
 
 const router = express.Router();
 
@@ -29,8 +30,23 @@ router.get('/', requireRole('admin', 'manager'), async (req, res) => {
     JOIN users u ON u.id = r.user_id
     ORDER BY r.requested_at DESC
   `);
-  res.json({ registered, pending, gatedRoles: DEVICE_GATED_ROLES });
+  const paused = (await getSetting(pool, 'device_approval_paused', 'false')) === 'true';
+  res.json({ registered, pending, gatedRoles: DEVICE_GATED_ROLES, paused });
 });
+
+// Admin-only toggle for the device-approval pause (see lib/deviceAuth.js
+// for what this actually does while active). Manager can see the state
+// via the GET above but can't flip it - matches the read-only split
+// used everywhere else on this page.
+router.post('/pause', requireRole('admin'), async (req, res) => {
+  const { paused } = req.body || {};
+  if (typeof paused !== 'boolean') {
+    return res.status(400).json({ error: 'paused (boolean) is required' });
+  }
+  await setSetting(pool, 'device_approval_paused', paused ? 'true' : 'false');
+  res.json({ ok: true, paused });
+});
+
 
 router.post('/approve', requireRole('admin'), async (req, res) => {
   const { userId, deviceId, label } = req.body || {};

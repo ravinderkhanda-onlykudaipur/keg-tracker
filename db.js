@@ -91,6 +91,15 @@ async function init() {
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(user_id, device_id)
     );
+
+    -- Small generic key/value table for app-wide toggles Admin can flip
+    -- from the UI without a redeploy - currently just the device-
+    -- approval pause switch, but written generically since another
+    -- similar on/off setting would fit the same shape.
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Schema migrations for databases created before a column was added -
