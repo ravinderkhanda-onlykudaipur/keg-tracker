@@ -433,6 +433,13 @@ const ROLE_ACTIONS = {
       { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
       { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
       { name: 'notes', label: 'Damage notes (min 30 characters if failed)', type: 'text', requiredWhen: { field: 'inspection', equals: 'fail', minLength: 30 } },
+      // Washer's choice of where a successfully-washed keg goes next -
+      // straight to Filler, or back to Mover to hold as clean stock
+      // until Mover decides to release it. Ignored server-side if the
+      // inspection failed (routes to needs_repair regardless - see
+      // lib/stateMachine.js), so there's no need to hide/disable this
+      // field based on the inspection answer above.
+      { name: 'next_stop', label: 'Send to', type: 'select', options: ['filler', 'mover'], required: true },
     ],
   },
   filler: {
@@ -462,13 +469,28 @@ const ROLE_ACTIONS = {
     },
   },
   warehouse: {
-    // Warehouse has three possible actions depending on the keg's status.
-    // Assigning a destination also dispatches the keg in one step - see
-    // lib/stateMachine.js's assign_destination rule. There's no separate
-    // generic "log location" step anymore (removed - see getActionConfig()
-    // below for why): it was redundant right after receiving an empty
-    // keg (which already asks for a storage zone) and had no natural
-    // stopping point, so it kept re-appearing.
+    // Mover (warehouse role) is the central hub of the whole cycle now -
+    // five possible actions depending on the keg's status, each tied to
+    // exactly one status. Assigning a destination also dispatches the
+    // keg in one step - see lib/stateMachine.js's assign_destination
+    // rule. There's no separate generic "log location" step (removed -
+    // see getActionConfig() below for why): it was redundant right
+    // after receiving an empty keg (which already asks for a storage
+    // zone) and had no natural stopping point, so it kept re-appearing.
+    allot_washer: {
+      // Releases a returned/stored keg to Washer - Washer can't act on
+      // a keg still sitting in plain empty_returned (see
+      // lib/stateMachine.js), so this is what actually puts it in play.
+      action: 'allot_washer', label: 'Allot keg to Washer',
+      fields: [],
+    },
+    allot_filler: {
+      // Mirrors allot_washer for the clean-stock side of the cycle -
+      // releases a keg Washer sent to Mover instead of straight to
+      // Filler, on whatever schedule Mover chooses.
+      action: 'allot_filler', label: 'Allot keg to Filler',
+      fields: [],
+    },
     assign_destination: {
       action: 'assign_destination', label: 'Assign destination & dispatch',
       fields: [
@@ -506,12 +528,18 @@ const ROLE_ACTIONS = {
 // any staff member, and showing a role there would be misleading about
 // where the keg physically is.
 const STATUS_ROLE_FLOW = {
-  empty_returned:    { now: 'washer',    next: 'filler' },
+  // Mover is now the central hub: allots returned kegs to Washer,
+  // allots clean-stored kegs to Filler, assigns dispatch to Driver,
+  // and receives kegs back at the end - see lib/stateMachine.js for
+  // the full rationale behind each new status.
+  empty_returned:    { now: 'warehouse', next: 'washer' },
+  allotted_washer:   { now: 'washer',    next: 'filler' },
   washed:            { now: 'filler',    next: 'warehouse' },
+  clean_storage:     { now: 'warehouse', next: 'filler' },
   filled:            { now: 'warehouse', next: 'driver' },
   dispatched:        { now: 'driver',    next: 'warehouse' },
   delivered:         { now: 'customer',  next: 'warehouse' },
-  empty_at_customer: { now: 'customer',  next: 'washer' },
+  empty_at_customer: { now: 'customer',  next: 'warehouse' },
   needs_repair:      { now: 'warehouse', next: 'washer' },
 };
 // Display-only rename: the backend role value stays 'warehouse'
@@ -760,7 +788,7 @@ function getActionConfig() {
   // submitting and getting rejected. See renderForm()'s handling of a
   // null return for the actual on-screen warning shown in that case.
   if (currentUser.role === 'washer') {
-    return keg.status === 'empty_returned' ? cfg : null;
+    return keg.status === 'allotted_washer' ? cfg : null;
   }
 
   if (currentUser.role === 'filler') {
@@ -777,14 +805,18 @@ function getActionConfig() {
   }
 
   if (currentUser.role === 'warehouse') {
-    // Warehouse has exactly three active jobs, each tied to one specific
-    // status - assigning a destination (which also dispatches, see
-    // lib/stateMachine.js), receiving an empty keg back, and resolving a
-    // keg that failed wash inspection. Every other status belongs to a
-    // different role, so nothing more is offered here - this used to
-    // fall through to a generic "log location" step, which had no
-    // natural stopping point and re-appeared right after receiving an
-    // empty keg (redundant, since that already asks for a storage zone).
+    // Mover (warehouse role) has exactly five active jobs, each tied to
+    // one specific status - allotting a keg to Washer, allotting a
+    // clean-stored keg to Filler, assigning a destination (which also
+    // dispatches, see lib/stateMachine.js), receiving an empty keg
+    // back, and resolving a keg that failed wash inspection. Every
+    // other status belongs to a different role, so nothing more is
+    // offered here - this used to fall through to a generic "log
+    // location" step, which had no natural stopping point and
+    // re-appeared right after receiving an empty keg (redundant, since
+    // that already asks for a storage zone).
+    if (keg.status === 'empty_returned') return cfg.allot_washer;
+    if (keg.status === 'clean_storage') return cfg.allot_filler;
     if (keg.status === 'filled') return cfg.assign_destination;
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
     if (keg.status === 'needs_repair') return cfg.mark_repaired;

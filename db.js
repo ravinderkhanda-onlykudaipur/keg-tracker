@@ -53,7 +53,7 @@ async function init() {
       size_liters REAL,
       material TEXT,
       status TEXT NOT NULL DEFAULT 'empty_returned'
-        CHECK (status IN ('empty_returned','washed','filled','dispatched','delivered','empty_at_customer','needs_repair')),
+        CHECK (status IN ('empty_returned','allotted_washer','clean_storage','washed','filled','dispatched','delivered','empty_at_customer','needs_repair')),
       current_location TEXT,
       destination TEXT,
       destination_address TEXT,
@@ -141,6 +141,24 @@ async function init() {
   await pool.query(`ALTER TABLE device_registrations DROP COLUMN IF EXISTS role;`);
   await pool.query(`ALTER TABLE device_approval_requests DROP COLUMN IF EXISTS role;`);
   await pool.query(`ALTER TABLE device_approval_requests DROP COLUMN IF EXISTS requested_by_user_id;`); // superseded by user_id itself
+
+  // Keg lifecycle expanded: Mover now explicitly releases a returned
+  // keg to Washer ('allotted_washer') rather than Washer being able to
+  // act on anything sitting in 'empty_returned', and Washer can now
+  // choose to route a freshly-washed keg either straight to Filler
+  // ('washed', unchanged) or back to Mover to hold as clean stock
+  // ('clean_storage') until Mover decides to release it to Filler.
+  // Existing kegs already sitting in a status from before this change
+  // need no data migration - only the two new status values need to
+  // become valid, which means dropping and re-adding the CHECK
+  // constraint (ALTER COLUMN can't add to a CHECK's allowed list
+  // directly, and ADD COLUMN IF NOT EXISTS - the pattern used
+  // elsewhere in this function - doesn't apply to constraints).
+  await pool.query(`ALTER TABLE kegs DROP CONSTRAINT IF EXISTS kegs_status_check;`);
+  await pool.query(`
+    ALTER TABLE kegs ADD CONSTRAINT kegs_status_check
+      CHECK (status IN ('empty_returned','allotted_washer','clean_storage','washed','filled','dispatched','delivered','empty_at_customer','needs_repair'));
+  `);
 }
 
 // Runs fn with a dedicated client, wrapped in BEGIN/COMMIT/ROLLBACK,
