@@ -5,15 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <title>Keg Tracker - Admin</title>
 
-<!-- PWA installability - see the matching comment in scan.html for why
-     both the manifest and the apple-specific tags are needed. -->
+<!-- This is the admin/oversight page, not the operational scanner app -
+     deliberately NOT marked as installable in standalone/full-screen
+     mode (unlike scan.html), even though it still links the same
+     manifest.json for its icon. The actual bug this fixes: iOS Safari
+     ignores manifest.json's start_url entirely for "Add to Home
+     Screen" - it just uses whatever page had these capability tags
+     when you tapped Add. With this page also marked capable, someone
+     who happened to add THIS page to their home screen got a
+     full-screen "app" that was actually the admin dashboard - no scan
+     button, table-based layout, nothing like scan.html's actual app
+     UI. Removing these tags here means index.html can still be
+     bookmarked, but only ever opens as a normal browser tab (visible
+     address bar and all), not a fullscreen standalone app - which
+     also makes it immediately obvious, if this ever happens again,
+     that you're looking at a regular webpage and not the app. -->
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="theme-color" content="#FFFFFF">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Kegs Admin">
 <style>
   :root {
     /* Same palette + typography spec as scan.html - see the comment
