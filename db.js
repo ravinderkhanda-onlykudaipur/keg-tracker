@@ -53,7 +53,7 @@ async function init() {
       size_liters REAL,
       material TEXT,
       status TEXT NOT NULL DEFAULT 'empty_returned'
-        CHECK (status IN ('empty_returned','allotted_washer','clean_storage','washed','filled','dispatched','delivered','empty_at_customer','needs_repair')),
+        CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','washed','received_filler','filled','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair')),
       current_location TEXT,
       destination TEXT,
       destination_address TEXT,
@@ -157,16 +157,29 @@ async function init() {
   // choose to route a freshly-washed keg either straight to Filler
   // ('washed', unchanged) or back to Mover to hold as clean stock
   // ('clean_storage') until Mover decides to release it to Filler.
-  // Existing kegs already sitting in a status from before this change
-  // need no data migration - only the two new status values need to
-  // become valid, which means dropping and re-adding the CHECK
-  // constraint (ALTER COLUMN can't add to a CHECK's allowed list
-  // directly, and ADD COLUMN IF NOT EXISTS - the pattern used
-  // elsewhere in this function - doesn't apply to constraints).
+  //
+  // Further expanded: Washer, Filler, Driver, and Mover (for the
+  // empty-keg handoff from Driver specifically) each now have a
+  // separate "receive" step before their actual work action -
+  // 'received_washer', 'received_filler', 'received_driver',
+  // 'received_from_driver'. This decouples "Mover/whoever told me
+  // about this keg" from "I'm physically holding it right now", so
+  // someone can scan through a whole batch (e.g. ten kegs allotted for
+  // washing) confirming custody of each first, then come back and do
+  // the actual wash/fill/deliver one at a time whenever they're ready,
+  // rather than the notification and the work being forced into one
+  // single action.
+  //
+  // Existing kegs already sitting in a status from before either
+  // change need no data migration - only the new status values
+  // themselves need to become valid, which means dropping and
+  // re-adding the CHECK constraint (ALTER COLUMN can't add to a
+  // CHECK's allowed list directly, and ADD COLUMN IF NOT EXISTS - the
+  // pattern used elsewhere in this function - doesn't apply to constraints).
   await pool.query(`ALTER TABLE kegs DROP CONSTRAINT IF EXISTS kegs_status_check;`);
   await pool.query(`
     ALTER TABLE kegs ADD CONSTRAINT kegs_status_check
-      CHECK (status IN ('empty_returned','allotted_washer','clean_storage','washed','filled','dispatched','delivered','empty_at_customer','needs_repair'));
+      CHECK (status IN ('empty_returned','allotted_washer','received_washer','clean_storage','washed','received_filler','filled','dispatched','received_driver','delivered','empty_at_customer','received_from_driver','needs_repair'));
   `);
 }
 

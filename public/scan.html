@@ -106,7 +106,7 @@
   .dash-list-heading { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
   .dash-list-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
   .dash-list-items { display: flex; flex-wrap: wrap; gap: 6px; }
-  .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; color: var(--primary); text-decoration: none; }
+  .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; color: var(--text); }
   .dash-list-empty { font-size: 13px; color: var(--text-muted); }
   .dash-group { margin: 12px 0; }
   .dash-group-summary { cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
@@ -452,35 +452,61 @@ let keg = null;
 // checkRequiredFields() before submission.
 const ROLE_ACTIONS = {
   washer: {
-    action: 'wash', label: 'Log wash',
-    fields: [
-      { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
-      { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
-      { name: 'notes', label: 'Damage notes (min 30 characters if failed)', type: 'text', requiredWhen: { field: 'inspection', equals: 'fail', minLength: 30 } },
-      // Washer's choice of where a successfully-washed keg goes next -
-      // straight to Filler, or back to Mover to hold as clean stock
-      // until Mover decides to release it. Ignored server-side if the
-      // inspection failed (routes to needs_repair regardless - see
-      // lib/stateMachine.js), so there's no need to hide/disable this
-      // field based on the inspection answer above.
-      { name: 'next_stop', label: 'Send to', type: 'select', options: ['filler', 'mover'], required: true },
-    ],
+    // Washer now has two possible actions depending on the keg's
+    // status - confirming they're physically holding an allotted keg
+    // (a simple scan, no real form), then separately washing it
+    // whenever they're actually ready to. This split is what lets
+    // someone scan through a whole batch of allotted kegs first,
+    // confirming custody of each, and come back to wash them one at a
+    // time later - see lib/stateMachine.js for the full reasoning.
+    receive_from_allotted: {
+      action: 'receive_washer', label: 'Confirm you have this keg',
+      fields: [],
+    },
+    wash_from_received: {
+      action: 'wash', label: 'Log wash',
+      fields: [
+        { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
+        { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
+        { name: 'notes', label: 'Damage notes (min 30 characters if failed)', type: 'text', requiredWhen: { field: 'inspection', equals: 'fail', minLength: 30 } },
+        // Washer's choice of where a successfully-washed keg goes next -
+        // straight to Filler, or back to Mover to hold as clean stock
+        // until Mover decides to release it. Ignored server-side if the
+        // inspection failed (routes to needs_repair regardless - see
+        // lib/stateMachine.js), so there's no need to hide/disable this
+        // field based on the inspection answer above.
+        { name: 'next_stop', label: 'Send to', type: 'select', options: ['filler', 'mover'], required: true },
+      ],
+    },
   },
   filler: {
-    action: 'fill', label: 'Log fill',
-    fixedDetails: { volume_liters: 20 }, // every fill is 20L - not a field the user fills in, just recorded automatically
-    fields: [
-      { name: 'product', label: 'Beer Name', type: 'product_select', required: true },
-      { name: 'batch_number', label: 'Batch Number', type: 'text', required: true },
-      { name: 'abv', label: 'ABV %', type: 'number', required: true },
-    ],
+    // Mirrors washer above - confirm custody first, fill whenever ready.
+    receive_from_washed: {
+      action: 'receive_filler', label: 'Confirm you have this keg',
+      fields: [],
+    },
+    fill_from_received: {
+      action: 'fill', label: 'Log fill',
+      fixedDetails: { volume_liters: 20 }, // every fill is 20L - not a field the user fills in, just recorded automatically
+      fields: [
+        { name: 'product', label: 'Beer Name', type: 'product_select', required: true },
+        { name: 'batch_number', label: 'Batch Number', type: 'text', required: true },
+        { name: 'abv', label: 'ABV %', type: 'number', required: true },
+      ],
+    },
   },
   driver: {
-    // Driver's first involvement is confirming delivery - Warehouse
-    // assigning a destination now dispatches the keg directly (see
-    // warehouse.assign_destination below), so there's no separate
-    // driver-initiated "dispatch" step anymore.
-    delivered_from_dispatched: {
+    // Driver's first involvement is confirming they're actually holding
+    // the keg Warehouse assigned to them (Warehouse assigning a
+    // destination dispatches the keg directly, but that's just a
+    // notification - see warehouse.assign_destination below and
+    // lib/stateMachine.js), then delivering it whenever they're
+    // actually en route/arrived, mirroring washer/filler above.
+    receive_from_dispatched: {
+      action: 'receive_driver', label: 'Confirm you have this keg',
+      fields: [],
+    },
+    delivered_from_received: {
       action: 'deliver', label: 'Log delivery',
       fields: [
         { name: 'location', label: 'Delivery location (confirm)', type: 'text', geo: true, required: true },
@@ -494,7 +520,7 @@ const ROLE_ACTIONS = {
   },
   warehouse: {
     // Mover (warehouse role) is the central hub of the whole cycle now -
-    // five possible actions depending on the keg's status, each tied to
+    // six possible actions depending on the keg's status, each tied to
     // exactly one status. Assigning a destination also dispatches the
     // keg in one step - see lib/stateMachine.js's assign_destination
     // rule. There's no separate generic "log location" step (removed -
@@ -521,13 +547,22 @@ const ROLE_ACTIONS = {
         { name: 'customer_id', label: 'Delivery destination (customer)', type: 'customer_select', required: true },
       ],
     },
+    // Mirrors receive_washer/receive_filler/receive_driver above -
+    // Mover confirms they're physically holding the keg Driver brought
+    // back, as its own step separate from deciding what happens to it
+    // next (see receive_from_received below).
     receive_from_empty_at_customer: {
+      action: 'receive_from_driver', label: 'Confirm you have this keg back',
+      fields: [],
+    },
+    receive_from_received: {
       action: 'receive_empty', label: 'Receive empty keg back into warehouse',
       fields: [
         { name: 'location', label: 'Storage zone', type: 'text', geo: true, required: true },
-        // Mover's choice at the moment of receiving - Uncleaned storage
-        // (default) or straight to Washer, skipping storage. Mirrors
-        // Washer's own "Send to" choice on the wash form.
+        // Mover's choice, now made once they've actually confirmed
+        // receipt - Uncleaned storage (default) or straight to Washer,
+        // skipping storage. Mirrors Washer's own "Send to" choice on
+        // the wash form.
         { name: 'next_stop', label: 'Send to', type: 'select', options: ['uncleaned_storage', 'washer'], required: true },
       ],
     },
@@ -568,21 +603,29 @@ const STATUS_ROLE_FLOW = {
   // Mover is now the central hub: allots returned kegs to Washer,
   // allots clean-stored kegs to Filler, assigns dispatch to Driver,
   // and receives kegs back at the end - see lib/stateMachine.js for
-  // the full rationale behind each new status.
-  empty_returned:    { now: 'warehouse', next: 'washer' },
-  allotted_washer:   { now: 'washer',    next: 'filler' },
-  washed:            { now: 'filler',    next: 'warehouse' },
-  clean_storage:     { now: 'warehouse', next: 'filler' },
-  filled:            { now: 'warehouse', next: 'driver' },
-  dispatched:        { now: 'driver',    next: 'warehouse' },
-  delivered:         { now: 'customer',  next: 'warehouse' },
+  // the full rationale behind each new status. Each role's "notified"
+  // and "received" pair (e.g. allotted_washer/received_washer) shows
+  // the same now/next - both are still that role's overall phase,
+  // same pattern already used for Driver owning two consecutive
+  // statuses (dispatched/delivered) before handing off.
+  empty_returned:       { now: 'warehouse', next: 'washer' },
+  allotted_washer:      { now: 'washer',    next: 'filler' },
+  received_washer:      { now: 'washer',    next: 'filler' },
+  washed:               { now: 'filler',    next: 'warehouse' },
+  received_filler:      { now: 'filler',    next: 'warehouse' },
+  clean_storage:        { now: 'warehouse', next: 'filler' },
+  filled:               { now: 'warehouse', next: 'driver' },
+  dispatched:           { now: 'driver',    next: 'warehouse' },
+  received_driver:      { now: 'driver',    next: 'warehouse' },
+  delivered:            { now: 'customer',  next: 'warehouse' },
   // 'now: driver' here, not 'customer' - marking a keg empty means the
   // driver has ALREADY received it back from the customer (per the
   // "driver carries it back to Mover" redesign), so the keg is
   // physically with the driver at this point, in transit, not still
   // sitting at the customer's premises.
-  empty_at_customer: { now: 'driver',    next: 'warehouse' },
-  needs_repair:      { now: 'warehouse', next: 'washer' },
+  empty_at_customer:    { now: 'driver',    next: 'warehouse' },
+  received_from_driver: { now: 'warehouse', next: 'washer' },
+  needs_repair:         { now: 'warehouse', next: 'washer' },
 };
 // Display-only rename: the backend role value stays 'warehouse'
 // everywhere (database, API, permissions, all unchanged) - this only
@@ -743,7 +786,7 @@ async function fetchKegListHtml(status, label) {
     if (!res.ok) return '';
     const kegs = await res.json();
     const itemsHtml = kegs.length
-      ? `<div class="dash-list-items">${kegs.map(k => `<a class="dash-list-item" href="/scan.html?keg=${k.id}">${k.id}</a>`).join('')}</div>`
+      ? `<div class="dash-list-items">${kegs.map(k => `<span class="dash-list-item">${k.id}</span>`).join('')}</div>`
       : `<div class="dash-list-empty">None right now.</div>`;
     return `
       <div class="dash-list-card">
@@ -763,7 +806,7 @@ async function loadDashboardLists() {
   // Mover sees considerably more lists than anyone else (they're the
   // hub for almost every handoff), so theirs are grouped into two
   // collapsed <details> sections instead of shown flat - tap "Warehouse"
-  // or "In Transit" to expand. Everyone else only has 1-2 lists, which
+  // or "In Transit" to expand. Everyone else only has 2-3 lists, which
   // don't need grouping.
   if (currentUser.role === 'warehouse') {
     const warehouseGroup = await fetchGroupedListsHtml('Warehouse', [
@@ -776,19 +819,35 @@ async function loadDashboardLists() {
       ['dispatched', 'To be delivered'],
       ['delivered', 'At customer'],
       ['empty_at_customer', 'To be received'],
+      // Mover's own received-but-not-yet-routed stage, from Driver's
+      // handoff - see lib/stateMachine.js's receive_from_driver.
+      ['received_from_driver', 'Received, not yet routed'],
     ]);
     container.innerHTML = warehouseGroup + transitGroup;
     return;
   }
 
+  // Everyone else shows "Allotted" (notified, not yet received) and
+  // "Received" (confirmed custody, ready for the actual work) as
+  // separate lists - the whole point of this split, see
+  // lib/stateMachine.js: someone can scan through a batch of allotted
+  // kegs to move them all into "Received" first, then come back and do
+  // the actual wash/fill/deliver on each one at their own pace.
   let statusLabels;
   if (currentUser.role === 'washer') {
-    statusLabels = [['allotted_washer', 'Allotted to you']];
+    statusLabels = [
+      ['allotted_washer', 'Allotted to you'],
+      ['received_washer', 'Received, ready to wash'],
+    ];
   } else if (currentUser.role === 'filler') {
-    statusLabels = [['washed', 'Allotted to you']];
+    statusLabels = [
+      ['washed', 'Allotted to you'],
+      ['received_filler', 'Received, ready to fill'],
+    ];
   } else if (currentUser.role === 'driver') {
     statusLabels = [
-      ['dispatched', 'To deliver'],
+      ['dispatched', 'Allotted to you'],
+      ['received_driver', 'Received, ready to deliver'],
       ['delivered', 'To mark empty'],
     ];
   } else {
@@ -943,37 +1002,48 @@ function getActionConfig() {
   // submitting and getting rejected. See renderForm()'s handling of a
   // null return for the actual on-screen warning shown in that case.
   if (currentUser.role === 'washer') {
-    return keg.status === 'allotted_washer' ? cfg : null;
+    // Two-step: confirm custody of an allotted keg first, then (once
+    // that's done and the status has moved on) wash it whenever ready.
+    if (keg.status === 'allotted_washer') return cfg.receive_from_allotted;
+    if (keg.status === 'received_washer') return cfg.wash_from_received;
+    return null;
   }
 
   if (currentUser.role === 'filler') {
-    return keg.status === 'washed' ? cfg : null;
+    if (keg.status === 'washed') return cfg.receive_from_washed;
+    if (keg.status === 'received_filler') return cfg.fill_from_received;
+    return null;
   }
 
   if (currentUser.role === 'driver') {
-    // Driver's first involvement is confirming delivery once Warehouse
-    // has already dispatched it (see warehouse's assign_destination,
-    // which dispatches directly - no separate driver-initiated step).
-    if (keg.status === 'dispatched') return cfg.delivered_from_dispatched;
+    // Driver's first involvement is confirming they're actually
+    // holding the keg once Warehouse has already dispatched it (see
+    // warehouse's assign_destination, which dispatches directly - no
+    // separate driver-initiated dispatch step), then delivering it
+    // whenever they're actually en route/arrived.
+    if (keg.status === 'dispatched') return cfg.receive_from_dispatched;
+    if (keg.status === 'received_driver') return cfg.delivered_from_received;
     if (keg.status === 'delivered') return cfg.empty_from_delivered;
     return null;
   }
 
   if (currentUser.role === 'warehouse') {
-    // Mover (warehouse role) has exactly five active jobs, each tied to
-    // one specific status - allotting a keg to Washer, allotting a
+    // Mover (warehouse role) has exactly seven active jobs, each tied
+    // to one specific status - allotting a keg to Washer, allotting a
     // clean-stored keg to Filler, assigning a destination (which also
-    // dispatches, see lib/stateMachine.js), receiving an empty keg
-    // back, and resolving a keg that failed wash inspection. Every
-    // other status belongs to a different role, so nothing more is
-    // offered here - this used to fall through to a generic "log
-    // location" step, which had no natural stopping point and
-    // re-appeared right after receiving an empty keg (redundant, since
-    // that already asks for a storage zone).
+    // dispatches, see lib/stateMachine.js), confirming custody of an
+    // empty keg Driver brought back, deciding where that keg actually
+    // goes once received, and resolving a keg that failed wash
+    // inspection. Every other status belongs to a different role, so
+    // nothing more is offered here - this used to fall through to a
+    // generic "log location" step, which had no natural stopping point
+    // and re-appeared right after receiving an empty keg (redundant,
+    // since that already asks for a storage zone).
     if (keg.status === 'empty_returned') return cfg.allot_washer;
     if (keg.status === 'clean_storage') return cfg.allot_filler;
     if (keg.status === 'filled') return cfg.assign_destination;
     if (keg.status === 'empty_at_customer') return cfg.receive_from_empty_at_customer;
+    if (keg.status === 'received_from_driver') return cfg.receive_from_received;
     if (keg.status === 'needs_repair') return cfg.mark_repaired;
     return null;
   }
