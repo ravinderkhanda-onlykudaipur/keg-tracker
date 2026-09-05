@@ -2,7 +2,7 @@
   "name": "Keg Tracker",
   "short_name": "Kegs",
   "description": "QR-code keg lifecycle tracking - wash, fill, dispatch, deliver",
-  "start_url": "/scan.html",
+  "start_url": "/scan-v2.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FFFFFF",
