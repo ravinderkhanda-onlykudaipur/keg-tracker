@@ -109,6 +109,9 @@
   .dash-list-items { display: flex; flex-wrap: wrap; gap: 6px; }
   .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; color: var(--text); }
   .dash-list-empty { font-size: 13px; color: var(--text-muted); }
+  .alerts-overview-heading { font-size: 16px; font-weight: 600; color: var(--text); margin: 4px 0 10px; }
+  .alert-item { background: var(--warn-bg); border-color: var(--warn-text); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .alert-item-label { font-size: 11px; font-weight: 400; color: var(--warn-text); }
   .dash-group { margin: 12px 0; }
   .dash-group-summary { cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
   .dash-group-summary::-webkit-details-marker { display: none; }
@@ -401,6 +404,7 @@
       <h2 id="homeGreeting" style="margin-top:0"></h2>
       <p class="muted">Scan a keg's QR code to get started.</p>
     </div>
+    <div id="moverAlertsOverview"></div>
     <div id="dashboardLists"></div>
   </div>
 
@@ -830,6 +834,7 @@ function showHomeScreen() {
   document.getElementById('homeGreeting').textContent = `${timeGreeting}, ${firstName}!`;
 
   loadDashboardLists();
+  loadMoverAlertsOverview();
 }
 
 // One list per relevant status, showing the actual keg IDs currently
@@ -962,6 +967,50 @@ async function loadMyAlerts() {
     }
   } catch (err) {
     // Offline or alerts fetch failed - not critical, just skip the badge silently.
+  }
+}
+
+// Mover-only: every overdue keg company-wide (not just alerts for
+// Mover's own role, unlike the small badge everyone else gets - see
+// loadMyAlerts() below), grouped by pipeline stage rather than by role,
+// so Mover can see at a glance WHERE things are backing up: with
+// Washer/Filler, sitting in the warehouse waiting on Mover themselves,
+// or out in transit with Driver/at a customer. Keg IDs shown as plain
+// text, matching the dashboard lists' non-clickable treatment - same
+// reasoning as loadMyAlerts()'s comment below: a one-tap shortcut to
+// the action form would undercut the physical-scan requirement.
+const ALERT_STAGE_GROUPS = {
+  'At Washer/Filler': ['allotted_washer', 'received_washer', 'washed', 'received_filler'],
+  'At Warehouse': ['empty_returned', 'clean_storage', 'received_from_washer', 'filled', 'received_from_filler', 'received_from_driver', 'needs_repair'],
+  'In Transit': ['dispatched', 'received_driver', 'delivered', 'empty_at_customer', 'returned_to_warehouse'],
+};
+
+async function loadMoverAlertsOverview() {
+  const container = document.getElementById('moverAlertsOverview');
+  if (!container) return;
+  if (currentUser.role !== 'warehouse') { container.innerHTML = ''; return; }
+
+  try {
+    const res = await fetch('/api/alerts', { credentials: 'include' });
+    if (!res.ok) { container.innerHTML = ''; return; }
+    const alerts = await res.json();
+
+    const groupsHtml = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, statuses]) => {
+      const groupAlerts = alerts.filter((a) => statuses.includes(a.status));
+      const itemsHtml = groupAlerts.length
+        ? `<div class="dash-list-items">${groupAlerts.map((a) => `<span class="dash-list-item alert-item">${a.kegId} <span class="alert-item-label">${a.label}</span></span>`).join('')}</div>`
+        : `<div class="dash-list-empty">Nothing overdue here.</div>`;
+      return `
+        <details class="dash-group">
+          <summary class="dash-group-summary">${groupLabel} <span class="dash-list-count">${groupAlerts.length}</span></summary>
+          <div class="dash-group-content">${itemsHtml}</div>
+        </details>
+      `;
+    }).join('');
+
+    container.innerHTML = `<h3 class="alerts-overview-heading">Alerts</h3>${groupsHtml}`;
+  } catch (err) {
+    container.innerHTML = ''; // offline or fetch failed - skip silently, same pattern as loadMyAlerts()
   }
 }
 
