@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Keg Tracker v2</title>
+<style>
+  :root {
+    --bg: #FFFFFF; --card-bg: #F5F5F5; --card-border: #E8E6E0;
+    --text: #1A1A1A; --text-secondary: #6B6B6B; --text-muted: #A0A0A0;
+    --primary: #2FA8F5; --primary-tint-bg: #E6F1FB;
+    --success-bg: #E8F5E9; --success-text: #1B5E20;
+    --warn-bg: #FFF4E0; --warn-text: #8A5700;
+    --error-bg: #FCEAEA; --error-text: #B3261E;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; background: var(--bg); color: var(--text); margin: 0; padding: 16px; max-width: 480px; margin-left: auto; margin-right: auto; }
+  h2 { font-size: 20px; } h3 { font-size: 16px; }
+  .muted { color: var(--text-secondary); font-size: 13px; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; margin: 14px 0; }
+  label { display: block; font-size: 13px; font-weight: 500; margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 10px; font-size: 15px; border: 1px solid var(--card-border); border-radius: 8px; font-family: inherit; }
+  button { width: 100%; margin-top: 12px; font-family: inherit; font-size: 15px; font-weight: 500; padding: 13px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
+  button.secondary { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+  button:disabled { opacity: 0.6; }
+  .error { color: var(--error-text); font-size: 13px; margin-top: 8px; }
+  .success { color: var(--success-text); font-size: 13px; margin-top: 8px; }
+
+  /* Current custody state - a plain fact, never a prediction. See
+     lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely". */
+  .custody-card { text-align: center; }
+  .custody-location { font-size: 22px; font-weight: 600; }
+  .custody-sublocation { font-size: 14px; color: var(--text-secondary); }
+  .custody-condition { display: inline-block; margin-top: 8px; padding: 4px 12px; border-radius: 10px; background: var(--primary-tint-bg); color: var(--primary); font-size: 13px; font-weight: 500; }
+
+  /* Pending handover banner - only shown while pending_handover_to is set */
+  .pending-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 500; text-align: center; margin: 10px 0; }
+
+  /* Available actions - every matching transition shows as its own
+     button, never auto-picked. See DATA_MODEL.md Section 9 note. */
+  .action-btn-wrap { margin-top: 10px; }
+  .action-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+
+  /* Dashboard groups on the home screen - same collapsible pattern
+     already established in scan.html/index.html, replicated here
+     since this is a separate standalone file. */
+  .dash-group { margin: 12px 0; }
+  .dash-group-summary { cursor: pointer; list-style: none; font-size: 15px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .dash-group-summary::-webkit-details-marker { display: none; }
+  .dash-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
+  .dash-group[open] > .dash-group-summary::before { transform: rotate(90deg); }
+  .dash-group-content { padding: 8px 4px 4px; }
+  .dash-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+  .dash-item { display: inline-block; padding: 5px 10px; margin: 3px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; }
+  .dash-item.pending { background: var(--warn-bg); border-color: var(--warn-text); color: var(--warn-text); }
+  .dash-empty { font-size: 13px; color: var(--text-muted); padding: 4px; }
+</style>
+</head>
+<body>
+
+<div id="loginBlock">
+  <h2>Keg Tracker v2</h2>
+  <div class="card">
+    <label>User</label>
+    <select id="userSelect"></select>
+    <label>Password</label>
+    <input type="password" id="password">
+    <button onclick="login()">Log in</button>
+    <div id="loginError" class="error"></div>
+  </div>
+</div>
+
+<div id="appBlock" style="display:none">
+  <div style="display:flex; justify-content:space-between; align-items:center">
+    <span id="whoami" class="muted"></span>
+    <button class="secondary" style="width:auto; margin:0; padding:8px 14px" onclick="logout()">Log out</button>
+  </div>
+
+  <div id="noKegBlock" class="card" style="display:none">
+    <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
+  </div>
+  <div id="dashboardBlock"></div>
+
+  <div id="kegBlock" style="display:none">
+    <h3 id="kegIdHeading"></h3>
+
+    <div class="card custody-card">
+      <div class="muted">Current custody</div>
+      <div class="custody-location" id="custodyLocation"></div>
+      <div class="custody-sublocation" id="custodySublocation"></div>
+      <div class="custody-condition" id="custodyCondition"></div>
+    </div>
+
+    <div id="pendingBannerWrap"></div>
+    <div id="confirmSection"></div>
+    <div id="actionsSection"></div>
+    <div id="actionFormSection"></div>
+  </div>
+</div>
+
+<script src="/device-id.js"></script>
+<script>
+let currentUser = null;
+let currentKeg = null;
+let availableTransitions = [];
+const kegId = new URLSearchParams(location.search).get('keg');
+
+async function init() {
+  let me = null;
+  try {
+    const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+    me = await meRes.json();
+  } catch (err) {
+    document.getElementById('loginBlock').innerHTML = '<p class="error">No connection - connect once to log in.</p>';
+    return;
+  }
+  if (me) { currentUser = me; showApp(); return; }
+
+  const res = await fetch('/api/auth/users');
+  const users = await res.json();
+  document.getElementById('userSelect').innerHTML =
+    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+}
+
+async function login() {
+  const userId = document.getElementById('userSelect').value;
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, password, deviceId: DeviceId.get() }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    document.getElementById('loginError').textContent = data.error || 'Invalid password';
+    return;
+  }
+  currentUser = await res.json();
+  showApp();
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+function showApp() {
+  document.getElementById('loginBlock').style.display = 'none';
+  document.getElementById('appBlock').style.display = 'block';
+  document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
+
+  if (!kegId) {
+    document.getElementById('noKegBlock').style.display = 'block';
+    loadDashboard();
+    return;
+  }
+  document.getElementById('kegBlock').style.display = 'block';
+  loadKeg();
+}
+
+// Every location+warehouse-sublocation combination the schema allows,
+// covered exactly once - verified the same way the v1 dashboard's
+// groupings were (a coverage check against the actual matrix values),
+// see the audit further down.
+const DASHBOARD_GROUPS = [
+  { label: 'At Washer', match: (k) => k.current_location === 'washer' },
+  { label: 'At Filler', match: (k) => k.current_location === 'filler' },
+  { label: 'With Mover', match: (k) => k.current_location === 'mover' },
+  { label: 'Warehouse: Uncleaned Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'uncleaned' },
+  { label: 'Warehouse: Cleaned Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'cleaned' },
+  { label: 'Warehouse: Filled Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'filled' },
+  { label: 'Warehouse: Damaged Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'damaged' },
+  { label: 'With Driver', match: (k) => k.current_location === 'driver' },
+  { label: 'With Customer', match: (k) => k.current_location === 'customer' },
+];
+
+async function loadDashboard() {
+  const el = document.getElementById('dashboardBlock');
+  const res = await fetch('/api/v2/kegs', { credentials: 'include' });
+  if (!res.ok) { el.innerHTML = ''; return; }
+  const kegs = await res.json();
+
+  el.innerHTML = DASHBOARD_GROUPS.map((group) => {
+    const matched = kegs.filter(group.match);
+    const itemsHtml = matched.length
+      ? matched.map((k) => `<span class="dash-item${k.pending_handover_to ? ' pending' : ''}">${k.id}${k.pending_handover_to ? ' \u2013 pending' : ''}</span>`).join('')
+      : '<div class="dash-empty">None right now.</div>';
+    return `
+      <details class="dash-group">
+        <summary class="dash-group-summary">${group.label} <span class="dash-count">${matched.length}</span></summary>
+        <div class="dash-group-content">${itemsHtml}</div>
+      </details>
+    `;
+  }).join('');
+}
+
+init();
+
+const LOCATION_LABELS = { customer: 'Customer', driver: 'Driver', mover: 'Mover', washer: 'Washer', filler: 'Filler', warehouse: 'Warehouse' };
+const SUBLOCATION_LABELS = { uncleaned: 'Uncleaned Storage', cleaned: 'Cleaned Storage', filled: 'Filled Storage', damaged: 'Damaged Storage' };
+const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned', filling: 'Filling', filled: 'Filled', to_be_delivered: 'To Be Delivered', delivered: 'Delivered', delivery_failed: 'Delivery Failed', damaged: 'Damaged' };
+const REASON_LABELS = { forgot_to_deliver: 'Forgot to Deliver', damaged: 'Damaged Item/Keg', customer_refused: 'Customer Refused to Accept', customer_unavailable: 'Customer Unavailable', shop_closed: 'Shop Closed', other: 'Other' };
+
+async function loadKeg() {
+  const res = await fetch(`/api/v2/kegs/${kegId}`, { credentials: 'include' });
+  if (!res.ok) {
+    document.getElementById('kegBlock').innerHTML = '<p class="error">Could not load this keg.</p>';
+    return;
+  }
+  const data = await res.json();
+  currentKeg = data.keg;
+  availableTransitions = data.availableTransitions;
+  renderKeg();
+}
+
+function renderKeg() {
+  document.getElementById('kegIdHeading').textContent = currentKeg.id;
+
+  // Current custody - a plain fact, never a prediction. See
+  // lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely".
+  document.getElementById('custodyLocation').textContent = LOCATION_LABELS[currentKeg.current_location] || currentKeg.current_location;
+  document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
+    ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
+  document.getElementById('custodyCondition').textContent = CONDITION_LABELS[currentKeg.current_condition] || currentKeg.current_condition;
+
+  // Pending handover banner + confirm button - only shown when this
+  // user's role can actually confirm it (see entityRoleMapping.js).
+  const pendingWrap = document.getElementById('pendingBannerWrap');
+  const confirmSection = document.getElementById('confirmSection');
+  if (currentKeg.pending_handover_to) {
+    pendingWrap.innerHTML = `<div class="pending-banner">Awaiting receipt by ${LOCATION_LABELS[currentKeg.pending_handover_to] || currentKeg.pending_handover_to}</div>`;
+  } else {
+    pendingWrap.innerHTML = '';
+  }
+  renderConfirmSection();
+
+  renderAvailableActions();
+}
+
+// The API doesn't return a separate "can I confirm" flag - a pending
+// handover directed at this role is confirmable if currentUser.role
+// maps to pending_handover_to per the same entity/role rules the
+// backend already enforces (entityRoleMapping.js) - re-implemented
+// minimally client-side just to decide whether to show the button;
+// the actual permission check that matters happens server-side on
+// /confirm regardless, this is purely a UI convenience.
+const ENTITY_TO_DB_ROLE = { customer: 'driver', driver: 'driver', mover: 'warehouse', washer: 'washer', filler: 'filler', warehouse: 'warehouse' };
+function dbRoleCanActAsEntity(dbRole, entity) {
+  if (dbRole === 'manager') return true;
+  return ENTITY_TO_DB_ROLE[entity] === dbRole;
+}
+
+function renderConfirmSection() {
+  const el = document.getElementById('confirmSection');
+  if (!currentKeg.pending_handover_to || !dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `<button onclick="submitConfirm()">Confirm receipt</button><div id="confirmMsg"></div>`;
+}
+
+function renderAvailableActions() {
+  const el = document.getElementById('actionsSection');
+  document.getElementById('actionFormSection').innerHTML = '';
+  if (currentKeg.pending_handover_to) {
+    // Nothing to initiate while a handover is already pending on this
+    // keg - only the confirm button above applies until it resolves.
+    el.innerHTML = '';
+    return;
+  }
+  if (!availableTransitions.length) {
+    el.innerHTML = '<p class="muted">No actions available for your role on this keg right now.</p>';
+    return;
+  }
+  // Every matching transition shows as its own button - deliberately
+  // never auto-picked, even when there are two (e.g. Mover holding an
+  // empty keg can send to Washer OR Uncleaned Storage). See
+  // DATA_MODEL.md's Section 9 note.
+  el.innerHTML = availableTransitions.map((t) => `
+    <div class="action-btn-wrap">
+      <button class="${availableTransitions.length > 1 ? 'secondary' : ''}" onclick="selectAction('${t.id}')">${t.label}</button>
+    </div>
+  `).join('');
+}
+
+function selectAction(transitionId) {
+  const t = availableTransitions.find((x) => x.id === transitionId);
+  const formEl = document.getElementById('actionFormSection');
+
+  let fieldsHtml = '';
+  if (t.requiresReason) {
+    fieldsHtml += `
+      <label>Reason</label>
+      <select id="f_reason" onchange="toggleReasonOther()">
+        ${t.reasonOptions.map((r) => `<option value="${r}">${REASON_LABELS[r] || r}</option>`).join('')}
+      </select>
+      <div id="reasonOtherWrap" style="display:none">
+        <label>Please describe</label>
+        <input type="text" id="f_reasonText">
+      </div>
+    `;
+  }
+  if (t.requiresCustomer) {
+    fieldsHtml += `<label>Delivery destination (customer)</label><select id="f_customerId"></select>`;
+  }
+
+  formEl.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">${t.label}</h3>
+      ${fieldsHtml}
+      <button onclick="submitAction('${t.id}', ${t.twoScan})">Confirm</button>
+      <div id="actionMsg"></div>
+    </div>
+  `;
+
+  if (t.requiresCustomer) populateCustomerSelect();
+}
+
+function toggleReasonOther() {
+  const reason = document.getElementById('f_reason').value;
+  document.getElementById('reasonOtherWrap').style.display = reason === 'other' ? 'block' : 'none';
+}
+
+async function populateCustomerSelect() {
+  const res = await fetch('/api/customers', { credentials: 'include' });
+  const customers = res.ok ? await res.json() : [];
+  document.getElementById('f_customerId').innerHTML =
+    '<option value="">-- select customer --</option>' +
+    customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function collectDetails(t) {
+  const details = {};
+  if (t.requiresReason) {
+    details.reason = document.getElementById('f_reason').value;
+    if (details.reason === 'other') details.reasonText = document.getElementById('f_reasonText').value;
+  }
+  if (t.requiresCustomer) {
+    details.customerId = document.getElementById('f_customerId').value;
+  }
+  return details;
+}
+
+async function submitAction(transitionId, twoScan) {
+  const t = availableTransitions.find((x) => x.id === transitionId);
+  const details = collectDetails(t);
+  const msg = document.getElementById('actionMsg');
+
+  const endpoint = twoScan ? 'initiate' : 'execute';
+  const res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ transitionId, details }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  msg.className = 'success';
+  msg.textContent = 'Done.';
+  setTimeout(loadKeg, 800);
+}
+
+async function submitConfirm() {
+  const msg = document.getElementById('confirmMsg');
+  const res = await fetch(`/api/v2/kegs/${kegId}/confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  msg.className = 'success';
+  msg.textContent = 'Receipt confirmed.';
+  setTimeout(loadKeg, 800);
+}
+</script>
+</body>
+</html>

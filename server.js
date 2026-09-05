@@ -17,6 +17,7 @@ const customerRoutes = require('./routes/customers');
 const deviceRoutes = require('./routes/devices');
 const userRoutes = require('./routes/users');
 const productRoutes = require('./routes/products');
+const v2KegRoutes = require('./routes/v2Kegs'); // new custody-model endpoints - coexists with kegRoutes/eventRoutes above, see lib/v2/DATA_MODEL.md
 
 const app = express();
 app.use(express.json());
@@ -76,6 +77,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/v2/kegs', v2KegRoutes);
 
 const PORT = process.env.PORT || 3000;
 
