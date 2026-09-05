@@ -1016,10 +1016,16 @@ async function loadMoverAlertsOverview() {
 
 async function loadKeg() {
   // A specific keg is loaded now (via QR scan or a dashboard list
-  // link) - clear any dashboard lists left over from the home screen
-  // so they don't linger below this keg's own card.
+  // link) - clear any dashboard lists and Mover's Alerts overview left
+  // over from the home screen, so neither lingers below this keg's own
+  // card. Found while auditing the whole app for this exact class of
+  // bug (the Destination card had the identical issue a few rounds
+  // back) - moverAlertsOverview was added after this clearing block
+  // already existed and got missed at the time.
   const dashEl = document.getElementById('dashboardLists');
   if (dashEl) dashEl.innerHTML = '';
+  const alertsEl = document.getElementById('moverAlertsOverview');
+  if (alertsEl) alertsEl.innerHTML = '';
 
   let res;
   try {
