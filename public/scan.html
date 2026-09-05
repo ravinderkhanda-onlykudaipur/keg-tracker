@@ -3,12 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-<title>Keg Scan</title>
+<title>Keg Tracker</title>
 
-<!-- PWA installability: lets "Add to Home Screen" create a real app icon
-     that opens full-screen (no browser address bar) instead of just a
-     bookmark. manifest.json covers Android/Chrome; the apple-* tags
-     below cover iOS Safari, which doesn't fully honor the manifest. -->
+<!-- PWA installability - manifest.json's start_url points here, so
+     this is the app's actual home screen destination. -->
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="theme-color" content="#FFFFFF">
@@ -17,12 +15,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Kegs">
 <style>
+  /* Full palette from the original app's design, not the smaller
+     ad-hoc set this page's first version used. */
   :root {
-    /* Palette below is the exact spec provided - see README's "Design
-       system" section for the source table. Functional colors
-       (success/error/warning) aren't part of that spec, so they're
-       chosen to harmonize with it: light tinted backgrounds, readable
-       dark text, same visual language as the primary blue banner. */
     --bg: #FFFFFF;
     --card-bg: #F5F5F5;
     --card-border: #E8E6E0;
@@ -44,746 +39,272 @@
     --warn-bg: #FFF4E0;
     --warn-text: #8A5700;
   }
-  /* Two weights only, per spec: 400 (regular) and 500 (medium) - never
-     600/700/800 (Fill Details' Keg ID value is a deliberate, flagged
-     exception - see the design-system note in README.md). Sizes below
-     are close to the original spec's scale (20/16/14/13/12) - an
-     earlier round increased these ~15% across the board, but the
-     cumulative effect (combined with several individually-enlarged
-     elements since) started reading as too large/"zoomed" overall, so
-     this dials the base scale back down while leaving the handful of
-     just-finalized element sizes (Beer/Batch/ABV icons, Now/Next role
-     icons) close to where they were explicitly set. Sentence case
-     throughout - no uppercase transforms anywhere below. */
+  * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; max-width: 480px; margin: 0 auto; padding: 18px 16px; color: var(--text); background: var(--bg); font-size: 14px; line-height: 1.5; }
   h2 { font-size: 20px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
   h3 { font-size: 16px; font-weight: 500; color: var(--text); margin: 0 0 4px; }
-  .muted { color: var(--text-secondary); font-size: 13px; font-weight: 400; }
+  .muted { color: var(--text-secondary); font-size: 13px; }
   .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; margin: 14px 0; }
   label { display: block; font-size: 13px; margin: 10px 0 5px; font-weight: 500; color: var(--text); }
-  /* Inputs stay at 16px regardless of the type scale above - anything
-     smaller triggers iOS Safari's auto-zoom-on-focus, which is worse
-     for usability than a one-off exception to the scale. Buttons don't
-     have that constraint, so their text scales normally with everything else. */
   input, select { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 16px; font-weight: 400; padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
   input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(47,168,245,0.18); }
   button { width: 100%; margin-top: 16px; font-family: inherit; font-size: 16px; font-weight: 500; padding: 13px; background: var(--primary); color: #FFFFFF; border: none; border-radius: 10px; cursor: pointer; }
-  button:hover { background: var(--primary-hover); }
+  button.secondary { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); width: auto; margin: 8px 4px 0 0; padding: 10px 16px; }
+  button:disabled { opacity: 0.6; }
+  .error { color: var(--error-text); font-size: 13px; margin-top: 8px; }
+  .success { color: var(--success-text); font-size: 13px; margin-top: 8px; }
 
-  .app-header { margin-bottom: 8px; }
-  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .user-chip, .logout-btn { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
-  .alert-count-badge { display: none; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--error-text); color: #FFFFFF; font-size: 10px; font-weight: 600; margin-left: 6px; }
-  .logout-btn { cursor: pointer; width: auto; margin: 0; }
-  .logout-btn:hover { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
-
-  .error { color: var(--error-text); font-size: 13px; margin-top: 10px; font-weight: 400; }
-  .success { color: var(--success-text); font-size: 13px; margin-top: 10px; font-weight: 400; }
-  .history-item { border-bottom: 1px solid var(--card-border); padding: 10px 0; font-size: 13px; }
-  .history-item b { font-weight: 500; }
-  .offline-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 11px 14px; font-size: 13px; margin-bottom: 12px; }
-  .pending-banner { background: var(--primary-tint-bg); color: var(--primary-tint-text-mid); border-radius: 10px; padding: 11px 14px; font-size: 13px; margin-bottom: 12px; }
-  .pending-banner button { width: auto; display: inline-block; margin: 8px 6px 0 0; padding: 7px 12px; font-size: 13px; }
-  .geo-btn { width: auto; display: inline-block; margin-top: 6px; padding: 8px 12px; font-size: 13px; font-weight: 500; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); }
-  .geo-btn:hover { background: #D6E9F9; }
-  .inline-add-box { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: 10px; background: var(--bg); }
-  .btn-danger-outline { background: #FFFFFF; color: var(--error-text); border: 1px solid var(--error-text); }
-  .btn-danger-outline:hover { background: var(--error-bg); }
-
-  /* Fill Details card: status -> next status, then a large prominent
-     Keg ID, then Beer/Batch/ABV as three compact icon columns - all
-     presentation-only, same underlying data as before. */
-  .status-next-row { display: flex; align-items: stretch; }
-  .status-next-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 10px; text-align: center; }
-  .status-next-arrow-mid { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; padding: 0 6px; }
-  .days-with-customer { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
-  .pending-receipt-line { text-align: center; font-size: 12px; font-weight: 600; color: var(--warn-text); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); }
-
-  /* Home-screen dashboard lists - shown per role instead of just the
-     plain greeting, so someone can actually find which physical keg
-     they're responsible for instead of it only being visible once
-     they've already scanned that specific keg's QR code. */
-  .dash-list-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
-  .dash-list-heading { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-  .dash-list-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
-  .dash-list-items { display: flex; flex-wrap: wrap; gap: 6px; }
-  .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; color: var(--text); }
-  .dash-list-empty { font-size: 13px; color: var(--text-muted); }
-  .alerts-overview-heading { font-size: 16px; font-weight: 600; color: var(--text); margin: 4px 0 10px; }
-  /* Mover's Alerts/Inventory tab bar - same visual pattern as
-     index.html's tabs, replicated here rather than shared since these
-     are two separate HTML files with their own <style> blocks. */
-  .tab-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--card-border); padding-bottom: 2px; }
-  .tab-btn { background: transparent; color: var(--text-secondary); border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 10px 14px; font-weight: 500; font-size: 13px; margin: 0; width: auto; }
-  .tab-btn:hover { background: var(--card-bg); color: var(--text); }
-  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
-  .alert-item { background: var(--warn-bg); border-color: var(--warn-text); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-  .alert-item-label { font-size: 11px; font-weight: 400; color: var(--warn-text); }
-  .dash-group { margin: 12px 0; }
-  .dash-group-summary { cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
-  .dash-group-summary::-webkit-details-marker { display: none; }
-  .dash-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
-  .dash-group[open] > .dash-group-summary::before { transform: rotate(90deg); }
-  .dash-group-content { padding: 4px 0 0; }
-  /* Nested sub-groups (Uncleaned/Cleaned/Filled/Damaged etc.) inside a
-     Warehouse/In Transit group - smaller and flatter than the outer
-     group, with a left border tying it visually to its parent, so it
-     reads as "nested inside" rather than another top-level group. */
-  .dash-subgroup { margin: 8px 0 8px 10px; }
-  .dash-subgroup-summary { font-size: 14px; font-weight: 500; background: var(--bg); border-left: 3px solid var(--card-border); border-radius: 8px; padding: 9px 12px; }
-  .status-next-label { font-size: 12px; color: var(--text-secondary); }
-  .status-next-value { font-size: 17px; font-weight: 500; }
-  .status-next-value.current { color: var(--success-text); }
-  .status-next-value.next { color: var(--primary); }
-  .role-icon-wrap { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
-  .keg-id-hero { text-align: center; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin: 4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--card-border); }
-
-  .detail-cols { display: flex; justify-content: space-between; gap: 6px; }
-  .detail-col { flex: 1; text-align: center; }
-  .detail-col + .detail-col { border-left: 1px solid var(--card-border); }
-  .detail-icon { width: 30px; height: 30px; border-radius: 50%; background: var(--primary-tint-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; flex-shrink: 0; }
-  /* Beer/Batch/ABV icons scoped larger than the shared .detail-icon
-     default (which the Destination card's icons also use, at their own
-     smaller size) - .detail-cols only wraps Fill Details, so this
-     doesn't affect the Destination card. */
-  .detail-cols .detail-icon { width: 48px; height: 48px; margin: 0 auto 8px; background: transparent; }
-  .detail-col-value { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 3px; word-break: break-word; }
-
-  /* Destination card - white background with a "Customer" header, then
-     a two-column row split by a vertical divider: Name+Address on the
-     left (2 parts), a call-icon-only column on the right (1 part) -
-     the phone number itself isn't shown as text, only reachable by
-     tapping the icon (or the number's aria-label for screen readers). */
-  .destination-card { background: #FFFFFF; border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin: 14px 0; }
-  .dest-header-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; text-align: center; }
-  .dest-row { display: flex; align-items: flex-start; }
-  /* Icon sits centered against the whole name+address text block next
-     to it (which may run to 2-3 lines once address wraps) rather than
-     against just the name - align-items:center on this flex row
-     handles that regardless of how many lines the address ends up
-     being, without needing to hardcode a height. */
-  .dest-col-left { flex: 4; min-width: 0; display: flex; align-items: flex-start; gap: 10px; }
-  .dest-col-right { flex: 1; display: flex; align-items: flex-start; justify-content: center; min-width: 0; }
-  .dest-icon { margin: 0; flex-shrink: 0; width: 34px; height: 34px; color: #2699E6; }
-  .dest-text-block { min-width: 0; }
-  .dest-name { font-size: 13px; font-weight: 700; color: var(--text); word-break: break-word; }
-  .dest-address { font-size: 11.7px; font-weight: 700; color: var(--text); word-break: break-word; margin-top: 3px; }
-  .dest-phone-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-
-  /* Bottom-middle floating scan button, fixed above everything else -
-     the easy-access entry point requested for the operational roles,
-     also available to everyone else since it's just quick navigation
-     to a different keg, not a permission-sensitive action. Icon-only,
-     explicitly matched to the app logo's blue (not just inherited from
-     the general button style, in case that ever changes independently). */
-  .scan-fab {
-    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    width: 56px; height: 56px; padding: 0; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--primary); color: #FFFFFF;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.22); z-index: 100; margin: 0;
-  }
-  body { padding-bottom: 84px; } /* keeps page content from hiding behind the fixed button */
-
-  .scanner-overlay {
-    display: none; position: fixed; inset: 0; background: #000000;
-    z-index: 200; flex-direction: column; align-items: center; justify-content: center;
-  }
-  .scanner-overlay video { width: 100%; max-width: 480px; }
-  .scanner-overlay .scanner-msg { color: #FFFFFF; font-size: 14px; padding: 14px 20px; text-align: center; }
-  .scanner-overlay button { width: auto; margin-top: 20px; padding: 12px 28px; }
-
-  /* Top banner - decorative, sits above everything else including the
-     login screen. Deliberately compact (140px) rather than a full hero
-     section, since this is a tool people use to move fast (scanning
-     kegs), not a marketing page - the goal is brand presence without
-     pushing the actual work content further down the screen. */
+  /* Top banner - the app's original illustrated scene, purely visual
+     brand identity, unrelated to whichever custody model runs
+     underneath it. */
   .top-banner { margin: -18px -16px 0 -16px; height: 140px; position: relative; overflow: hidden; }
   .top-banner svg { display: block; width: 100%; height: 140px; }
   .top-banner .banner-logo { position: absolute; left: 50%; top: 34px; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; }
+
+  .app-header { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+  .user-chip { font-size: 13px; color: var(--text-secondary); }
+
+  /* Current custody state - a plain fact, never a prediction (this is
+     the actual point of the whole v2 rebuild - see
+     lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely").
+     Visually modeled on the original Now/Next icon-and-label layout,
+     just showing one fact instead of a now/next pair. */
+  .custody-card { text-align: center; }
+  .custody-icon-wrap { margin: 6px auto 4px; }
+  .custody-location { font-size: 20px; font-weight: 600; }
+  .custody-sublocation { font-size: 14px; color: var(--text-secondary); }
+  .custody-condition { display: inline-block; margin-top: 8px; padding: 4px 12px; border-radius: 10px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 13px; font-weight: 500; }
+
+  .pending-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 500; text-align: center; margin: 10px 0; }
+
+  .action-btn-wrap { margin-top: 10px; }
+
+  /* Dashboard groups - same collapsible pattern also used on
+     index.html, kept consistent across both. */
+  .dash-group { margin: 12px 0; }
+  .dash-group-summary { cursor: pointer; list-style: none; font-size: 15px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .dash-group-summary::-webkit-details-marker { display: none; }
+  .dash-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
+  .dash-group[open] > .dash-group-summary::before { transform: rotate(90deg); }
+  .dash-group-content { padding: 8px 4px 4px; }
+  .dash-count { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+  .dash-item { display: inline-block; padding: 5px 10px; margin: 3px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; color: var(--primary); text-decoration: none; }
+  .dash-item:active { background: var(--primary-tint-bg); }
+  .dash-item.pending { background: var(--warn-bg); border-color: var(--warn-text); color: var(--warn-text); }
+  .dash-empty { font-size: 13px; color: var(--text-muted); padding: 4px; }
 </style>
 </head>
 <body>
 
-  <div class="top-banner">
-    <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bannerSky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#0287D4"/>
-          <stop offset="55%" stop-color="#2BB0FD"/>
-          <stop offset="100%" stop-color="#72CAFE"/>
-        </linearGradient>
-        <linearGradient id="bannerLand" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#2185D4"/>
-          <stop offset="100%" stop-color="#01476F"/>
-        </linearGradient>
-        <filter id="bannerGlow" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="2.5" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="bannerShadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity=".25"/>
-        </filter>
-      </defs>
-      <rect x="0" y="0" width="480" height="140" fill="url(#bannerSky)"/>
-      <g fill="#BFE3FF" opacity=".25">
-        <path d="M8 25 C12 19 19 19 23 23 C28 16 39 17 44 24 C51 22 57 26 60 31 H8Z"/>
-        <path d="M370 24 C375 18 383 18 388 23 C393 15 405 17 410 24 C417 22 425 26 429 31 H370Z"/>
+<div class="top-banner">
+  <svg viewBox="0 0 480 140" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bannerSky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#0287D4"/>
+        <stop offset="55%" stop-color="#2BB0FD"/>
+        <stop offset="100%" stop-color="#72CAFE"/>
+      </linearGradient>
+      <linearGradient id="bannerLand" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#2185D4"/>
+        <stop offset="100%" stop-color="#01476F"/>
+      </linearGradient>
+      <filter id="bannerGlow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="bannerShadow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity=".25"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="480" height="140" fill="url(#bannerSky)"/>
+    <g fill="#BFE3FF" opacity=".25">
+      <path d="M8 25 C12 19 19 19 23 23 C28 16 39 17 44 24 C51 22 57 26 60 31 H8Z"/>
+      <path d="M370 24 C375 18 383 18 388 23 C393 15 405 17 410 24 C417 22 425 26 429 31 H370Z"/>
+    </g>
+    <path d="M0 72 L37 51 L72 73 L105 53 L145 76 L183 55 L220 77 L260 51 L300 76 L342 49 L383 74 L420 53 L455 73 L480 58 V110 H0Z" fill="#66AFE8" opacity=".38"/>
+    <path d="M0 88 C45 72 78 78 116 91 C153 103 189 81 225 91 C263 102 296 79 333 88 C375 99 414 77 480 66 V118 H0Z" fill="#1971C9" opacity=".55"/>
+    <g fill="#0759B5" opacity=".25">
+      <rect x="280" y="69" width="9" height="37"/><rect x="293" y="59" width="12" height="47"/>
+      <rect x="310" y="72" width="9" height="34"/><rect x="324" y="49" width="14" height="57"/>
+      <rect x="343" y="64" width="11" height="42"/><rect x="358" y="56" width="14" height="50"/>
+      <rect x="378" y="68" width="10" height="38"/>
+    </g>
+    <g fill="#0755A9" opacity=".65">
+      <path d="M78 103 L85 87 L92 103Z"/><path d="M88 106 L96 84 L104 106Z"/>
+      <path d="M395 106 L403 84 L411 106Z"/><path d="M407 108 L416 80 L425 108Z"/>
+    </g>
+    <path d="M0 96 C60 87 110 104 163 99 C220 94 270 105 322 99 C375 93 430 104 480 91 V140 H0Z" fill="url(#bannerLand)"/>
+    <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
+    <path d="M63 94 C82 94 91 79 108 79 C128 79 139 96 159 96 C179 96 192 77 212 77 C232 77 241 97 263 97 C284 97 295 79 314 79 C334 79 344 96 365 96 C383 96 395 84 414 87 C424 89 430 92 438 94" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 5" opacity=".95"/>
+    <g transform="translate(108 79)">
+      <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
+      <circle cy="-19" r="3" fill="#2BB0FD"/>
+      <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
+      <circle r="1.7" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(159 96)">
+      <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
+      <circle cy="-19" r="3" fill="#2BB0FD"/>
+      <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
+      <circle r="1.7" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(314 79)">
+      <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
+      <circle cy="-19" r="3" fill="#2BB0FD"/>
+      <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
+      <circle r="1.7" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(365 96)">
+      <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
+      <circle cy="-19" r="3" fill="#2BB0FD"/>
+      <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
+      <circle r="1.7" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(3 42)" filter="url(#bannerShadow)">
+      <rect x="0" y="31" width="58" height="62" rx="2" fill="#013A5B"/>
+      <path d="M-4 31 L29 10 L62 31 Z" fill="#01273D"/>
+      <ellipse cx="17" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
+      <rect x="9" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
+      <ellipse cx="17" cy="63" rx="8" ry="3" fill="#2278B9"/>
+      <ellipse cx="39" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
+      <rect x="31" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
+      <ellipse cx="39" cy="63" rx="8" ry="3" fill="#2278B9"/>
+      <rect x="46" y="9" width="6" height="23" fill="#064083"/>
+      <rect x="3" y="45" width="52" height="14" rx="2" fill="#05316B"/>
+      <text x="29" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="5.1" font-weight="800" fill="#FFFFFF">MICROBREWERY</text>
+      <rect x="23" y="67" width="12" height="26" rx="2" fill="#6BC5EC"/>
+      <rect x="5" y="68" width="11" height="13" fill="#74CDF2"/>
+      <rect x="42" y="68" width="11" height="13" fill="#74CDF2"/>
+      <g transform="translate(5 77)">
+        <ellipse cx="5" cy="2" rx="5" ry="2" fill="#D4EFF9"/>
+        <rect x="0" y="2" width="10" height="12" rx="3" fill="#8ACBE8"/>
+        <ellipse cx="5" cy="14" rx="5" ry="2" fill="#5CA1CC"/>
       </g>
-      <path d="M0 72 L37 51 L72 73 L105 53 L145 76 L183 55 L220 77 L260 51 L300 76 L342 49 L383 74 L420 53 L455 73 L480 58 V110 H0Z" fill="#66AFE8" opacity=".38"/>
-      <path d="M0 88 C45 72 78 78 116 91 C153 103 189 81 225 91 C263 102 296 79 333 88 C375 99 414 77 480 66 V118 H0Z" fill="#1971C9" opacity=".55"/>
-      <g fill="#0759B5" opacity=".25">
-        <rect x="280" y="69" width="9" height="37"/><rect x="293" y="59" width="12" height="47"/>
-        <rect x="310" y="72" width="9" height="34"/><rect x="324" y="49" width="14" height="57"/>
-        <rect x="343" y="64" width="11" height="42"/><rect x="358" y="56" width="14" height="50"/>
-        <rect x="378" y="68" width="10" height="38"/>
+    </g>
+    </g>
+    <circle cx="240" cy="34" r="42" fill="url(#bannerGlow)"/>
+    <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
+    <g transform="translate(381 58)" filter="url(#bannerShadow)">
+      <rect x="0" y="12" width="32" height="29" rx="2" fill="#01476F"/>
+      <g transform="translate(5 7)">
+        <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
+        <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
+        <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
       </g>
-      <g fill="#0755A9" opacity=".65">
-        <path d="M78 103 L85 87 L92 103Z"/><path d="M88 106 L96 84 L104 106Z"/>
-        <path d="M395 106 L403 84 L411 106Z"/><path d="M407 108 L416 80 L425 108Z"/>
+      <g transform="translate(17 7)">
+        <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
+        <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
+        <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
       </g>
-      <path d="M0 96 C60 87 110 104 163 99 C220 94 270 105 322 99 C375 93 430 104 480 91 V140 H0Z" fill="url(#bannerLand)"/>
-      <!-- Foreground scene (route, pins, brewery) compressed 25% horizontally
-           around the center, so brewery/bar stay visible on phones narrower
-           than this design's native 480px - preserveAspectRatio="slice"
-           crops from the edges on narrower screens, and these elements sat
-           too close to the extreme edges to survive that safely. -->
-      <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
-      <path d="M63 94 C82 94 91 79 108 79 C128 79 139 96 159 96 C179 96 192 77 212 77 C232 77 241 97 263 97 C284 97 295 79 314 79 C334 79 344 96 365 96 C383 96 395 84 414 87 C424 89 430 92 438 94" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-dasharray="6 5" opacity=".95"/>
-      <!-- Location pins along the route, brewery-to-bar - pin shape kept, number labels removed per request -->
-      <g transform="translate(108 79)">
-        <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
-        <circle cy="-19" r="3" fill="#2BB0FD"/>
-        <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
-        <circle r="1.7" fill="#FFFFFF"/>
-      </g>
-      <g transform="translate(159 96)">
-        <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
-        <circle cy="-19" r="3" fill="#2BB0FD"/>
-        <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
-        <circle r="1.7" fill="#FFFFFF"/>
-      </g>
-      <g transform="translate(314 79)">
-        <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
-        <circle cy="-19" r="3" fill="#2BB0FD"/>
-        <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
-        <circle r="1.7" fill="#FFFFFF"/>
-      </g>
-      <g transform="translate(365 96)">
-        <path d="M0 -30 C-7 -30 -11 -25 -11 -19 C-11 -11 0 -1 0 -1 C0 -1 11 -11 11 -19 C11 -25 7 -30 0 -30Z" fill="#FFFFFF"/>
-        <circle cy="-19" r="3" fill="#2BB0FD"/>
-        <circle r="5" fill="#2BB0FD" stroke="#FFFFFF" stroke-width="2"/>
-        <circle r="1.7" fill="#FFFFFF"/>
-      </g>
-      <g transform="translate(3 42)" filter="url(#bannerShadow)">
-        <rect x="0" y="31" width="58" height="62" rx="2" fill="#013A5B"/>
-        <path d="M-4 31 L29 10 L62 31 Z" fill="#01273D"/>
-        <ellipse cx="17" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
-        <rect x="9" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
-        <ellipse cx="17" cy="63" rx="8" ry="3" fill="#2278B9"/>
-        <ellipse cx="39" cy="29" rx="8" ry="3" fill="#C3EAF9"/>
-        <rect x="31" y="29" width="16" height="34" rx="7" fill="#3A9AD7"/>
-        <ellipse cx="39" cy="63" rx="8" ry="3" fill="#2278B9"/>
-        <rect x="46" y="9" width="6" height="23" fill="#064083"/>
-        <rect x="3" y="45" width="52" height="14" rx="2" fill="#05316B"/>
-        <text x="29" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="5.1" font-weight="800" fill="#FFFFFF">MICROBREWERY</text>
-        <rect x="23" y="67" width="12" height="26" rx="2" fill="#6BC5EC"/>
-        <rect x="5" y="68" width="11" height="13" fill="#74CDF2"/>
-        <rect x="42" y="68" width="11" height="13" fill="#74CDF2"/>
-        <g transform="translate(5 77)">
-          <ellipse cx="5" cy="2" rx="5" ry="2" fill="#D4EFF9"/>
-          <rect x="0" y="2" width="10" height="12" rx="3" fill="#8ACBE8"/>
-          <ellipse cx="5" cy="14" rx="5" ry="2" fill="#5CA1CC"/>
-        </g>
-      </g>
-      </g>
-      <!-- Logo: soft glow only, no separate hard circle behind it - the
-           uploaded logo image already has its own solid white circular
-           background baked in (no transparency), so a second circle here
-           just created a visible double-ring. Left OUTSIDE the compression
-           transform above so it stays perfectly circular, not stretched. -->
-      <circle cx="240" cy="34" r="42" fill="url(#bannerGlow)"/>
-      <g transform="translate(240,0) scale(0.75,1) translate(-240,0)">
-      <g transform="translate(381 58)" filter="url(#bannerShadow)">
-        <rect x="0" y="12" width="32" height="29" rx="2" fill="#01476F"/>
-        <g transform="translate(5 7)">
-          <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
-          <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
-          <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
-        </g>
-        <g transform="translate(17 7)">
-          <ellipse cx="6" cy="2" rx="6" ry="2" fill="#D5EFF9"/>
-          <rect x="0" y="2" width="12" height="15" rx="4" fill="#82C9E9"/>
-          <ellipse cx="6" cy="17" rx="6" ry="2" fill="#559DCA"/>
-        </g>
-        <path d="M32 20 H42 L51 28 V42 H32Z" fill="#0287D4"/>
-        <path d="M35 23 H41 L47 29 H35Z" fill="#A4E0F7"/>
-        <circle cx="9" cy="43" r="6" fill="#013A5B"/><circle cx="41" cy="43" r="6" fill="#013A5B"/>
-        <circle cx="9" cy="43" r="2.5" fill="#80CDEE"/><circle cx="41" cy="43" r="2.5" fill="#80CDEE"/>
-      </g>
-      <g transform="translate(435 43)" filter="url(#bannerShadow)">
-        <rect x="0" y="24" width="45" height="67" rx="2" fill="#013A5B"/>
-        <path d="M-5 24 L22 8 L50 24 Z" fill="#01273D"/>
-        <rect x="4" y="30" width="37" height="17" rx="2" fill="#062F67"/>
-        <text x="22.5" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="8" font-weight="900" letter-spacing=".8" fill="#FFD84D">BAR</text>
-        <path d="M2 48 H43 L40 55 H5Z" fill="#FFFFFF"/>
-        <rect x="5" y="58" width="10" height="18" fill="#74C9F0"/>
-        <rect x="18" y="58" width="10" height="18" fill="#74C9F0"/>
-        <rect x="31" y="58" width="9" height="18" fill="#74C9F0"/>
-        <rect x="17" y="77" width="12" height="14" fill="#07519B"/>
-      </g>
-      </g>
-      <path d="M0 115 C70 122 145 130 225 128 C315 126 405 112 480 101 V140 H0Z" fill="#FFFFFF"/>
-    </svg>
-    <img class="banner-logo" src="/icon-192.png" alt="Only K logo">
-  </div>
+      <path d="M32 20 H42 L51 28 V42 H32Z" fill="#0287D4"/>
+      <path d="M35 23 H41 L47 29 H35Z" fill="#A4E0F7"/>
+      <circle cx="9" cy="43" r="6" fill="#013A5B"/><circle cx="41" cy="43" r="6" fill="#013A5B"/>
+      <circle cx="9" cy="43" r="2.5" fill="#80CDEE"/><circle cx="41" cy="43" r="2.5" fill="#80CDEE"/>
+    </g>
+    <g transform="translate(435 43)" filter="url(#bannerShadow)">
+      <rect x="0" y="24" width="45" height="67" rx="2" fill="#013A5B"/>
+      <path d="M-5 24 L22 8 L50 24 Z" fill="#01273D"/>
+      <rect x="4" y="30" width="37" height="17" rx="2" fill="#062F67"/>
+      <text x="22.5" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="8" font-weight="900" letter-spacing=".8" fill="#FFD84D">BAR</text>
+      <path d="M2 48 H43 L40 55 H5Z" fill="#FFFFFF"/>
+      <rect x="5" y="58" width="10" height="18" fill="#74C9F0"/>
+      <rect x="18" y="58" width="10" height="18" fill="#74C9F0"/>
+      <rect x="31" y="58" width="9" height="18" fill="#74C9F0"/>
+      <rect x="17" y="77" width="12" height="14" fill="#07519B"/>
+    </g>
+    </g>
+    <path d="M0 115 C70 122 145 130 225 128 C315 126 405 112 480 101 V140 H0Z" fill="#FFFFFF"/>
+  </svg>
+  <img class="banner-logo" src="/icon-192.png" alt="Only K logo">
+</div>
 
-  <div id="offlineBanner" class="offline-banner" style="display:none">
-    &#128246; No connection &mdash; you can still log an action below; it'll be saved on this device and sent automatically once you're back online.
-  </div>
-  <div id="pendingBanner" class="pending-banner" style="display:none"></div>
-
-  <div id="loginBlock" class="card">
-    <h2>Who are you?</h2>
+<div id="loginBlock">
+  <h2>Log in</h2>
+  <div class="card">
     <label>User</label>
     <select id="userSelect"></select>
     <label>Password</label>
-    <input id="password" type="password" placeholder="Password">
+    <input type="password" id="password">
     <button onclick="login()">Log in</button>
     <div id="loginError" class="error"></div>
   </div>
+</div>
 
-  <div id="appBlock" style="display:none">
-    <div class="app-header">
-      <div class="header-row">
-        <span class="user-chip"><span id="whoami"></span><span class="alert-count-badge" id="alertCountBadge"></span></span>
-        <button class="logout-btn" onclick="logout();return false;">Log out</button>
-      </div>
-    </div>
-
-    <div class="card" id="nowNextCard" style="display:none">
-      <div id="nowNextContent"></div>
-    </div>
-
-    <div class="card" id="formCard"></div>
-
-    <div id="kegDestinationLine" class="destination-card" style="display:none">
-      <div class="dest-header-label">Customer</div>
-      <div class="dest-row">
-        <div class="dest-col-left">
-          <div class="detail-icon dest-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.32" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-          <div class="dest-text-block">
-            <div class="dest-name" id="kegDestination"></div>
-            <div class="dest-address" id="kegDestinationAddress"></div>
-          </div>
-        </div>
-        <a class="dest-col-right" id="kegDestinationPhoneLink" style="text-decoration:none;color:inherit" aria-label="Call customer">
-          <div class="detail-icon dest-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.32" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-            </svg>
-          </div>
-          <!-- Number itself isn't shown visually (per request) - kept
-               in the DOM only for screen readers via this visually-
-               hidden span, so the actual digits are still announced to
-               anyone relying on one. -->
-          <span class="dest-phone-hidden" id="kegDestinationPhone"></span>
-        </a>
-      </div>
-    </div>
-
-    <div class="card" id="fillDetailsCard" style="display:none">
-      <div id="fillDetailsContent"></div>
-    </div>
-
-    <div class="card" id="historyCard" style="display:none">
-      <h3 style="margin-top:0">History</h3>
-      <div id="history"></div>
-    </div>
-
-    <div class="card" id="revertCard" style="display:none">
-      <h3 style="margin-top:0">Correct a mistake</h3>
-      <p class="muted" id="revertDesc"></p>
-      <button class="btn-danger-outline" onclick="revertLastAction()">Undo last action</button>
-    </div>
-
-    <div id="homeScreenBlock" class="card" style="display:none">
-      <h2 id="homeGreeting" style="margin-top:0"></h2>
-      <p class="muted">Scan a keg's QR code to get started.</p>
-    </div>
-    <div id="moverTabBar" class="tab-bar" style="display:none">
-      <button class="tab-btn active" id="moverTabBtn-alerts" onclick="showMoverTab('alerts')">Alerts</button>
-      <button class="tab-btn" id="moverTabBtn-inventory" onclick="showMoverTab('inventory')">Inventory</button>
-    </div>
-    <div id="moverAlertsOverview"></div>
-    <div id="dashboardLists"></div>
+<div id="appBlock" style="display:none">
+  <div class="app-header">
+    <span class="user-chip" id="whoami"></span>
+    <button class="secondary" onclick="logout()">Log out</button>
   </div>
 
-  <button id="scanFab" class="scan-fab" onclick="openScanner()" style="display:none" aria-label="Scan a keg's QR code">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <!-- viewfinder corner brackets -->
-      <path d="M3 7V4a1 1 0 0 1 1-1h3"/>
-      <path d="M17 3h3a1 1 0 0 1 1 1v3"/>
-      <path d="M21 17v3a1 1 0 0 1-1 1h-3"/>
-      <path d="M7 21H4a1 1 0 0 1-1-1v-3"/>
-      <!-- small QR-pattern grid inside, so this reads as "QR scan"
-           specifically rather than a generic camera viewfinder -->
-      <rect x="8" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-      <rect x="13" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-      <rect x="8" y="13" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-      <rect x="13" y="13" width="3" height="3" rx="0.5" fill="currentColor" stroke="none" opacity="0.45"/>
-    </svg>
-  </button>
-
-  <div id="scannerOverlay" class="scanner-overlay">
-    <video id="scannerVideo" autoplay playsinline muted></video>
-    <canvas id="scannerCanvas" style="display:none"></canvas>
-    <div id="scannerMsg" class="scanner-msg"></div>
-    <button onclick="closeScanner()">Cancel</button>
+  <div id="noKegBlock" class="card" style="display:none">
+    <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
   </div>
+  <div id="dashboardBlock"></div>
 
-<script src="/offline-queue.js"></script>
+  <div id="kegBlock" style="display:none">
+    <h3 id="kegIdHeading"></h3>
+
+    <div class="card custody-card">
+      <div class="muted">Current custody</div>
+      <div class="custody-icon-wrap" id="custodyIconWrap"></div>
+      <div class="custody-location" id="custodyLocation"></div>
+      <div class="custody-sublocation" id="custodySublocation"></div>
+      <div class="custody-condition" id="custodyCondition"></div>
+      <div id="custodyCustomer" class="muted" style="margin-top:6px"></div>
+      <div id="custodyFillDetails" class="muted"></div>
+    </div>
+
+    <div id="pendingBannerWrap"></div>
+    <div id="confirmSection"></div>
+    <div id="actionsSection"></div>
+    <div id="actionFormSection"></div>
+  </div>
+</div>
+
 <script src="/device-id.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
-const kegId = new URLSearchParams(location.search).get('keg');
 let currentUser = null;
-let keg = null;
+let currentKeg = null;
+let availableTransitions = [];
+const kegId = new URLSearchParams(location.search).get('keg');
 
-// ---- Role -> form field config -------------------------------------------
-// This is the single place that drives "different roles fill different
-// fields" from the original requirement. Add a role/action and its fields
-// here; the form renders itself from this table.
-//
-// Fields marked `geo: true` get a "Use my current location" button next
-// to them (see useMyLocation() below), which fills the field with the
-// device's actual GPS coordinates via the browser's Geolocation API.
-// Still a plain text field underneath, so it can be corrected/typed
-// manually too (e.g. if GPS is unavailable or inaccurate indoors).
-//
-// Fields marked `requiredWhen: { field, equals, minLength? }` are only
-// mandatory when another field in the same form has a specific value -
-// e.g. damage notes are only required (and held to a minimum length) if
-// the inspection result is "fail". Enforced client-side in
-// checkRequiredFields() before submission.
-const ROLE_ACTIONS = {
-  washer: {
-    // Washer now has two possible actions depending on the keg's
-    // status - confirming they're physically holding an allotted keg
-    // (a simple scan, no real form), then separately washing it
-    // whenever they're actually ready to. This split is what lets
-    // someone scan through a whole batch of allotted kegs first,
-    // confirming custody of each, and come back to wash them one at a
-    // time later - see lib/stateMachine.js for the full reasoning.
-    receive_from_allotted: {
-      action: 'receive_washer', label: 'Confirm received',
-      fields: [],
-    },
-    wash_from_received: {
-      action: 'wash', label: 'Log wash',
-      fields: [
-        { name: 'wash_cycle', label: 'Wash cycle type', type: 'select', options: ['caustic', 'sanitize', 'rinse_only'] },
-        { name: 'inspection', label: 'Inspection result', type: 'select', options: ['pass', 'fail'] },
-        { name: 'notes', label: 'Damage notes (min 30 characters if failed)', type: 'text', requiredWhen: { field: 'inspection', equals: 'fail', minLength: 30 } },
-        // Washer's choice of where a successfully-washed keg goes next -
-        // straight to Filler, or back to Mover to hold as clean stock
-        // until Mover decides to release it. Ignored server-side if the
-        // inspection failed (routes to needs_repair regardless - see
-        // lib/stateMachine.js), so there's no need to hide/disable this
-        // field based on the inspection answer above.
-        { name: 'next_stop', label: 'Send to', type: 'select', options: ['filler', 'mover'], required: true },
-      ],
-    },
-  },
-  filler: {
-    // Mirrors washer above - confirm custody first, fill whenever ready.
-    receive_from_washed: {
-      action: 'receive_filler', label: 'Confirm received',
-      fields: [],
-    },
-    fill_from_received: {
-      action: 'fill', label: 'Log fill',
-      fixedDetails: { volume_liters: 20 }, // every fill is 20L - not a field the user fills in, just recorded automatically
-      fields: [
-        { name: 'product', label: 'Beer Name', type: 'product_select', required: true },
-        { name: 'batch_number', label: 'Batch Number', type: 'text', required: true },
-        { name: 'abv', label: 'ABV %', type: 'number', required: true },
-      ],
-    },
-  },
-  driver: {
-    // Driver's first involvement is confirming they're actually holding
-    // the keg Warehouse assigned to them (Warehouse assigning a
-    // destination dispatches the keg directly, but that's just a
-    // notification - see warehouse.assign_destination below and
-    // lib/stateMachine.js), then delivering it whenever they're
-    // actually en route/arrived, mirroring washer/filler above.
-    receive_from_dispatched: {
-      action: 'receive_driver', label: 'Confirm received',
-      fields: [],
-    },
-    delivered_from_received: {
-      action: 'deliver', label: 'Log delivery',
-      fields: [
-        { name: 'location', label: 'Delivery location (confirm)', type: 'text', geo: true, required: true },
-        { name: 'customer_signature', label: 'Customer name (signature)', type: 'text' },
-      ],
-    },
-    empty_from_delivered: {
-      action: 'mark_empty', label: 'Received from Customer',
-      fields: [],
-    },
-    // Driver's own "sender-side" scan for the handoff back to Mover -
-    // without this, driver-to-mover was the only handoff missing a
-    // scan from the sending party, jumping straight from Driver
-    // marking it empty to Mover being able to confirm receipt with no
-    // record of it actually reaching the warehouse in between.
-    return_to_warehouse_from_empty: {
-      action: 'return_to_warehouse', label: 'Return to Warehouse',
-      fields: [],
-    },
-  },
-  warehouse: {
-    // Mover (warehouse role) is the central hub of the whole cycle now -
-    // nine possible actions depending on the keg's status, each tied to
-    // exactly one status. Assigning a destination also dispatches the
-    // keg in one step - see lib/stateMachine.js's assign_destination
-    // rule. There's no separate generic "log location" step (removed -
-    // see getActionConfig() below for why): it was redundant right
-    // after receiving an empty keg (which already asks for a storage
-    // zone) and had no natural stopping point, so it kept re-appearing.
-    allot_washer: {
-      // Releases a returned/stored keg to Washer - Washer can't act on
-      // a keg still sitting in plain empty_returned (see
-      // lib/stateMachine.js), so this is what actually puts it in play.
-      action: 'allot_washer', label: 'Allot keg to Washer',
-      fields: [],
-    },
-    // Mirrors receive_washer/receive_filler/receive_driver - Mover
-    // confirms custody of a clean keg Washer sent their way, as its
-    // own step separate from deciding when to release it to Filler.
-    receive_from_clean_storage: {
-      action: 'receive_from_washer', label: 'Confirm received',
-      fields: [],
-    },
-    allot_filler: {
-      // Mirrors allot_washer for the clean-stock side of the cycle -
-      // releases a keg Washer sent to Mover instead of straight to
-      // Filler, on whatever schedule Mover chooses.
-      action: 'allot_filler', label: 'Allot keg to Filler',
-      fields: [],
-    },
-    // Mirrors the above - Mover confirms custody of a completed fill
-    // from Filler, as its own step separate from actually dispatching it.
-    receive_from_filled: {
-      action: 'receive_from_filler', label: 'Confirm received',
-      fields: [],
-    },
-    assign_destination: {
-      action: 'assign_destination', label: 'Assign destination & dispatch',
-      fields: [
-        { name: 'customer_id', label: 'Delivery destination (customer)', type: 'customer_select', required: true },
-      ],
-    },
-    // Mirrors receive_washer/receive_filler/receive_driver above -
-    // Mover confirms they're physically holding the keg Driver brought
-    // back, as its own step separate from deciding what happens to it
-    // next (see receive_from_received below).
-    receive_from_empty_at_customer: {
-      action: 'receive_from_driver', label: 'Confirm received',
-      fields: [],
-    },
-    receive_from_received: {
-      action: 'receive_empty', label: 'Receive empty keg back into warehouse',
-      fields: [
-        { name: 'location', label: 'Storage zone', type: 'text', geo: true, required: true },
-        // Mover's choice, now made once they've actually confirmed
-        // receipt - Uncleaned storage (default) or straight to Washer,
-        // skipping storage. Mirrors Washer's own "Send to" choice on
-        // the wash form.
-        { name: 'next_stop', label: 'Send to', type: 'select', options: ['uncleaned_storage', 'washer'], required: true },
-      ],
-    },
-    mark_repaired: {
-      // A failed wash inspection or a driver's report_damage both route
-      // the keg here instead of 'washed'/'dispatched' (see
-      // lib/stateMachine.js) - this is what lets someone confirm it's
-      // actually fixed before it re-enters the normal cycle, rather
-      // than a failed inspection or a damage report having no real
-      // consequence. Mover first classifies what the damaged keg
-      // actually was (still had product in it, or already empty) -
-      // this matters for anything downstream that cares about product
-      // loss, and "Empty" additionally asks why, since an empty
-      // damaged keg is more likely to need an actual explanation
-      // (e.g. what happened to it) than one that still had product.
-      action: 'mark_repaired', label: 'Mark keg repaired - ready for wash',
-      fields: [
-        { name: 'condition', label: 'Was the keg filled or empty when damaged?', type: 'select', options: ['filled', 'empty'], required: true },
-        { name: 'reason', label: 'Reason (why was it empty?)', type: 'text', requiredWhen: { field: 'condition', equals: 'empty', minLength: 10 } },
-        { name: 'notes', label: 'Repair notes (optional)', type: 'text' },
-      ],
-    },
-  },
-};
+// Uses the app's uploaded SVG icon files (public/icons/) - has both
+// 'mover' and 'warehouse' as distinct location values (unlike the
+// prior version of this cycle, which only ever had a single
+// 'warehouse' role), so both map to the same 'mover' icon file,
+// matching entityRoleMapping.js's own reasoning: Mover is the person
+// who physically operates on Warehouse's behalf, so the same icon
+// representing that person fits both location values.
+const LOCATION_ICON_FILE = { washer: 'washer', filler: 'filler', driver: 'driver', mover: 'mover', warehouse: 'mover' };
 
-// "Now" and "Next" show WHO (or, for a keg that's left staff hands
-// entirely, WHAT) currently has the keg, not the status text. "next"
-// reflects the real role-handoff cycle: Washer -> Filler -> Mover ->
-// Driver -> Mover -> Washer. Driver owns two consecutive statuses
-// (dispatched, delivered) before handing off, so both point to the
-// same next role (Mover) rather than "next" flipping mid-Driver's-own-
-// phase. delivered/empty_at_customer show "now: customer" rather than
-// attributing the keg to whichever staff role acts on it next - during
-// those two statuses the keg is genuinely with the customer, not with
-// any staff member, and showing a role there would be misleading about
-// where the keg physically is.
-const STATUS_ROLE_FLOW = {
-  // Possession-based: "now" shows whoever last actually CONFIRMED
-  // holding the keg (via a receive_* action) - not whoever's merely
-  // been notified/allotted it. Until the receiving party scans to
-  // confirm, the PREVIOUS holder still shows in "now", with
-  // pending:true marking that a handoff is awaiting confirmation.
-  // Mover is the central hub: allots returned kegs to Washer, allots
-  // clean-stored kegs to Filler, assigns dispatch to Driver, and
-  // receives kegs back at the end - see lib/stateMachine.js for the
-  // full rationale behind each status.
-  // These 4 statuses all mean the same thing: the keg is confirmed
-  // sitting with Mover, in storage, not yet allotted anywhere - a
-  // genuinely different situation from an active handoff-in-progress
-  // (which is what "now: warehouse, next: someone else" would normally
-  // imply). "now: in_storage" is a display-only pseudo-value (see
-  // roleIcon()/roleLabel() below, same pattern as the existing
-  // 'customer' pseudo-role) rather than a real system role - "next"
-  // is Mover themselves, since the very next thing that happens is
-  // Mover's own allotment decision, not some other role receiving it
-  // (that's a separate, later step).
-  empty_returned:        { now: 'in_storage', next: 'warehouse', pending: false },
-  allotted_washer:       { now: 'warehouse', next: 'washer',    pending: true },
-  received_washer:       { now: 'washer',    next: 'filler',    pending: false },
-  washed:                { now: 'washer',    next: 'filler',    pending: true },
-  received_filler:       { now: 'filler',    next: 'warehouse', pending: false },
-  clean_storage:         { now: 'washer',    next: 'warehouse', pending: true },
-  received_from_washer:  { now: 'in_storage', next: 'warehouse', pending: false },
-  filled:                { now: 'filler',    next: 'warehouse', pending: true },
-  received_from_filler:  { now: 'in_storage', next: 'warehouse', pending: false },
-  dispatched:            { now: 'warehouse', next: 'driver',    pending: true },
-  received_driver:       { now: 'driver',    next: 'customer',  pending: false },
-  // Once delivered, the keg's physical possession genuinely passes to
-  // the customer - Driver isn't holding it anymore. Next is Driver
-  // (not Warehouse/Mover directly) since Driver is who actually comes
-  // back to collect it - the customer never hands off straight to Mover.
-  delivered:             { now: 'customer',  next: 'driver',    pending: false },
-  // Driver's own "Received from Customer" action (mark_empty) already
-  // IS the confirmation of them taking possession back from the
-  // customer - there's no separate receive step for that specific
-  // handoff (the customer isn't an app user who could scan to hand it
-  // off) - so this shows pending:false. Driver still has one more scan
-  // of their own before Mover's side of the handoff even starts - see
-  // returned_to_warehouse below.
-  empty_at_customer:     { now: 'driver',    next: 'warehouse', pending: false },
-  // Driver has scanned to confirm they've brought the keg to the
-  // warehouse (their own "sender-side" scan), but Mover hasn't yet
-  // confirmed receiving it - genuinely pending now, unlike
-  // empty_at_customer above.
-  returned_to_warehouse: { now: 'driver',    next: 'warehouse', pending: true },
-  // Same "In Storage" treatment as empty_returned/received_from_washer/
-  // received_from_filler above - Mover has confirmed receiving the
-  // returned keg, but hasn't yet decided where it goes (Uncleaned
-  // storage vs. straight to Washer - see lib/stateMachine.js's
-  // receive_empty), so this is genuinely storage, not an active handoff.
-  received_from_driver:  { now: 'in_storage', next: 'warehouse', pending: false },
-  needs_repair:          { now: 'warehouse', next: 'washer',    pending: false },
-};
-// Display-only rename: the backend role value stays 'warehouse'
-// everywhere (database, API, permissions, all unchanged) - this only
-// changes what text a user actually sees for that role, consistently
-// across every place a role name is shown.
-function roleLabel(role) {
-  if (!role) return role;
-  if (role === 'in_storage') return 'In Storage';
-  const label = role === 'warehouse' ? 'Mover' : role;
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-// Same display-only rename pattern as roleLabel above, for a status
-// value instead of a role - the backend status value stays
-// 'empty_at_customer' everywhere (database, state machine, alerts, all
-// unchanged), this only changes the text shown for it, since the keg
-// is now understood to be with the Driver on the way back rather than
-// literally sitting at the customer's premises the whole time.
-function statusLabel(status) {
-  if (!status) return status;
-  if (status === 'empty_at_customer') return 'pending at driver';
-  return status.replace(/_/g, ' ');
-}
-
-// Role icon images, one file per role - real uploaded SVG vector
-// artwork (not raster PNGs, not hand-drawn) with pre-made blue and
-// green variants baked in by the source designer. 'warehouse' maps to
-// the Mover artwork/label, matching the display-only Warehouse->Mover
-// rename elsewhere in the app.
-const ROLE_ICON_FILE = { washer: 'washer', filler: 'filler', driver: 'driver', warehouse: 'mover' };
-function roleIcon(role, variant) {
-  if (role === 'in_storage') {
-    // A box/package shape - this is a state (sitting in storage), not
-    // a person or role, so it gets its own icon rather than reusing
-    // any role's - same circle-background treatment as the other
-    // pseudo-role ('customer') below, for consistent visual weight.
-    const bg = variant === 'green' ? '#C7EDC7' : '#BBDCFC';
-    const fg = variant === 'green' ? '#1B5E20' : '#2699E6';
-    return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="${bg}"/><g transform="translate(14,15)" stroke="${fg}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M14 0L28 6.5V19.5L14 26L0 19.5V6.5Z"/><path d="M0 6.5L14 13L28 6.5"/><path d="M14 13V26"/></g></svg>`;
+function locationIcon(location) {
+  if (location === 'customer') {
+    // Not a role with an uploaded icon file - a location pin drawn
+    // inline instead, same shape used for the Destination card
+    // elsewhere in the app, so "with the customer" reads as a place,
+    // not a person.
+    return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="#C7EDC7"/><g transform="translate(14,14)" stroke="#1B5E20" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></g></svg>`;
   }
-  if (role === 'customer') {
-    // Not a system role, so there's no uploaded icon file for it - a
-    // location pin drawn inline instead, matching the same shape used
-    // for the Destination card's icon elsewhere, so a keg "with the
-    // customer" reads as a place, not a person, consistent with how
-    // the rest of the app represents "where this keg physically is".
-    // Includes its own circle background (the uploaded role icons all
-    // have one baked in) so it carries the same visual weight instead
-    // of looking thin next to a real role icon in the same row.
-    const bg = variant === 'green' ? '#C7EDC7' : '#BBDCFC';
-    const fg = variant === 'green' ? '#1B5E20' : '#2699E6';
-    return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="${bg}"/><g transform="translate(14,14)" stroke="${fg}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></g></svg>`;
-  }
-  const file = ROLE_ICON_FILE[role];
+  const file = LOCATION_ICON_FILE[location];
   if (!file) return '';
-  const src = variant === 'green' ? `/icons/${file}-green.svg` : `/icons/${file}.svg`;
-  return `<img src="${src}" width="56" height="56" alt="">`;
+  return `<img src="/icons/${file}-green.svg" width="56" height="56" alt="">`;
 }
 
 async function init() {
-  // If a session cookie is already valid (e.g. page refresh), skip the
-  // login screen entirely.
   let me = null;
   try {
-    const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+    const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
     me = await meRes.json();
   } catch (err) {
-    // No connectivity and nothing cached yet on this device - the very
-    // first visit has to happen online (to log in and cache the shell +
-    // this keg at least once). After that, offline works.
-    document.getElementById('loginBlock').innerHTML =
-      '<p class="error">No connection, and this device hasn\'t logged in here before. Connect once to log in - after that this page works offline.</p>';
+    document.getElementById('loginBlock').innerHTML = '<p class="error">No connection - connect once to log in.</p>';
     return;
   }
+  if (me) { currentUser = me; showApp(); return; }
 
-  if (me) {
-    currentUser = me;
-    showApp();
-    return;
-  }
-
-  const res = await fetch('/api/auth/users');
+  const res = await fetch('/api/auth/users', { cache: 'no-store' });
   const users = await res.json();
   document.getElementById('userSelect').innerHTML =
-    users.map(u => `<option value="${u.id}">${u.name} (${roleLabel(u.role)})</option>`).join('');
+    users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
 }
 
 async function login() {
@@ -791,14 +312,10 @@ async function login() {
   const password = document.getElementById('password').value;
   const res = await fetch('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', // required so the session cookie is stored/sent
+    credentials: 'include', cache: 'no-store',
     body: JSON.stringify({ userId, password, deviceId: DeviceId.get() }),
   });
   if (!res.ok) {
-    // Show the server's actual reason (wrong password, or now also a
-    // possible "device not approved" rejection - see lib/deviceAuth.js)
-    // instead of a fixed "Invalid password" that would be misleading for
-    // the device case.
     const data = await res.json().catch(() => ({}));
     document.getElementById('loginError').textContent = data.error || 'Invalid password';
     return;
@@ -808,1363 +325,315 @@ async function login() {
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', cache: 'no-store' });
   location.reload();
 }
 
 function showApp() {
-  // Admin lands here first on a fresh home-screen launch (the PWA's
-  // start_url always points to this page now - see manifest.json's
-  // fix a couple rounds back), but this page has no oversight
-  // functionality for Admin at all (no dashboard lists, no action
-  // forms - Admin is a pure observer, see lib/stateMachine.js) - their
-  // actual home is index.html's Kegs/Alerts/Reports/Customers/Devices
-  // tabs. Redirected here rather than just added to this page, mirroring
-  // the exact same pattern index.html already uses to send the four
-  // operational roles over to this page instead. Skipped when a keg is
-  // already in the URL (someone followed a direct link/scan while
-  // logged in as Admin) - that's a legitimate reason to stay here.
+  document.getElementById('loginBlock').style.display = 'none';
+  document.getElementById('appBlock').style.display = 'block';
+  document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
+
+  // Admin lands here first now that this page is the PWA's start_url,
+  // but has no oversight functionality here at all - a pure observer
+  // has nothing to act on, and the dashboard groups shown to
+  // operational roles don't mean much without any action to take from
+  // them. Redirected to index.html instead - skipped when a specific
+  // keg IS requested (a direct scan, or a Keg ID link clicked from
+  // Admin's own Kegs table), since that's a legitimate reason to stay here.
   if (currentUser.role === 'admin' && !kegId) {
     location.href = '/index.html';
     return;
   }
 
-  document.getElementById('loginBlock').style.display = 'none';
-  document.getElementById('appBlock').style.display = 'block';
-  document.getElementById('whoami').textContent = `${currentUser.name} (${roleLabel(currentUser.role)})`;
-  loadMyAlerts();
-
-  // The scan button is available to everyone logged in - it's just
-  // quick navigation to a different keg, not a permission-sensitive
-  // action, so no role restriction here (unlike most other features).
-  document.getElementById('scanFab').style.display = 'block';
-
-  // No keg in the URL - this page was opened directly (e.g. from an
-  // installed home-screen icon), not via a QR scan. Show a
-  // personalized landing screen instead of erroring out trying to
-  // fetch a keg that was never specified.
   if (!kegId) {
-    showHomeScreen();
+    document.getElementById('noKegBlock').style.display = 'block';
+    loadDashboard();
     return;
   }
-
+  document.getElementById('kegBlock').style.display = 'block';
   loadKeg();
 }
 
-function showHomeScreen() {
-  document.getElementById('nowNextCard').style.display = 'none';
-  document.getElementById('formCard').style.display = 'none';
-  document.getElementById('historyCard').style.display = 'none';
-  document.getElementById('fillDetailsCard').style.display = 'none';
-  // This was missing before - the Destination card (customer name,
-  // address, call button) was never hidden on return to the home
-  // screen, so it kept showing stale info from whatever keg was last
-  // viewed. Likely why completing an action could look like it hadn't
-  // actually done anything - the old customer details just sat there.
-  document.getElementById('kegDestinationLine').style.display = 'none';
-  document.getElementById('revertCard').style.display = 'none';
-  document.getElementById('homeScreenBlock').style.display = 'block';
+const DASHBOARD_GROUPS = [
+  { label: 'At Washer', match: (k) => k.current_location === 'washer' },
+  { label: 'At Filler', match: (k) => k.current_location === 'filler' },
+  { label: 'With Mover', match: (k) => k.current_location === 'mover' },
+  { label: 'Warehouse: Uncleaned Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'uncleaned' },
+  { label: 'Warehouse: Cleaned Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'cleaned' },
+  { label: 'Warehouse: Filled Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'filled' },
+  { label: 'Warehouse: Damaged Storage', match: (k) => k.current_location === 'warehouse' && k.warehouse_sublocation === 'damaged' },
+  { label: 'With Driver', match: (k) => k.current_location === 'driver' },
+  { label: 'With Customer', match: (k) => k.current_location === 'customer' },
+];
 
-  const hour = new Date().getHours();
-  const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const firstName = currentUser.name.split(' ')[0];
-  document.getElementById('homeGreeting').textContent = `${timeGreeting}, ${firstName}!`;
+async function loadDashboard() {
+  const el = document.getElementById('dashboardBlock');
+  const res = await fetch('/api/v2/kegs', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) { el.innerHTML = ''; return; }
+  const kegs = await res.json();
 
-  // Only Mover gets both an Alerts overview and a full Inventory
-  // breakdown - everyone else either sees just their own simple
-  // "Allotted to you" list (no alerts overview to tab against) or
-  // nothing at all (Admin/Manager have index.html for this). Tabs let
-  // Mover look at one or the other on purpose, rather than always
-  // scrolling past one to reach the other on a single continuous page.
-  const tabBar = document.getElementById('moverTabBar');
-  if (currentUser.role === 'warehouse') {
-    tabBar.style.display = 'flex';
-    showMoverTab('alerts'); // default tab on arriving at the home screen
-  } else {
-    tabBar.style.display = 'none';
-    document.getElementById('moverAlertsOverview').style.display = 'none';
-    document.getElementById('dashboardLists').style.display = 'block';
-  }
-
-  loadDashboardLists();
-  loadMoverAlertsOverview();
-}
-
-// Switches which of Mover's two home-screen sections is visible -
-// both are already loaded/populated by loadDashboardLists() and
-// loadMoverAlertsOverview() regardless of which tab is showing, so
-// switching tabs is instant and doesn't need a fresh fetch each time.
-function showMoverTab(name) {
-  document.getElementById('moverTabBtn-alerts').classList.toggle('active', name === 'alerts');
-  document.getElementById('moverTabBtn-inventory').classList.toggle('active', name === 'inventory');
-  document.getElementById('moverAlertsOverview').style.display = name === 'alerts' ? 'block' : 'none';
-  document.getElementById('dashboardLists').style.display = name === 'inventory' ? 'block' : 'none';
-}
-
-// One list per relevant status, showing the actual keg IDs currently
-// sitting there - this is what makes an allotment/handoff genuinely
-// actionable rather than invisible: without this, there's no way for
-// someone to know WHICH physical keg is theirs to act on until they
-// happen to scan it. Mover sees every stage since they're the hub for
-// almost every handoff; everyone else sees just their own turn.
-async function fetchKegListHtml(status, label) {
-  try {
-    const res = await fetch(`/api/kegs?status=${encodeURIComponent(status)}`, { credentials: 'include' });
-    if (!res.ok) return '';
-    const kegs = await res.json();
-    const itemsHtml = kegs.length
-      ? `<div class="dash-list-items">${kegs.map(k => `<span class="dash-list-item">${k.id}</span>`).join('')}</div>`
-      : `<div class="dash-list-empty">None right now.</div>`;
+  el.innerHTML = DASHBOARD_GROUPS.map((group) => {
+    const matched = kegs.filter(group.match);
+    const itemsHtml = matched.length
+      ? matched.map((k) => `<a class="dash-item${k.pending_handover_to ? ' pending' : ''}" href="/scan.html?keg=${k.id}">${k.id} \u2013 ${CONDITION_LABELS[k.current_condition] || k.current_condition}${k.pending_handover_to ? ', pending' : ''}</a>`).join('')
+      : '<div class="dash-empty">None right now.</div>';
     return `
-      <div class="dash-list-card">
-        <div class="dash-list-heading">${label} <span class="dash-list-count">${kegs.length}</span></div>
-        ${itemsHtml}
-      </div>
-    `;
-  } catch (err) {
-    return ''; // offline or fetch failed - skip this one list silently, same pattern loadMyAlerts already uses
-  }
-}
-
-async function loadDashboardLists() {
-  const container = document.getElementById('dashboardLists');
-  if (!container) return;
-
-  // Mover sees considerably more lists than anyone else (they're the
-  // hub for almost every handoff), so theirs are grouped into two
-  // collapsed <details> sections instead of shown flat - tap "Warehouse"
-  // or "In Transit" to expand. Everyone else only has 2-3 lists, which
-  // don't need grouping.
-  if (currentUser.role === 'warehouse') {
-    const warehouseGroup = await fetchGroupedListsHtml('Warehouse', [
-      ['empty_returned', 'Uncleaned'],
-      ['clean_storage', 'Cleaned'],
-      ['received_from_washer', 'Cleaned, received'],
-      ['filled', 'Filled'],
-      ['received_from_filler', 'Filled, received'],
-      ['needs_repair', 'Damaged'],
-    ]);
-    const transitGroup = await fetchGroupedListsHtml('In Transit', [
-      ['dispatched', 'To be delivered'],
-      ['delivered', 'At customer'],
-      ['empty_at_customer', 'With driver, returning'],
-      ['returned_to_warehouse', 'At warehouse, to be received'],
-      // Mover's own received-but-not-yet-routed stage, from Driver's
-      // handoff - see lib/stateMachine.js's receive_from_driver.
-      ['received_from_driver', 'Received, not yet routed'],
-    ]);
-    container.innerHTML = warehouseGroup + transitGroup;
-    return;
-  }
-
-  // Everyone else shows "Allotted" (notified, not yet received) and
-  // "Received" (confirmed custody, ready for the actual work) as
-  // separate lists - the whole point of this split, see
-  // lib/stateMachine.js: someone can scan through a batch of allotted
-  // kegs to move them all into "Received" first, then come back and do
-  // the actual wash/fill/deliver on each one at their own pace.
-  let statusLabels;
-  if (currentUser.role === 'washer') {
-    statusLabels = [
-      ['allotted_washer', 'Allotted to you'],
-      ['received_washer', 'Received, ready to wash'],
-    ];
-  } else if (currentUser.role === 'filler') {
-    statusLabels = [
-      ['washed', 'Allotted to you'],
-      ['received_filler', 'Received, ready to fill'],
-    ];
-  } else if (currentUser.role === 'driver') {
-    statusLabels = [
-      ['dispatched', 'Allotted to you'],
-      ['received_driver', 'Received, ready to deliver'],
-      ['delivered', 'To mark empty'],
-      ['empty_at_customer', 'To return to warehouse'],
-    ];
-  } else {
-    container.innerHTML = ''; // admin/manager have index.html for this kind of oversight instead
-    return;
-  }
-
-  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchKegListHtml(status, label)));
-  container.innerHTML = parts.join('');
-}
-
-// A collapsed <details>/<summary> section (native HTML, no extra JS
-// needed for expand/collapse) wrapping a few related lists together -
-// used for Mover's two groups above. The overall count badge on the
-// summary is the sum across every list inside, so the number is
-// visible even while the section itself is still collapsed.
-async function fetchGroupedListsHtml(groupLabel, statusLabels) {
-  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchNestedKegListHtml(status, label)));
-  const totalMatch = parts.join('').match(/dash-list-count">(\d+)</g) || [];
-  const total = totalMatch.reduce((sum, m) => sum + Number(m.match(/\d+/)[0]), 0);
-  return `
-    <details class="dash-group">
-      <summary class="dash-group-summary">${groupLabel} <span class="dash-list-count">${total}</span></summary>
-      <div class="dash-group-content">${parts.join('')}</div>
-    </details>
-  `;
-}
-
-// A variant of fetchKegListHtml() specifically for use inside the
-// grouped Warehouse/In Transit sections above - each sub-category
-// (Uncleaned, Cleaned, Filled, Damaged, etc.) gets its own nested
-// <details>, individually collapsible, rather than all showing at
-// once as soon as the outer group is opened. Kept separate from
-// fetchKegListHtml() itself rather than adding a flag to it, since
-// Washer/Filler/Driver's simpler single-list views (which call that
-// function directly, with no outer group to nest inside) are meant to
-// stay exactly as they are - always-visible, no accordion needed for
-// a single list.
-async function fetchNestedKegListHtml(status, label) {
-  try {
-    const res = await fetch(`/api/kegs?status=${encodeURIComponent(status)}`, { credentials: 'include' });
-    if (!res.ok) return '';
-    const kegs = await res.json();
-    const itemsHtml = kegs.length
-      ? `<div class="dash-list-items">${kegs.map(k => `<span class="dash-list-item">${k.id}</span>`).join('')}</div>`
-      : `<div class="dash-list-empty">None right now.</div>`;
-    return `
-      <details class="dash-group dash-subgroup">
-        <summary class="dash-group-summary dash-subgroup-summary">${label} <span class="dash-list-count">${kegs.length}</span></summary>
+      <details class="dash-group">
+        <summary class="dash-group-summary">${group.label} <span class="dash-count">${matched.length}</span></summary>
         <div class="dash-group-content">${itemsHtml}</div>
       </details>
     `;
-  } catch (err) {
-    return ''; // offline or fetch failed - skip this one list silently, same pattern loadMyAlerts already uses
-  }
-}
-
-async function loadMyAlerts() {
-  // Shows how many kegs are overdue for this person's role - just the
-  // count, as a small badge on the user chip (no bottom banner anymore,
-  // no keg IDs or links here). Showing individual IDs with a one-tap
-  // shortcut straight to the action form would make it too easy to log
-  // a wash/fill/dispatch without actually being physically at that keg
-  // to scan it - which defeats the point of QR-based verification in
-  // the first place. (Admin/Manager's alerts list on the admin page is
-  // different - they're not the ones performing these physical
-  // actions, so that list keeps its clickable keg IDs for oversight.)
-  try {
-    const res = await fetch('/api/alerts', { credentials: 'include' });
-    if (!res.ok) return;
-    const alerts = await res.json();
-    const mine = alerts.filter(a => a.role === currentUser.role);
-    const badge = document.getElementById('alertCountBadge');
-    if (mine.length > 0) {
-      badge.style.display = 'inline-flex';
-      badge.textContent = mine.length;
-    } else {
-      badge.style.display = 'none';
-    }
-  } catch (err) {
-    // Offline or alerts fetch failed - not critical, just skip the badge silently.
-  }
-}
-
-// Mover-only: every overdue keg company-wide (not just alerts for
-// Mover's own role, unlike the small badge everyone else gets - see
-// loadMyAlerts() below), grouped by pipeline stage rather than by role,
-// so Mover can see at a glance WHERE things are backing up: with
-// Washer/Filler, sitting in the warehouse waiting on Mover themselves,
-// or out in transit with Driver/at a customer. Keg IDs shown as plain
-// text, matching the dashboard lists' non-clickable treatment - same
-// reasoning as loadMyAlerts()'s comment below: a one-tap shortcut to
-// the action form would undercut the physical-scan requirement.
-const ALERT_STAGE_GROUPS = {
-  'At Washer/Filler': ['allotted_washer', 'received_washer', 'washed', 'received_filler'],
-  'At Warehouse': ['empty_returned', 'clean_storage', 'received_from_washer', 'filled', 'received_from_filler', 'received_from_driver', 'needs_repair'],
-  'In Transit': ['dispatched', 'received_driver', 'delivered', 'empty_at_customer', 'returned_to_warehouse'],
-};
-
-// Formats an overdue duration for display - plain hours below a day,
-// days (+ leftover hours) once it's been overdue that long, since
-// "127h overdue" is harder to read at a glance than "5d 7h overdue".
-function formatOverdueDuration(hours) {
-  const rounded = Math.round(hours);
-  if (rounded < 24) return `${rounded}h overdue`;
-  const days = Math.floor(rounded / 24);
-  const remHours = rounded % 24;
-  return remHours > 0 ? `${days}d ${remHours}h overdue` : `${days}d overdue`;
-}
-
-async function loadMoverAlertsOverview() {
-  const container = document.getElementById('moverAlertsOverview');
-  if (!container) return;
-  if (currentUser.role !== 'warehouse') { container.innerHTML = ''; return; }
-
-  try {
-    const res = await fetch('/api/alerts', { credentials: 'include' });
-    if (!res.ok) { container.innerHTML = ''; return; }
-    const alerts = await res.json();
-
-    const groupsHtml = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, statuses]) => {
-      const groupAlerts = alerts.filter((a) => statuses.includes(a.status));
-      const itemsHtml = groupAlerts.length
-        ? `<div class="dash-list-items">${groupAlerts.map((a) => `<span class="dash-list-item alert-item">${a.kegId} <span class="alert-item-label">${a.label} \u00b7 ${formatOverdueDuration(a.hoursOverdue)}</span></span>`).join('')}</div>`
-        : `<div class="dash-list-empty">Nothing overdue here.</div>`;
-      return `
-        <details class="dash-group">
-          <summary class="dash-group-summary">${groupLabel} <span class="dash-list-count">${groupAlerts.length}</span></summary>
-          <div class="dash-group-content">${itemsHtml}</div>
-        </details>
-      `;
-    }).join('');
-
-    container.innerHTML = `<h3 class="alerts-overview-heading">Alerts</h3>${groupsHtml}`;
-  } catch (err) {
-    container.innerHTML = ''; // offline or fetch failed - skip silently, same pattern as loadMyAlerts()
-  }
+  }).join('');
 }
 
 async function loadKeg() {
-  // A specific keg is loaded now (via QR scan or a dashboard list
-  // link) - clear any dashboard lists and Mover's Alerts overview left
-  // over from the home screen, so neither lingers below this keg's own
-  // card. Found while auditing the whole app for this exact class of
-  // bug (the Destination card had the identical issue a few rounds
-  // back) - moverAlertsOverview was added after this clearing block
-  // already existed and got missed at the time.
-  const dashEl = document.getElementById('dashboardLists');
-  if (dashEl) dashEl.innerHTML = '';
-  const alertsEl = document.getElementById('moverAlertsOverview');
-  if (alertsEl) alertsEl.innerHTML = '';
-
-  let res;
-  try {
-    // credentials: 'include' is required now - the backend
-    // (routes/kegs.js) decides whether to include manufacturing_number
-    // based on the logged-in session, so without sending the cookie,
-    // Admin/Manager would never see it either.
-    res = await fetch(`/api/kegs/${kegId}`, { credentials: 'include' });
-  } catch (err) {
-    // No connectivity at all - fall back to the last-known data for this
-    // keg, if we have any (i.e. this device has scanned it before).
-    const cached = OfflineQueue.getCachedKeg(kegId);
-    if (cached) {
-      keg = cached;
-      renderOfflineFallback();
-      return;
-    }
-    document.getElementById('formCard').innerHTML =
-      `<p class="error">No connection, and this keg hasn't been loaded on this device before, so there's nothing cached to show.</p>`;
-    return;
-  }
-
+  const res = await fetch(`/api/v2/kegs/${kegId}`, { credentials: 'include', cache: 'no-store' });
   if (!res.ok) {
-    document.getElementById('formCard').innerHTML = `<p class="error">Keg ${kegId} not found.</p>`;
+    document.getElementById('kegBlock').innerHTML = '<p class="error">Could not load this keg.</p>';
     return;
   }
-  keg = await res.json();
-  OfflineQueue.cacheKeg(keg); // keep a local copy for the next time there's no signal
-  renderNowNext();
-  updateDestinationLine();
-  await renderForm();
-  renderHistory();
-  updatePendingBanner();
+  const data = await res.json();
+  currentKeg = data.keg;
+  availableTransitions = data.availableTransitions;
+  renderKeg();
 }
 
-function renderOfflineFallback() {
-  renderNowNext();
-  updateDestinationLine();
-  renderForm();
+const LOCATION_LABELS = { customer: 'Customer', driver: 'Driver', mover: 'Mover', washer: 'Washer', filler: 'Filler', warehouse: 'Warehouse' };
+const SUBLOCATION_LABELS = { uncleaned: 'Uncleaned Storage', cleaned: 'Cleaned Storage', filled: 'Filled Storage', damaged: 'Damaged Storage' };
+const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned', filling: 'Filling', filled: 'Filled', to_be_delivered: 'To Be Delivered', delivered: 'Delivered', delivery_failed: 'Delivery Failed', damaged: 'Damaged' };
+const REASON_LABELS = { forgot_to_deliver: 'Forgot to Deliver', damaged: 'Damaged Item/Keg', customer_refused: 'Customer Refused to Accept', customer_unavailable: 'Customer Unavailable', shop_closed: 'Shop Closed', other: 'Other' };
 
-  // Fill Details is shown to everyone offline too (matches
-  // renderHistory() above) - History is still Admin/Manager only.
-  const isOversight = currentUser.role === 'admin' || currentUser.role === 'manager';
-  document.getElementById('historyCard').style.display = isOversight ? 'block' : 'none';
-  document.getElementById('fillDetailsCard').style.display = 'block';
-  if (isOversight) {
-    document.getElementById('history').innerHTML = '<p class="muted">Unavailable while offline.</p>';
-  }
-  document.getElementById('fillDetailsContent').innerHTML =
-    '<p class="muted">Unavailable while offline.</p>';
+function renderKeg() {
+  document.getElementById('kegIdHeading').textContent = currentKeg.id;
 
-  updatePendingBanner();
-}
+  // Current custody - a plain fact, never a prediction. See
+  // lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely".
+  document.getElementById('custodyIconWrap').innerHTML = locationIcon(currentKeg.current_location);
+  document.getElementById('custodyLocation').textContent = LOCATION_LABELS[currentKeg.current_location] || currentKeg.current_location;
+  document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
+    ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
+  document.getElementById('custodyCondition').textContent = CONDITION_LABELS[currentKeg.current_condition] || currentKeg.current_condition;
+  document.getElementById('custodyCustomer').textContent = currentKeg.current_customer_name
+    ? `Destination: ${currentKeg.current_customer_name}` : '';
+  document.getElementById('custodyFillDetails').textContent = currentKeg.current_product_name
+    ? `${currentKeg.current_product_name} \u00b7 Batch ${currentKeg.current_batch_number} \u00b7 ${currentKeg.current_abv}% ABV` : '';
 
-function updateDestinationLine() {
-  const line = document.getElementById('kegDestinationLine');
-  if (keg.destination) {
-    document.getElementById('kegDestination').textContent = keg.destination;
-    // Show the address AND phone too, not just the customer's name - a
-    // driver needs to know exactly where to go and who to call, not
-    // just who they're delivering to (this was confusing before: name
-    // alone doesn't tell you a location or how to reach someone).
-    const addressEl = document.getElementById('kegDestinationAddress');
-    addressEl.textContent = keg.destination_address ? keg.destination_address : '-';
-    const phoneEl = document.getElementById('kegDestinationPhone');
-    const phoneLink = document.getElementById('kegDestinationPhoneLink');
-    // The whole icon+number area is one tappable link now, not just
-    // the number text - tapping the icon calls just as well as tapping
-    // the digits.
-    if (keg.destination_phone) {
-      phoneLink.href = `tel:${keg.destination_phone.replace(/\s+/g, '')}`;
-      phoneEl.textContent = keg.destination_phone;
-    } else {
-      phoneLink.removeAttribute('href');
-      phoneEl.textContent = '-';
-    }
-    line.style.display = 'block';
+  const pendingWrap = document.getElementById('pendingBannerWrap');
+  if (currentKeg.pending_handover_to) {
+    pendingWrap.innerHTML = `<div class="pending-banner">Awaiting receipt by ${LOCATION_LABELS[currentKeg.pending_handover_to] || currentKeg.pending_handover_to}</div>`;
   } else {
-    line.style.display = 'none';
+    pendingWrap.innerHTML = '';
   }
+  renderConfirmSection();
+  renderAvailableActions();
 }
 
-// Single source of truth for "which role's config applies to which
-// status" - built once so getActionConfig() below doesn't need one
-// role-scoped branch per role (which would make a Manager bypass need
-// duplicating the same status list four times). Every entry here must
-// mirror lib/stateMachine.js's TRANSITIONS "from" states exactly - this
-// is what stops (say) a washer from even seeing the wash form while a
-// keg is already filled or dispatched, instead of only finding out
-// after submitting and getting rejected. See renderForm()'s handling
-// of a null return for the actual on-screen warning shown in that case.
-const STATUS_ACTION_MAP = {
-  // Washer: confirm custody of an allotted keg first, then (once
-  // that's done and the status has moved on) wash it whenever ready.
-  allotted_washer:       { role: 'washer',    cfg: () => ROLE_ACTIONS.washer.receive_from_allotted },
-  received_washer:       { role: 'washer',    cfg: () => ROLE_ACTIONS.washer.wash_from_received },
-  // Filler: mirrors washer above.
-  washed:                { role: 'filler',    cfg: () => ROLE_ACTIONS.filler.receive_from_washed },
-  received_filler:       { role: 'filler',    cfg: () => ROLE_ACTIONS.filler.fill_from_received },
-  // Driver: confirm custody once Warehouse has dispatched (Warehouse
-  // assigning a destination dispatches directly - no separate driver-
-  // initiated dispatch step), deliver whenever actually en route/
-  // arrived, then one more scan of their own - returning it to the
-  // warehouse - before Mover can confirm receipt.
-  dispatched:             { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.receive_from_dispatched },
-  received_driver:        { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.delivered_from_received },
-  delivered:              { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.empty_from_delivered },
-  empty_at_customer:      { role: 'driver',    cfg: () => ROLE_ACTIONS.driver.return_to_warehouse_from_empty },
-  // Mover (warehouse role): nine jobs, each tied to one specific
-  // status - allotting a keg to Washer, confirming custody of a clean
-  // keg Washer sent their way, allotting that clean-stored keg to
-  // Filler, confirming custody of a completed fill, assigning a
-  // destination (which also dispatches), confirming custody of an
-  // empty keg Driver brought back, deciding where that keg actually
-  // goes once received, and resolving a keg that failed wash
-  // inspection. Every other status belongs to a different role, so
-  // nothing more is offered here - this used to fall through to a
-  // generic "log location" step, which had no natural stopping point
-  // and re-appeared right after receiving an empty keg (redundant,
-  // since that already asks for a storage zone).
-  empty_returned:         { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.allot_washer },
-  clean_storage:          { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_clean_storage },
-  received_from_washer:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.allot_filler },
-  filled:                 { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_filled },
-  received_from_filler:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.assign_destination },
-  returned_to_warehouse:  { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_empty_at_customer },
-  received_from_driver:   { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.receive_from_received },
-  needs_repair:           { role: 'warehouse', cfg: () => ROLE_ACTIONS.warehouse.mark_repaired },
-};
-
-function getActionConfig() {
-  const entry = STATUS_ACTION_MAP[keg.status];
-  if (!entry) return null;
-  // Manager is elevated to perform ANY operational action on ANY keg,
-  // regardless of which role the status normally belongs to - matches
-  // the same bypass in lib/stateMachine.js's validateTransition.
-  // Everyone else (including Mover themselves) only sees the form when
-  // it's genuinely their own role's turn.
-  if (currentUser.role !== 'manager' && currentUser.role !== entry.role) return null;
-  return entry.cfg();
+const ENTITY_TO_DB_ROLE = { customer: 'driver', driver: 'driver', mover: 'warehouse', washer: 'washer', filler: 'filler', warehouse: 'warehouse' };
+function dbRoleCanActAsEntity(dbRole, entity) {
+  if (dbRole === 'manager') return true;
+  return ENTITY_TO_DB_ROLE[entity] === dbRole;
 }
 
-// Cached customer list, so switching between forms doesn't re-fetch every
-// time. Passed true to refetch after adding a new customer.
-let customersCache = null;
-async function fetchCustomers(forceRefresh) {
-  if (customersCache && !forceRefresh) return customersCache;
-  try {
-    const res = await fetch('/api/customers', { credentials: 'include' });
-    customersCache = res.ok ? await res.json() : (customersCache || []);
-  } catch (err) {
-    customersCache = customersCache || []; // offline - keep whatever we had, or empty
-  }
-  return customersCache;
-}
-
-let productsCache = null;
-async function fetchProducts(forceRefresh) {
-  if (productsCache && !forceRefresh) return productsCache;
-  try {
-    const res = await fetch('/api/products', { credentials: 'include' });
-    productsCache = res.ok ? await res.json() : (productsCache || []);
-  } catch (err) {
-    productsCache = productsCache || [];
-  }
-  return productsCache;
-}
-
-// When a beer is picked, auto-fill its typical ABV (still editable -
-// actual batches can vary slightly, this is just a helpful starting
-// point). Reads straight off the selected <option>'s data-abv attribute
-// rather than looking the product up by id - simpler, and consistent
-// with the dropdown submitting the beer's NAME as the value (not an id),
-// since that's what lib/reports.js's getFillStats() already expects in
-// details.product, and what any existing fill history already has.
-function onProductSelected(selectEl) {
-  const abvField = document.getElementById('f_abv');
-  const opt = selectEl.options[selectEl.selectedIndex];
-  const abv = opt ? opt.dataset.abv : '';
-  if (abvField && abv) abvField.value = abv;
-}
-
-function toggleAddCustomer() {
-  const box = document.getElementById('addCustomerBox');
-  if (!box) return;
-  // Checks the actual rendered display (whether it's hidden via the CSS
-  // class or a previous inline override), not just the inline style
-  // attribute directly - a plain `box.style.display === 'none'` check
-  // would be wrong now that hiding comes from the .inline-add-box CSS
-  // class rather than an inline style.
-  const isHidden = getComputedStyle(box).display === 'none';
-  box.style.display = isHidden ? 'block' : 'none';
-}
-
-function toggleAddProduct() {
-  const box = document.getElementById('addProductBox');
-  if (!box) return;
-  const isHidden = getComputedStyle(box).display === 'none';
-  box.style.display = isHidden ? 'block' : 'none';
-}
-
-async function addNewCustomer() {
-  const name = document.getElementById('newCustomerName').value.trim();
-  const address = document.getElementById('newCustomerAddress').value.trim();
-  const phone = document.getElementById('newCustomerPhone').value.trim();
-  const msg = document.getElementById('addCustomerMsg');
-  if (!name) {
-    msg.className = 'error';
-    msg.textContent = 'Customer name is required.';
+function renderConfirmSection() {
+  const el = document.getElementById('confirmSection');
+  if (!currentKeg.pending_handover_to || !dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
+    el.innerHTML = '';
     return;
   }
-  msg.className = 'muted';
-  msg.textContent = 'Adding...';
+  el.innerHTML = `<button onclick="submitConfirm()">Confirm receipt</button><div id="confirmMsg"></div>`;
+}
 
-  let res;
-  try {
-    res = await fetch('/api/customers', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ name, address, phone }),
-    });
-  } catch (err) {
-    msg.className = 'error';
-    msg.textContent = 'No connection - try again once online.';
+function renderAvailableActions() {
+  const el = document.getElementById('actionsSection');
+  document.getElementById('actionFormSection').innerHTML = '';
+  if (currentKeg.pending_handover_to) {
+    el.innerHTML = '';
     return;
   }
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    msg.className = 'error';
-    msg.textContent = data.error || 'Could not add customer.';
+  if (!availableTransitions.length) {
+    el.innerHTML = '<p class="muted">No actions available for your role on this keg right now.</p>';
     return;
   }
-
-  const newCustomer = await res.json();
-  await fetchCustomers(true); // refresh cache so the dropdown includes it
-  await renderForm(); // rebuild the form - new customer now in the list
-  const sel = document.getElementById('f_customer_id');
-  if (sel) sel.value = newCustomer.id; // pre-select the one just added
-}
-
-async function addNewProduct() {
-  const name = document.getElementById('newProductName').value.trim();
-  const abvRaw = document.getElementById('newProductAbv').value;
-  const msg = document.getElementById('addProductMsg');
-  if (!name) {
-    msg.className = 'error';
-    msg.textContent = 'Beer name is required.';
-    return;
-  }
-  msg.className = 'muted';
-  msg.textContent = 'Adding...';
-
-  let res;
-  try {
-    res = await fetch('/api/products', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ name, default_abv: abvRaw || null }),
-    });
-  } catch (err) {
-    msg.className = 'error';
-    msg.textContent = 'No connection - try again once online.';
-    return;
-  }
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    msg.className = 'error';
-    msg.textContent = data.error || 'Could not add beer.';
-    return;
-  }
-
-  const newProduct = await res.json();
-  await fetchProducts(true); // refresh cache so the dropdown includes it
-  await renderForm(); // rebuild the form - new beer now in the list
-  const sel = document.getElementById('f_product');
-  if (sel) { sel.value = newProduct.name; onProductSelected(sel); }
-}
-
-async function renderForm() {
-  const card = document.getElementById('formCard');
-
-  const pending = OfflineQueue.pendingFor(kegId);
-  if (pending) {
-    card.style.display = 'block';
-    card.innerHTML = `
-      <h3 style="margin-top:0">Action queued</h3>
-      <p class="muted">A "${pending.actionType.replace(/_/g,' ')}" is saved on this device, waiting to sync.
-      It'll send automatically once you're back online, or tap "Sync now" above.</p>
-    `;
-    return;
-  }
-
-  const cfg = getActionConfig();
-  // Mover/Manager editing the destination customer on a keg that's
-  // already dispatched, independent of whatever getActionConfig()
-  // returns - for plain Mover it's not their turn there at all
-  // (Driver's), so cfg is null; for Manager, cfg is Driver's own form
-  // (Manager can act as any role - see getActionConfig() above), which
-  // would otherwise mean this section never gets a chance to show if
-  // it were still nested inside "only when cfg is null" like before.
-  const canEditDestination = (currentUser.role === 'warehouse' || currentUser.role === 'manager')
-    && keg.status === 'received_driver';
-
-  if (!cfg && !canEditDestination) {
-    // Nothing shown here when it's not this person's turn - the Now/Next
-    // card above already covers "who's responsible right now", and a
-    // summary of the last action (what was previously shown here) was
-    // redundant with what's already visible in Fill Details (Beer/Batch/
-    // ABV, right under the Keg ID) - no need to repeat it a second time.
-    card.style.display = 'none';
-    card.innerHTML = '';
-    return;
-  }
-
-  card.style.display = 'block';
-
-  if (!cfg) {
-    card.innerHTML = ''; // nothing primary to show - edit_destination below will be the only content
-  } else {
-
-  // Prefetch anything a field needs before building the HTML, so the
-  // template below can be built synchronously in one pass.
-  let customers = [];
-  let products = [];
-  if (cfg.fields.some((f) => f.type === 'customer_select')) {
-    customers = await fetchCustomers();
-  }
-  if (cfg.fields.some((f) => f.type === 'product_select')) {
-    products = await fetchProducts();
-  }
-
-  card.innerHTML = `
-    <h3 style="margin-top:0">${cfg.label}</h3>
-    ${cfg.fields.map((f) => {
-      if (f.type === 'customer_select') {
-        return `
-          <label>${f.label}</label>
-          <select id="f_${f.name}">
-            <option value="">-- select customer --</option>
-            ${customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('')}
-          </select>
-          <button type="button" onclick="toggleAddCustomer()" class="geo-btn">&#43; Add new customer</button>
-          <div id="addCustomerBox" class="inline-add-box">
-            <label>New customer name</label>
-            <input id="newCustomerName" type="text">
-            <label>Address (optional)</label>
-            <input id="newCustomerAddress" type="text">
-            <label>Mobile number (optional)</label>
-            <input id="newCustomerPhone" type="tel">
-            <button type="button" onclick="addNewCustomer()" style="margin-top:8px">Add customer</button>
-            <div id="addCustomerMsg" class="muted"></div>
-          </div>
-        `;
-      }
-      if (f.type === 'product_select') {
-        return `
-          <label>${f.label}</label>
-          <select id="f_${f.name}" onchange="onProductSelected(this)">
-            <option value="">-- select beer --</option>
-            ${products.map((p) => `<option value="${p.name}" data-abv="${p.default_abv ?? ''}">${p.name}</option>`).join('')}
-          </select>
-          <button type="button" onclick="toggleAddProduct()" class="geo-btn">&#43; Add new beer</button>
-          <div id="addProductBox" class="inline-add-box">
-            <label>New beer name</label>
-            <input id="newProductName" type="text">
-            <label>Typical ABV % (optional)</label>
-            <input id="newProductAbv" type="number" step="0.1">
-            <button type="button" onclick="addNewProduct()" style="margin-top:8px">Add beer</button>
-            <div id="addProductMsg" class="muted"></div>
-          </div>
-        `;
-      }
-      const isLocationOptional = f.geo && !f.required;
-      // Fields with requiredWhen start hidden unless the field they
-      // depend on already happens to be at the matching value by
-      // default (a select's default is always its first listed
-      // option) - toggleConditionalFields() below keeps this in sync
-      // as the user changes the field it depends on.
-      const startsHidden = f.requiredWhen && f.requiredWhen.equals !== (cfg.fields.find(o => o.name === f.requiredWhen.field)?.options?.[0]);
-      return `
-        <div id="fieldwrap_${f.name}" ${startsHidden ? 'style="display:none"' : ''}>
-        <label>${f.label}${isLocationOptional ? ' <span class="muted">(optional)</span>' : ''}</label>
-        ${f.type === 'select'
-          ? `<select id="f_${f.name}" onchange="toggleConditionalFields()">${f.options.map(o => `<option value="${o}">${o.replace(/_/g,' ')}</option>`).join('')}</select>`
-          : `<input id="f_${f.name}" type="${f.type}" ${f.geo ? `placeholder="Tap 'Use my location' or type manually"` : ''}>`}
-        ${f.geo ? `<button type="button" class="geo-btn" onclick="useMyLocation('${f.name}')">&#128205; Use my location</button>
-        <span id="geoMsg_${f.name}" class="muted"></span>` : ''}
-        </div>
-      `;
-    }).join('')}
-    <button id="submitBtn" onclick="submitEvent('${cfg.action}')">${cfg.label}</button>
-    <div id="submitMsg"></div>
-  `;
-  } // closes "else" for the cfg-present branch above
-
-  if (canEditDestination) {
-    const customers = await fetchCustomers();
-    card.innerHTML += `
-      <div style="${cfg ? 'margin-top:20px; padding-top:20px; border-top:1px solid var(--card-border);' : ''}">
-        <h3 style="margin-top:0">Edit destination</h3>
-        <p class="muted">Correct the customer this keg was dispatched to, before it's delivered.</p>
-        <label>Delivery destination (customer)</label>
-        <select id="f_edit_customer_id">
-          <option value="">-- select customer --</option>
-          ${customers.map((c) => `<option value="${c.id}" ${c.id === keg.customer_id ? 'selected' : ''}>${c.name}</option>`).join('')}
-        </select>
-        <button onclick="submitEditDestination()">Save destination</button>
-        ${cfg ? '' : '<div id="submitMsg"></div>'}
-      </div>
-    `;
-  }
-
-  // Damage reporting: a separate, secondary action available to a
-  // driver (or Manager, who can act as any role - see
-  // getActionConfig() above) at any point while they physically have
-  // the keg (before or after handing it off), alongside whatever their
-  // normal next step is - not folded into the main form above, since
-  // it's an exception path, not the expected next action.
-  if ((currentUser.role === 'driver' || currentUser.role === 'manager') && (keg.status === 'received_driver' || keg.status === 'delivered')) {
-    card.innerHTML += `
-      <button type="button" class="btn-danger-outline" onclick="reportDamage()" style="margin-top:14px">&#9888; Report damage instead</button>
-    `;
-  }
-}
-
-// Shows/hides every field with a requiredWhen condition based on the
-// CURRENT value of whatever field it depends on - called on page load
-// (implicitly, via the startsHidden calculation in renderForm above)
-// and again every time a select field changes, so e.g. the wash form's
-// damage notes field only actually appears once "Inspection result" is
-// set to "fail", and mark_repaired's reason field only appears once
-// "condition" is set to "empty", rather than always showing regardless
-// of whether it's currently relevant.
-function toggleConditionalFields() {
-  const cfg = getActionConfig();
-  if (!cfg) return;
-  for (const f of cfg.fields) {
-    if (!f.requiredWhen) continue;
-    const wrap = document.getElementById(`fieldwrap_${f.name}`);
-    const triggerEl = document.getElementById(`f_${f.requiredWhen.field}`);
-    if (!wrap || !triggerEl) continue;
-    wrap.style.display = (triggerEl.value === f.requiredWhen.equals) ? 'block' : 'none';
-  }
-}
-
-// Checks any `requiredWhen` conditions on the current form's fields
-// against what's actually been entered - both presence and, if set, a
-// minimum length. Returns an error string, or null if everything
-// required is present and long enough.
-// Checks:
-// - plain `required: true` fields are non-empty, always
-// - `requiredWhen` conditions (presence, and optionally a minimum length)
-//   against what's actually been entered, only when the condition applies
-// Returns an error string, or null if everything checks out.
-function checkRequiredFields(cfg, values) {
-  for (const f of cfg.fields) {
-    if (f.required) {
-      const val = (values[f.name] || '').trim();
-      if (!val) {
-        return `${f.label.replace(/\s*\(.*\)/, '')} is required.`;
-      }
-    }
-
-    if (!f.requiredWhen) continue;
-    const depValue = values[f.requiredWhen.field];
-    if (depValue !== f.requiredWhen.equals) continue; // condition doesn't apply right now
-    const val = (values[f.name] || '').trim();
-    if (!val) {
-      return `${f.label.replace(/\s*\(.*\)/, '')} is required when ${f.requiredWhen.field.replace(/_/g,' ')} is "${f.requiredWhen.equals}".`;
-    }
-    if (f.requiredWhen.minLength && val.length < f.requiredWhen.minLength) {
-      return `${f.label.replace(/\s*\(.*\)/, '')} needs at least ${f.requiredWhen.minLength} characters when ${f.requiredWhen.field.replace(/_/g,' ')} is "${f.requiredWhen.equals}" (currently ${val.length}).`;
-    }
-  }
-  return null;
-}
-
-function useMyLocation(fieldName) {
-  const msg = document.getElementById(`geoMsg_${fieldName}`);
-  if (!('geolocation' in navigator)) {
-    msg.textContent = 'GPS not available on this device/browser.';
-    return;
-  }
-  msg.textContent = 'Getting location...';
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords;
-      document.getElementById(`f_${fieldName}`).value =
-        `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-      msg.textContent = '';
-    },
-    (err) => {
-      // Common cases: user denied the permission prompt, or GPS timed out
-      // (e.g. deep indoors). Field stays editable either way.
-      msg.textContent = err.code === err.PERMISSION_DENIED
-        ? 'Location permission denied - type it manually instead.'
-        : 'Could not get location - type it manually instead.';
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
-  );
-}
-
-let isSubmitting = false; // guards against double-submit (double-tap, slow network + impatient re-tap)
-
-// Damage reporting is a secondary, exception-path action for Driver -
-// not built through the generic field-rendering system above (that's
-// for a role's expected next action), just a direct prompt + submit,
-// sharing the same offline-queue and error-handling shape as
-// submitEvent() below rather than duplicating it wholesale.
-async function reportDamage() {
-  if (isSubmitting) return;
-
-  const notes = prompt('Describe the damage (required):');
-  if (notes === null) return; // cancelled
-  if (!notes.trim()) { alert('A description is required to report damage.'); return; }
-
-  isSubmitting = true;
-  try {
-    const details = { notes: notes.trim() };
-    let res;
-    try {
-      res = await fetch(`/api/kegs/${kegId}/events`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ actionType: 'report_damage', details }),
-      });
-    } catch (err) {
-      if (!OfflineQueue.canQueueFor(kegId)) {
-        alert('There is already a queued action for this keg on this device - sync that one before adding another.');
-        return;
-      }
-      OfflineQueue.enqueue({ kegId, actionType: 'report_damage', details });
-      renderForm();
-      updatePendingBanner();
-      return;
-    }
-
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error || 'Could not report damage.');
-      return;
-    }
-    await loadKeg(); // re-renders - keg is now needs_repair, driver's form will show "not your turn" until Warehouse resolves it
-  } finally {
-    isSubmitting = false;
-  }
-}
-
-async function revertLastAction() {
-  const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
-  if (!lastEvent) return;
-  const confirmed = confirm(
-    `Undo "${lastEvent.action_type.replace(/_/g,' ')}" by ${lastEvent.user_name} (${roleLabel(lastEvent.role)})?\n\nKeg ${kegId} will go back to its status before that action. The original entry stays in the record.`
-  );
-  if (!confirmed) return;
-
-  const btn = document.querySelector('#revertCard button');
-  if (btn) { btn.disabled = true; btn.textContent = 'Undoing...'; }
-
-  try {
-    const res = await fetch(`/api/kegs/${kegId}/revert`, {
-      method: 'POST', credentials: 'include',
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert('Could not undo: ' + data.error);
-      if (btn) { btn.disabled = false; btn.textContent = 'Undo last action'; }
-      return;
-    }
-    await loadKeg(); // re-renders everything against the now-reverted status
-  } catch (err) {
-    alert('Could not undo - check your connection and try again.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Undo last action'; }
-  }
-}
-
-// A dedicated, simpler counterpart to submitEvent() above - the edit-
-// destination form isn't driven by getActionConfig()/cfg.fields (it's
-// a hand-built exception case for Mover correcting a dispatched keg's
-// customer - see renderForm()'s early-return handling), so it needs
-// its own submit path rather than reusing submitEvent() directly.
-// Mirrors the same overall shape: confirm, disable the button, submit,
-// then return to the home screen on success.
-async function submitEditDestination() {
-  if (isSubmitting) return;
-
-  const customerId = document.getElementById('f_edit_customer_id').value;
-  const msg = document.getElementById('submitMsg');
-  if (!customerId) {
-    msg.className = 'error';
-    msg.textContent = 'Select a customer.';
-    return;
-  }
-
-  const customerName = document.getElementById('f_edit_customer_id').selectedOptions[0]?.textContent || '';
-  const confirmed = confirm(`Confirm: change delivery destination\nKeg: ${kegId}\n\nNew customer: ${customerName}`);
-  if (!confirmed) return;
-
-  isSubmitting = true;
-  const submitBtn = document.getElementById('submitBtn');
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
-
-  try {
-    const res = await fetch(`/api/kegs/${kegId}/events`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ actionType: 'edit_destination', details: { customer_id: customerId } }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      msg.className = 'error';
-      msg.textContent = data.error;
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save destination'; }
-      return;
-    }
-    msg.className = 'success';
-    msg.textContent = 'Destination updated.';
-    if (submitBtn) submitBtn.style.display = 'none';
-    setTimeout(() => {
-      history.replaceState(null, '', location.pathname);
-      showHomeScreen();
-    }, 1500);
-  } finally {
-    isSubmitting = false;
-  }
-}
-
-async function submitEvent(action) {
-  if (isSubmitting) return; // ignore a second click while the first is still in flight
-
-  const cfg = getActionConfig();
-  const details = { ...(cfg.fixedDetails || {}) }; // e.g. filler's fixed 20L volume, not a visible field
-  cfg.fields.forEach(f => { details[f.name] = document.getElementById(`f_${f.name}`).value; });
-
-  const requiredError = checkRequiredFields(cfg, details);
-  if (requiredError) {
-    const msg = document.getElementById('submitMsg');
-    msg.className = 'error';
-    msg.textContent = requiredError;
-    return; // never reaches the network - same guard applies whether online or offline
-  }
-
-  // A plain confirm() summarizing what's about to be logged - meant to
-  // catch an accidental submit (someone fills the form, taps the
-  // button without meaning to, or means to change something first) -
-  // not a security measure, just a last chance to notice before it's
-  // logged. Only lists fields that actually have a value, so it stays
-  // short rather than repeating every empty optional field.
-  const confirmSummary = cfg.fields
-    .filter((f) => (details[f.name] || '').toString().trim())
-    .map((f) => `${f.label.replace(/\s*\(.*\)/, '')}: ${details[f.name]}`)
-    .join('\n');
-  const confirmed = confirm(`Confirm: ${cfg.label}\nKeg: ${kegId}${confirmSummary ? '\n\n' + confirmSummary : ''}`);
-  if (!confirmed) return;
-
-  isSubmitting = true;
-  const submitBtn = document.getElementById('submitBtn');
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
-
-  try {
-    let res;
-    try {
-      res = await fetch(`/api/kegs/${kegId}/events`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // session cookie identifies the user - no userId sent
-        body: JSON.stringify({ actionType: action, details }),
-      });
-    } catch (err) {
-      // Network failure (not a server rejection) - save it locally instead
-      // of losing the work. It'll send automatically once back online.
-      if (!OfflineQueue.canQueueFor(kegId)) {
-        document.getElementById('submitMsg').className = 'error';
-        document.getElementById('submitMsg').textContent =
-          'There is already a queued action for this keg on this device - sync that one before adding another.';
-        return;
-      }
-      OfflineQueue.enqueue({ kegId, actionType: action, details });
-      renderForm(); // now shows the "queued" state instead of the form
-      updatePendingBanner();
-      return;
-    }
-
-    const data = await res.json();
-    const msg = document.getElementById('submitMsg');
-    if (!res.ok) {
-      msg.className = 'error';
-      msg.textContent = data.error;
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = cfg.label; }
-      return;
-    }
-    msg.className = 'success';
-    msg.textContent = 'Logged. New status: ' + statusLabel(data.status);
-    if (submitBtn) submitBtn.style.display = 'none'; // hidden immediately so there's no way to double-submit while the message is showing
-
-    // Now/Next (and the rest of the keg-specific view) should only be
-    // visible right after a QR scan, not linger after the task that
-    // scan was for is done - clears back to the home screen a moment
-    // after the success message appears, long enough to actually read
-    // it. Also drops '?keg=...' from the URL so a refresh or back-nav
-    // doesn't silently reload the same keg's now-stale action view -
-    // kegId itself can't be reassigned (it's a const read once from the
-    // URL at page load), but nothing calls loadKeg() again without a
-    // fresh page load, so leaving its old value alone here is safe.
-    setTimeout(() => {
-      history.replaceState(null, '', location.pathname);
-      showHomeScreen();
-      loadMyAlerts(); // the action just submitted may have changed what's overdue for this role
-    }, 1500);
-  } finally {
-    isSubmitting = false;
-  }
-}
-
-// The database stores timestamps in UTC as plain "YYYY-MM-DD HH:MM:SS"
-// text (SQLite's datetime('now'), no timezone marker in the string
-// itself). This converts one of those for display in Indian Standard
-// Time - storage stays UTC (the correct practice), only the display
-// layer converts.
-function formatIST(dateVal) {
-  if (!dateVal) return '';
-  // Postgres serializes timestamps as full ISO strings (e.g.
-  // "2026-08-31T20:15:32.123Z") - parseable directly with new Date().
-  // This also tolerates the older SQLite-style "YYYY-MM-DD HH:MM:SS"
-  // (no 'T', no timezone marker) just in case, treating it as UTC the
-  // same way the original version did.
-  const str = String(dateVal);
-  const isoStr = str.includes('T') ? str : str.replace(' ', 'T') + 'Z';
-  const date = new Date(isoStr);
-  if (isNaN(date.getTime())) return str; // fall back to the raw value if parsing ever fails
-  return date.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
-  }) + ' IST';
-}
-
-// Standalone "Now / Next" card, shown first on the page - who currently
-// has the keg's job, and who's next in the role-handoff cycle (see
-// STATUS_ROLE_FLOW above). Each role gets a small icon for quick
-// recognition. Rendered on its own now, previously embedded inside the
-// Fill Details card.
-function renderNowNext() {
-  // Hidden entirely when it's the current viewer's own turn to act -
-  // if the keg is pending with them, "Now: [their own role]" is
-  // redundant with the action form they're already looking at. Shown
-  // only when it's genuinely someone else's turn, where "who has it
-  // right now" is actually useful context.
-  const nowNextCard = document.getElementById('nowNextCard');
-  if (getActionConfig()) {
-    nowNextCard.style.display = 'none';
-    return;
-  }
-
-  const roleFlow = STATUS_ROLE_FLOW[keg.status] || {};
-  nowNextCard.style.display = 'block';
-
-  // For a keg currently with the customer, show how long it's been out
-  // there - lets staff eyeball "this one's been out a while" without
-  // waiting for a formal overdue-alert threshold to trip.
-  let daysWithCustomerHtml = '';
-  if (keg.status === 'delivered' || keg.status === 'empty_at_customer') {
-    const deliverEvent = keg.history.slice().reverse().find((h) => h.action_type === 'deliver');
-    if (deliverEvent) {
-      const deliveredAt = new Date(deliverEvent.created_at);
-      const days = Math.floor((Date.now() - deliveredAt.getTime()) / (1000 * 60 * 60 * 24));
-      const label = days === 0 ? 'Delivered today' : `Delivered ${days} day${days === 1 ? '' : 's'} ago`;
-      daysWithCustomerHtml = `<div class="days-with-customer">${label}</div>`;
-    }
-  }
-
-  // Sits as its own line below the whole row, matching exactly how
-  // "Delivered today" already works below - NOT swapped in for the
-  // arrow anymore. The earlier version replaced the arrow with the
-  // badge, which changed the row's width/layout depending on whether
-  // a handoff was pending or not; keeping the arrow always in the
-  // same place and adding this as an extra line underneath keeps the
-  // row itself completely consistent regardless of state.
-  const pendingReceiptHtml = roleFlow.pending
-    ? '<div class="pending-receipt-line">Pending for receipt</div>' : '';
-
-  document.getElementById('nowNextContent').innerHTML = `
-    <div class="status-next-row">
-      <div class="status-next-col">
-        <span class="status-next-label">Now</span>
-        <span class="role-icon-wrap">${roleIcon(roleFlow.now, 'green')}</span>
-        <span class="status-next-value current">${roleLabel(roleFlow.now) || '-'}</span>
-      </div>
-      <div class="status-next-arrow-mid">&#8594;</div>
-      <div class="status-next-col">
-        <span class="status-next-label">Next</span>
-        <span class="role-icon-wrap">${roleIcon(roleFlow.next, 'blue')}</span>
-        <span class="status-next-value next">${roleLabel(roleFlow.next) || '-'}</span>
-      </div>
+  el.innerHTML = availableTransitions.map((t) => `
+    <div class="action-btn-wrap">
+      <button class="${availableTransitions.length > 1 ? 'secondary' : ''}" onclick="selectAction('${t.id}')">${t.label}</button>
     </div>
-    ${pendingReceiptHtml}
-    ${daysWithCustomerHtml}
-  `;
+  `).join('');
 }
 
-async function renderHistory() {
-  // Fill Details is now shown to everyone, including Admin/Manager -
-  // previously it was one or the other (History for oversight roles,
-  // Fill Details for everyone else), but Admin/Manager opening a keg
-  // directly should still see what's actually in it, same as anyone
-  // else, in addition to the full audit trail only they get.
-  const isOversight = currentUser.role === 'admin' || currentUser.role === 'manager';
-  document.getElementById('historyCard').style.display = isOversight ? 'block' : 'none';
-  document.getElementById('fillDetailsCard').style.display = 'block';
+function selectAction(transitionId) {
+  const t = availableTransitions.find((x) => x.id === transitionId);
+  const formEl = document.getElementById('actionFormSection');
 
-  if (isOversight) {
-    const el = document.getElementById('history');
-    if (!keg.history.length) {
-      el.innerHTML = '<p class="muted">No events yet.</p>';
-    } else {
-      el.innerHTML = keg.history.slice().reverse().map(h => `
-        <div class="history-item">
-          <b>${h.action_type.replace(/_/g,' ')}</b> by ${h.user_name} (${roleLabel(h.role)})<br>
-          <span class="muted">${formatIST(h.created_at)}</span>
-          ${Object.keys(h.details).length ? `<br><span class="muted">${JSON.stringify(h.details)}</span>` : ''}
-        </div>
-      `).join('');
-    }
+  let fieldsHtml = '';
+  if (t.requiresReason) {
+    fieldsHtml += `
+      <label>Reason</label>
+      <select id="f_reason" onchange="toggleReasonOther()">
+        ${t.reasonOptions.map((r) => `<option value="${r}">${REASON_LABELS[r] || r}</option>`).join('')}
+      </select>
+      <div id="reasonOtherWrap" style="display:none">
+        <label>Please describe</label>
+        <input type="text" id="f_reasonText">
+      </div>
+    `;
+  }
+  if (t.requiresCustomer) {
+    fieldsHtml += `<label>Delivery destination (customer)</label><select id="f_customerId"></select>`;
+  }
+  if (t.requiresProductDetails) {
+    fieldsHtml += `
+      <label>Beer Name</label>
+      <select id="f_productId" onchange="onProductSelected()"></select>
+      <div id="newProductWrap" style="display:none">
+        <label>New beer name</label>
+        <input type="text" id="f_newProductName">
+        <label>Default ABV % (optional)</label>
+        <input type="number" step="0.1" id="f_newProductAbv">
+        <button type="button" class="secondary" onclick="saveNewProduct()">Save new beer</button>
+      </div>
+      <label>Batch Number</label>
+      <input type="text" id="f_batchNumber">
+      <label>ABV %</label>
+      <input type="number" step="0.1" id="f_abv">
+    `;
   }
 
-  // "Undo last action" - Mover, Admin, or Manager, and only when the
-  // most recent event was actually done by a role this viewer is
-  // allowed to revert (an operational mistake is the scope of this
-  // feature, not a general undo for anyone's action) - matches the
-  // same restriction the backend enforces in routes/events.js, checked
-  // here too so the button doesn't show at all for a case that would
-  // just get rejected. Manager gets one further elevation beyond Mover
-  // here too: reverting Warehouse's (Mover's) own actions, not just
-  // Washer/Filler/Driver's.
-  const revertCard = document.getElementById('revertCard');
-  const canRevertRole = currentUser.role === 'warehouse' || currentUser.role === 'admin' || currentUser.role === 'manager';
-  const revertableRoles = currentUser.role === 'manager'
-    ? ['washer', 'filler', 'driver', 'warehouse']
-    : ['washer', 'filler', 'driver'];
-  const lastEvent = keg.history.length ? keg.history[keg.history.length - 1] : null;
-  const lastEventRevertable = lastEvent && revertableRoles.includes(lastEvent.role) && lastEvent.action_type !== 'revert';
-  if (canRevertRole && lastEventRevertable) {
-    revertCard.style.display = 'block';
-    document.getElementById('revertDesc').textContent =
-      `Undoes "${lastEvent.action_type.replace(/_/g,' ')}" by ${lastEvent.user_name} (${roleLabel(lastEvent.role)}), logged ${formatIST(lastEvent.created_at)}. The original entry stays in the record - this adds a correction on top of it.`;
-  } else {
-    revertCard.style.display = 'none';
-  }
-
-  const fillEvent = keg.history.slice().reverse().find((h) => h.action_type === 'fill');
-  const el = document.getElementById('fillDetailsContent');
-  const kegIdHtml = `<div class="keg-id-hero">${keg.id}</div>`;
-
-  if (!fillEvent) {
-    el.innerHTML = kegIdHtml + '<p class="muted" style="text-align:center">Not filled yet.</p>';
-    return;
-  }
-  const d = fillEvent.details || {};
-  el.innerHTML = `
-    ${kegIdHtml}
-    <div class="detail-cols">
-      <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/beer.svg" width="48" height="48" alt=""></div>
-        <div class="detail-col-value">${d.product || '-'}</div>
-      </div>
-      <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/batch.svg" width="48" height="48" alt=""></div>
-        <div class="detail-col-value">${d.batch_number || '-'}</div>
-      </div>
-      <div class="detail-col">
-        <div class="detail-icon"><img src="/icons/abv.svg" width="48" height="48" alt=""></div>
-        <div class="detail-col-value">${d.abv ? d.abv + '%' : '-'}</div>
-      </div>
+  formEl.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">${t.label}</h3>
+      ${fieldsHtml}
+      <button onclick="submitAction('${t.id}', ${t.twoScan})">Confirm</button>
+      <div id="actionMsg"></div>
     </div>
   `;
+
+  if (t.requiresCustomer) populateCustomerSelect();
+  if (t.requiresProductDetails) populateProductSelect();
 }
 
-// ---- Offline / sync UI -----------------------------------------------
+let productsCache = [];
 
-function updatePendingBanner() {
-  const banner = document.getElementById('pendingBanner');
-  const n = OfflineQueue.count();
-  if (n === 0) {
-    banner.style.display = 'none';
-    return;
-  }
-  banner.style.display = 'block';
-  banner.innerHTML = `
-    ${n} action${n > 1 ? 's' : ''} saved on this device, waiting to sync.
-    <br><button onclick="trySync()">Sync now</button>
-  `;
+async function populateProductSelect() {
+  const res = await fetch('/api/products', { credentials: 'include', cache: 'no-store' });
+  productsCache = res.ok ? await res.json() : [];
+  document.getElementById('f_productId').innerHTML =
+    productsCache.map((p) => `<option value="${p.id}">${p.name}</option>`).join('') +
+    '<option value="__new__">-- Add new beer --</option>';
+  onProductSelected();
 }
 
-function updateOfflineBanner() {
-  document.getElementById('offlineBanner').style.display = navigator.onLine ? 'none' : 'block';
-}
-
-async function trySync() {
-  const outcome = await OfflineQueue.syncAll();
-  updatePendingBanner();
-  if (keg) await loadKeg(); // reflect whatever just synced, or re-show "queued" if still offline
-
-  if (outcome.rejected.length) {
-    const rejectedHtml = outcome.rejected.map(({ item, error }) => `
-      <div class="error" style="margin-top:6px">
-        "${item.actionType.replace(/_/g,' ')}" for ${item.kegId} was rejected: ${error}
-        <br><button onclick="discardQueuedItem('${item.id}')" style="margin-top:4px">Discard this action</button>
-      </div>
-    `).join('');
-    document.getElementById('pendingBanner').innerHTML += rejectedHtml;
+function onProductSelected() {
+  const sel = document.getElementById('f_productId');
+  const isNew = sel.value === '__new__';
+  document.getElementById('newProductWrap').style.display = isNew ? 'block' : 'none';
+  if (!isNew) {
+    const product = productsCache.find((p) => p.id === sel.value);
+    if (product && product.default_abv != null) {
+      document.getElementById('f_abv').value = product.default_abv;
+    }
   }
 }
 
-function discardQueuedItem(id) {
-  // Lets someone clear a permanently-rejected queued action (e.g. it was
-  // superseded by someone else's update) instead of it blocking this keg
-  // on this device forever - see the comment in offline-queue.js's
-  // syncAll() for why rejections aren't auto-dropped.
-  OfflineQueue.removeById(id);
-  updatePendingBanner();
-  if (keg) renderForm(); // re-check whether this keg can now show its normal form again
-}
-
-// Auto-sync whenever connectivity returns, and re-check periodically in
-// case the 'online' event doesn't fire reliably (common on mobile).
-window.addEventListener('online', () => { updateOfflineBanner(); trySync(); });
-window.addEventListener('offline', updateOfflineBanner);
-setInterval(() => { if (navigator.onLine && OfflineQueue.count() > 0) trySync(); }, 30000);
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {
-    // Non-fatal: app still works online-only if the service worker fails
-    // to register (e.g. unsupported browser) - just no offline app-shell caching.
+// Mirrors v1's inline "add new product" pattern - Filler shouldn't be
+// blocked mid-workflow the first time they need a beer that doesn't
+// exist yet in the managed list (see routes/products.js's own comment
+// on why this list exists at all: consistent naming for reporting).
+async function saveNewProduct() {
+  const name = document.getElementById('f_newProductName').value.trim();
+  if (!name) { alert('Enter a beer name first.'); return; }
+  const defaultAbv = document.getElementById('f_newProductAbv').value;
+  const res = await fetch('/api/products', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+    body: JSON.stringify({ name, default_abv: defaultAbv || null }),
   });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error); return; }
+  await populateProductSelect();
+  document.getElementById('f_productId').value = data.id;
+  onProductSelected();
 }
 
-// ---- In-app QR scanner ------------------------------------------------
-// Uses the device camera directly (getUserMedia) + jsQR (a small,
-// dependency-free QR decoder loaded via CDN, cached by the service
-// worker after first use - see sw.js) rather than relying on the
-// phone's own Camera app. Requires HTTPS (or localhost) - same
-// requirement as the GPS location buttons elsewhere on this page.
+function toggleReasonOther() {
+  const reason = document.getElementById('f_reason').value;
+  document.getElementById('reasonOtherWrap').style.display = reason === 'other' ? 'block' : 'none';
+}
 
-let scannerStream = null;
-let scannerRafId = null;
+async function populateCustomerSelect() {
+  const res = await fetch('/api/customers', { credentials: 'include', cache: 'no-store' });
+  const customers = res.ok ? await res.json() : [];
+  document.getElementById('f_customerId').innerHTML =
+    '<option value="">-- select customer --</option>' +
+    customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+}
 
-async function openScanner() {
-  const overlay = document.getElementById('scannerOverlay');
-  const video = document.getElementById('scannerVideo');
-  const msg = document.getElementById('scannerMsg');
-  overlay.style.display = 'flex';
-  msg.textContent = 'Loading scanner...';
+function collectDetails(t) {
+  const details = {};
+  if (t.requiresReason) {
+    details.reason = document.getElementById('f_reason').value;
+    if (details.reason === 'other') details.reasonText = document.getElementById('f_reasonText').value;
+  }
+  if (t.requiresCustomer) {
+    details.customerId = document.getElementById('f_customerId').value;
+  }
+  if (t.requiresProductDetails) {
+    details.productId = document.getElementById('f_productId').value;
+    details.batchNumber = document.getElementById('f_batchNumber').value;
+    details.abv = document.getElementById('f_abv').value;
+  }
+  return details;
+}
 
-  if (typeof jsQR === 'undefined') {
-    msg.textContent = 'Scanner failed to load - check your connection and try again, or use your phone\'s camera app instead.';
+async function submitAction(transitionId, twoScan) {
+  const t = availableTransitions.find((x) => x.id === transitionId);
+  const details = collectDetails(t);
+  const msg = document.getElementById('actionMsg');
+
+  // Guards against submitting with "Add new beer" still selected but
+  // never actually saved - would otherwise send the literal placeholder
+  // value as the product ID.
+  if (t.requiresProductDetails && details.productId === '__new__') {
+    msg.className = 'error';
+    msg.textContent = 'Save the new beer first, or pick an existing one.';
     return;
   }
 
-  if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia) {
-    msg.textContent = 'Camera access isn\'t available on this browser - use your phone\'s camera app instead.';
+  const endpoint = twoScan ? 'initiate' : 'execute';
+  const res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+    body: JSON.stringify({ transitionId, details }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
     return;
   }
+  msg.className = 'success';
+  msg.textContent = 'Done.';
+  setTimeout(loadKeg, 800);
+}
 
-  msg.textContent = 'Requesting camera access...';
-  try {
-    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-  } catch (err) {
-    msg.textContent = err.name === 'NotAllowedError'
-      ? 'Camera permission denied - check your browser/device settings and try again.'
-      : 'Could not access the camera - use your phone\'s camera app instead.';
+async function submitConfirm() {
+  const msg = document.getElementById('confirmMsg');
+  const res = await fetch(`/api/v2/kegs/${kegId}/confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
     return;
   }
-
-  video.srcObject = scannerStream;
-  msg.textContent = 'Point the camera at a keg\'s QR code.';
-  scanLoop();
+  msg.className = 'success';
+  msg.textContent = 'Receipt confirmed.';
+  setTimeout(loadKeg, 800);
 }
 
-function scanLoop() {
-  const video = document.getElementById('scannerVideo');
-  const canvas = document.getElementById('scannerCanvas');
-
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height);
-    if (code && code.data) {
-      handleScanResult(code.data);
-      return; // stop the loop - handleScanResult closes the scanner
-    }
-  }
-  scannerRafId = requestAnimationFrame(scanLoop);
-}
-
-function handleScanResult(text) {
-  closeScanner();
-
-  // The QR code encodes a full URL (e.g.
-  // https://yourapp.onrender.com/scan.html?keg=KEG-XXXX) - pull the
-  // keg id out of it. Falls back to treating the scanned text as a
-  // raw keg id directly, in case a QR was ever generated without the
-  // full URL wrapper.
-  let newKegId = null;
-  try {
-    const url = new URL(text);
-    newKegId = url.searchParams.get('keg');
-  } catch (err) {
-    newKegId = text.trim();
-  }
-
-  if (!newKegId) {
-    alert('Could not read a keg ID from that QR code - try again.');
-    return;
-  }
-
-  // Full page navigation, same as scanning with the phone's own camera
-  // app always has - keeps this one consistent code path for "a keg
-  // was scanned" rather than trying to hot-swap state in place.
-  window.location.href = `/scan.html?keg=${encodeURIComponent(newKegId)}`;
-}
-
-function closeScanner() {
-  if (scannerRafId) { cancelAnimationFrame(scannerRafId); scannerRafId = null; }
-  if (scannerStream) {
-    scannerStream.getTracks().forEach((t) => t.stop());
-    scannerStream = null;
-  }
-  document.getElementById('scannerOverlay').style.display = 'none';
-}
-
-updateOfflineBanner();
 init();
 </script>
 </body>

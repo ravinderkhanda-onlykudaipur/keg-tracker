@@ -91,7 +91,7 @@ db.init()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Keg tracker running at http://localhost:${PORT}`);
-      console.log(`Try it: http://localhost:${PORT}/scan-v2.html?keg=DEMO-KEG-1`);
+      console.log(`Try it: http://localhost:${PORT}/scan.html?keg=DEMO-KEG-1`);
     });
   })
   .catch((err) => {

@@ -454,16 +454,15 @@ async function login() {
   const user = await res.json();
   // This admin page is genuinely not meant for the four operational
   // roles (Washer/Filler/Driver/Warehouse) - their actual home is
-  // scan-v2.html now (updated from scan.html as part of the clean
-  // cutover - see lib/v2/DATA_MODEL.md), which already has everything
-  // they need without the oversight-oriented tabs here (Overview's
-  // Alerts, the full Kegs list, etc.) that showed to every logged-in
-  // user regardless of role until now. Redirecting immediately rather
-  // than just hiding tabs, since hiding tabs would still leave them on
-  // a mostly-blank page that was never their actual destination.
+  // scan.html, which already has everything they need without the
+  // oversight-oriented tabs here (Overview's Alerts, the full Kegs
+  // list, etc.) that showed to every logged-in user regardless of
+  // role until now. Redirecting immediately rather than just hiding
+  // tabs, since hiding tabs would still leave them on a mostly-blank
+  // page that was never their actual destination.
   const OPERATIONAL_ROLES = ['washer', 'filler', 'driver', 'warehouse'];
   if (OPERATIONAL_ROLES.includes(user.role)) {
-    location.href = '/scan-v2.html';
+    location.href = '/scan.html';
     return;
   }
   showMain(user);
@@ -562,7 +561,7 @@ async function createKeg() {
   document.getElementById('mfgNumber').value = '';
   resultEl.style.color = '';
   resultEl.innerHTML =
-    `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan-v2.html?keg=${data.id}">open scan page</a>`;
+    `Created <b>${data.id}</b> &mdash; <a href="/api/kegs/${data.id}/qrcode.png" target="_blank">view QR</a> | <a href="/scan.html?keg=${data.id}">open scan page</a>`;
   loadKegs();
   loadAlerts();
 }
@@ -582,7 +581,7 @@ async function loadKegs() {
   const tbody = document.querySelector('#kegTable tbody');
   tbody.innerHTML = kegs.map(k => `
     <tr>
-      <td><a href="/scan-v2.html?keg=${k.id}" target="_blank">${k.id}</a></td>
+      <td><a href="/scan.html?keg=${k.id}" target="_blank">${k.id}</a></td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
       <td><span class="status">${statusLabel(k.status)}</span></td>
       <td>${k.location_note || '-'}</td>
@@ -658,7 +657,7 @@ async function loadAlerts() {
     const itemsHtml = groupAlerts.length
       ? groupAlerts.map((a) => `
         <div class="alert-item">
-          <a href="/scan-v2.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
+          <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
           <span class="alert-badge">${formatOverdueDuration(a.hoursOverdue)}</span>
           <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
         </div>

@@ -6,9 +6,9 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v6'; // bumped: adds scan-v2.html to the cached shell, now that it's the actual operational page (manifest.json's start_url points there) - v5's cache list predates the v2 rebuild entirely, so a device that installed the app before this change would otherwise never get scan-v2.html shell-cached for offline use.
+const CACHE_NAME = 'keg-tracker-shell-v7'; // bumped: scan.html now contains the v2 custody model (the separate scan-v2.html file was consolidated back into scan.html to eliminate confusion between the two similarly-named files) - v6's cache had scan.html and scan-v2.html as two separate entries, which no longer matches reality now that there's only one file.
 const SHELL_FILES = [
-  '/scan.html', '/scan-v2.html', '/index.html', '/offline-queue.js', '/device-id.js',
+  '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
 ];
 // The in-app QR scanner's library - cached separately (not in SHELL_FILES)
