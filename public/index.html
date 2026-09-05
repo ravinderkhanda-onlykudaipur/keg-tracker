@@ -585,7 +585,7 @@ async function loadKegs() {
       <td><a href="/scan.html?keg=${k.id}" target="_blank">${k.id}</a></td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
       <td><span class="status">${statusLabel(k.status)}</span></td>
-      <td>${k.current_location || '-'}</td>
+      <td>${k.location_note || '-'}</td>
       <td><a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
     </tr>
   `).join('');

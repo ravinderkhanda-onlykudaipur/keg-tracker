@@ -233,27 +233,20 @@ async function init() {
   // the default" would be genuinely ambiguous once real v2 traffic
   // exists, since warehouse/empty is also a perfectly normal state a
   // v2-managed keg can legitimately be in on its own.
+  //
+  // Mapping itself now lives in lib/v2/statusMapping.js, shared with
+  // routes/events.js - that file needs the exact same mapping applied
+  // on every subsequent v1 action (not just once here), otherwise the
+  // v2 fields would freeze at whatever this one-time migration set
+  // them to while status kept moving forward under v1 actions. Found
+  // this as a real bug: a keg acted on via scan.html correctly updated
+  // its legacy status, but scan-v2.html kept showing its old custody
+  // state from migration time, making it look like v2 wasn't updating
+  // at all when actually the two models had just fallen out of sync.
   const { getSetting, setSetting } = require('./lib/settings');
+  const { STATUS_TO_V2 } = require('./lib/v2/statusMapping');
   const migrationDone = await getSetting(pool, 'v2_status_migration_done', 'false');
   if (migrationDone !== 'true') {
-    const STATUS_TO_V2 = {
-      empty_returned:        { current_location: 'mover',     current_condition: 'empty' },
-      allotted_washer:       { current_location: 'mover',     current_condition: 'empty',  pending_handover_to: 'washer' },
-      received_washer:       { current_location: 'washer',    current_condition: 'empty' },
-      washed:                { current_location: 'washer',    current_condition: 'cleaned', pending_handover_to: 'filler' },
-      clean_storage:         { current_location: 'washer',    current_condition: 'cleaned', pending_handover_to: 'mover' },
-      received_from_washer:  { current_location: 'mover',     current_condition: 'cleaned' },
-      received_filler:       { current_location: 'filler',    current_condition: 'cleaned' },
-      filled:                { current_location: 'filler',    current_condition: 'filled', pending_handover_to: 'mover' },
-      received_from_filler:  { current_location: 'mover',     current_condition: 'filled' },
-      dispatched:            { current_location: 'mover',     current_condition: 'filled', pending_handover_to: 'driver' },
-      received_driver:       { current_location: 'driver',    current_condition: 'to_be_delivered' },
-      delivered:             { current_location: 'customer',  current_condition: 'delivered' },
-      empty_at_customer:     { current_location: 'driver',    current_condition: 'empty' },
-      returned_to_warehouse: { current_location: 'driver',    current_condition: 'empty',  pending_handover_to: 'mover' },
-      received_from_driver:  { current_location: 'mover',     current_condition: 'empty' },
-      needs_repair:          { current_location: 'mover',     current_condition: 'damaged' },
-    };
     for (const [status, v2] of Object.entries(STATUS_TO_V2)) {
       await pool.query(
         `UPDATE kegs SET current_location = $1, current_condition = $2, pending_handover_to = $3 WHERE status = $4`,

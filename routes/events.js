@@ -16,6 +16,7 @@ const { pool, withTransaction } = require('../db');
 const { validateTransition, resolveNextStatus } = require('../lib/stateMachine');
 const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { checkCooldown } = require('../lib/cooldown');
+const { mapStatusToV2 } = require('../lib/v2/statusMapping');
 
 const router = express.Router();
 
@@ -94,17 +95,30 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
 
   // 'assign_destination'/'edit_destination' update keg.destination +
   // address + phone + customer_id together; every other action updates
-  // keg.current_location as before. Kept as separate columns since they
+  // keg.location_note as before. Kept as separate columns since they
   // mean different things - "where the keg physically is right now" vs
-  // "which customer it's assigned to".
+  // "which customer it's assigned to". Renamed from current_location to
+  // location_note when the v2 custody model needed that name for its
+  // own entity field (see db.js) - this free-text note (GPS
+  // coordinates, "Zone A", etc.) is a different concept entirely.
   const destinationActions = ['assign_destination', 'edit_destination'];
-  const nextLocation = destinationActions.includes(actionType)
-    ? keg.current_location
-    : (details?.location || keg.current_location);
+  const nextLocationNote = destinationActions.includes(actionType)
+    ? keg.location_note
+    : (details?.location || keg.location_note);
   const nextDestination = destinationActions.includes(actionType) ? resolvedDestination : keg.destination;
   const nextDestinationAddress = destinationActions.includes(actionType) ? resolvedDestinationAddress : keg.destination_address;
   const nextDestinationPhone = destinationActions.includes(actionType) ? resolvedDestinationPhone : keg.destination_phone;
   const nextCustomerId = destinationActions.includes(actionType) ? resolvedCustomerId : keg.customer_id;
+
+  // Keeps the v2 custody model in sync with every v1 action, for as
+  // long as both coexist - without this, v1 actions (from scan.html)
+  // would keep moving `status` forward while `current_location`/
+  // `current_condition` stayed frozen at whatever the one-time
+  // migration set them to, making scan-v2.html look like kegs never
+  // move even though scan.html itself was working correctly. Reuses
+  // the exact same status->v2 mapping the migration in db.js uses,
+  // imported from a shared module rather than duplicated in both places.
+  const v2Fields = mapStatusToV2(nextStatus);
 
   await withTransaction(async (client) => {
     await client.query(`
@@ -113,8 +127,15 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
     `, [kegId, user.id, user.role, actionType, JSON.stringify(details || {})]);
 
     await client.query(`
-      UPDATE kegs SET status = $1, current_location = $2, destination = $3, destination_address = $4, destination_phone = $5, customer_id = $6 WHERE id = $7
-    `, [nextStatus, nextLocation, nextDestination, nextDestinationAddress, nextDestinationPhone, nextCustomerId, kegId]);
+      UPDATE kegs SET
+        status = $1, location_note = $2, destination = $3, destination_address = $4, destination_phone = $5, customer_id = $6,
+        current_location = $7, warehouse_sublocation = $8, current_condition = $9, pending_handover_to = $10
+      WHERE id = $11
+    `, [
+      nextStatus, nextLocationNote, nextDestination, nextDestinationAddress, nextDestinationPhone, nextCustomerId,
+      v2Fields.current_location, v2Fields.warehouse_sublocation || null, v2Fields.current_condition, v2Fields.pending_handover_to || null,
+      kegId,
+    ]);
   });
 
   const { rows: updatedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);

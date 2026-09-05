@@ -39,9 +39,17 @@ router.post('/', requireRole('admin'), async (req, res) => {
 
   const id = 'KEG-' + nanoid(8).toUpperCase();
 
+  // location_note (renamed from the old current_location - see db.js)
+  // is a free-text note, unrelated to the v2 entity fields below - kept
+  // as 'Warehouse' here as a simple human-readable starting note, same
+  // as this INSERT always intended. The v2 fields are set explicitly
+  // to match exactly what a fresh 'empty_returned' keg maps to in
+  // lib/v2/statusMapping.js, rather than left at the schema's raw
+  // defaults - keeps a brand-new keg consistent with any other keg
+  // that reaches empty_returned through the normal v1 cycle.
   await pool.query(`
-    INSERT INTO kegs (id, manufacturing_number, size_liters, material, status, current_location)
-    VALUES ($1, $2, $3, $4, 'empty_returned', 'warehouse')
+    INSERT INTO kegs (id, manufacturing_number, size_liters, material, status, location_note, current_location, current_condition)
+    VALUES ($1, $2, $3, $4, 'empty_returned', 'Warehouse', 'mover', 'empty')
   `, [id, mfgNumber, size_liters || null, material || null]);
 
   res.status(201).json({ id, manufacturing_number: mfgNumber });
@@ -73,7 +81,7 @@ router.get('/export.csv', requireRole('admin', 'manager'), async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM kegs ORDER BY created_at DESC');
   const headers = [
     'id', 'manufacturing_number', 'size_liters', 'material', 'status',
-    'current_location', 'destination', 'destination_address', 'destination_phone',
+    'location_note', 'destination', 'destination_address', 'destination_phone',
     'customer_id', 'created_at',
   ];
   const lines = [headers.join(',')];

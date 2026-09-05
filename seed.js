@@ -61,8 +61,8 @@ async function seedIfEmpty() {
     }
 
     await pool.query(`
-      INSERT INTO kegs (id, size_liters, material, status, current_location)
-      VALUES ('DEMO-KEG-1', 50, 'stainless', 'empty_returned', 'warehouse')
+      INSERT INTO kegs (id, size_liters, material, status, location_note, current_location, current_condition)
+      VALUES ('DEMO-KEG-1', 50, 'stainless', 'empty_returned', 'Warehouse', 'mover', 'empty')
       ON CONFLICT (id) DO NOTHING
     `);
 
