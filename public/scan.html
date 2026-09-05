@@ -110,14 +110,27 @@
   .dash-list-item { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--card-border); font-size: 13px; font-weight: 500; color: var(--text); }
   .dash-list-empty { font-size: 13px; color: var(--text-muted); }
   .alerts-overview-heading { font-size: 16px; font-weight: 600; color: var(--text); margin: 4px 0 10px; }
+  /* Mover's Alerts/Inventory tab bar - same visual pattern as
+     index.html's tabs, replicated here rather than shared since these
+     are two separate HTML files with their own <style> blocks. */
+  .tab-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--card-border); padding-bottom: 2px; }
+  .tab-btn { background: transparent; color: var(--text-secondary); border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 10px 14px; font-weight: 500; font-size: 13px; margin: 0; width: auto; }
+  .tab-btn:hover { background: var(--card-bg); color: var(--text); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
   .alert-item { background: var(--warn-bg); border-color: var(--warn-text); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
   .alert-item-label { font-size: 11px; font-weight: 400; color: var(--warn-text); }
   .dash-group { margin: 12px 0; }
   .dash-group-summary { cursor: pointer; list-style: none; font-size: 16px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
   .dash-group-summary::-webkit-details-marker { display: none; }
   .dash-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
-  .dash-group[open] .dash-group-summary::before { transform: rotate(90deg); }
+  .dash-group[open] > .dash-group-summary::before { transform: rotate(90deg); }
   .dash-group-content { padding: 4px 0 0; }
+  /* Nested sub-groups (Uncleaned/Cleaned/Filled/Damaged etc.) inside a
+     Warehouse/In Transit group - smaller and flatter than the outer
+     group, with a left border tying it visually to its parent, so it
+     reads as "nested inside" rather than another top-level group. */
+  .dash-subgroup { margin: 8px 0 8px 10px; }
+  .dash-subgroup-summary { font-size: 14px; font-weight: 500; background: var(--bg); border-left: 3px solid var(--card-border); border-radius: 8px; padding: 9px 12px; }
   .status-next-label { font-size: 12px; color: var(--text-secondary); }
   .status-next-value { font-size: 17px; font-weight: 500; }
   .status-next-value.current { color: var(--success-text); }
@@ -404,6 +417,10 @@
       <h2 id="homeGreeting" style="margin-top:0"></h2>
       <p class="muted">Scan a keg's QR code to get started.</p>
     </div>
+    <div id="moverTabBar" class="tab-bar" style="display:none">
+      <button class="tab-btn active" id="moverTabBtn-alerts" onclick="showMoverTab('alerts')">Alerts</button>
+      <button class="tab-btn" id="moverTabBtn-inventory" onclick="showMoverTab('inventory')">Inventory</button>
+    </div>
     <div id="moverAlertsOverview"></div>
     <div id="dashboardLists"></div>
   </div>
@@ -636,15 +653,25 @@ const STATUS_ROLE_FLOW = {
   // clean-stored kegs to Filler, assigns dispatch to Driver, and
   // receives kegs back at the end - see lib/stateMachine.js for the
   // full rationale behind each status.
-  empty_returned:        { now: 'warehouse', next: 'washer',    pending: false },
+  // These 4 statuses all mean the same thing: the keg is confirmed
+  // sitting with Mover, in storage, not yet allotted anywhere - a
+  // genuinely different situation from an active handoff-in-progress
+  // (which is what "now: warehouse, next: someone else" would normally
+  // imply). "now: in_storage" is a display-only pseudo-value (see
+  // roleIcon()/roleLabel() below, same pattern as the existing
+  // 'customer' pseudo-role) rather than a real system role - "next"
+  // is Mover themselves, since the very next thing that happens is
+  // Mover's own allotment decision, not some other role receiving it
+  // (that's a separate, later step).
+  empty_returned:        { now: 'in_storage', next: 'warehouse', pending: false },
   allotted_washer:       { now: 'warehouse', next: 'washer',    pending: true },
   received_washer:       { now: 'washer',    next: 'filler',    pending: false },
   washed:                { now: 'washer',    next: 'filler',    pending: true },
   received_filler:       { now: 'filler',    next: 'warehouse', pending: false },
   clean_storage:         { now: 'washer',    next: 'warehouse', pending: true },
-  received_from_washer:  { now: 'warehouse', next: 'filler',    pending: false },
+  received_from_washer:  { now: 'in_storage', next: 'warehouse', pending: false },
   filled:                { now: 'filler',    next: 'warehouse', pending: true },
-  received_from_filler:  { now: 'warehouse', next: 'driver',    pending: false },
+  received_from_filler:  { now: 'in_storage', next: 'warehouse', pending: false },
   dispatched:            { now: 'warehouse', next: 'driver',    pending: true },
   received_driver:       { now: 'driver',    next: 'customer',  pending: false },
   // Once delivered, the keg's physical possession genuinely passes to
@@ -665,12 +692,12 @@ const STATUS_ROLE_FLOW = {
   // confirmed receiving it - genuinely pending now, unlike
   // empty_at_customer above.
   returned_to_warehouse: { now: 'driver',    next: 'warehouse', pending: true },
-  // Mover has confirmed receiving the returned keg, but hasn't yet
-  // decided where it goes (Uncleaned storage vs. straight to Washer -
-  // see lib/stateMachine.js's receive_empty). "Next" shows the eventual
-  // destination either way, since a keg sent to storage still ends up
-  // with Washer once Mover later allots it.
-  received_from_driver:  { now: 'warehouse', next: 'washer',    pending: false },
+  // Same "In Storage" treatment as empty_returned/received_from_washer/
+  // received_from_filler above - Mover has confirmed receiving the
+  // returned keg, but hasn't yet decided where it goes (Uncleaned
+  // storage vs. straight to Washer - see lib/stateMachine.js's
+  // receive_empty), so this is genuinely storage, not an active handoff.
+  received_from_driver:  { now: 'in_storage', next: 'warehouse', pending: false },
   needs_repair:          { now: 'warehouse', next: 'washer',    pending: false },
 };
 // Display-only rename: the backend role value stays 'warehouse'
@@ -679,6 +706,7 @@ const STATUS_ROLE_FLOW = {
 // across every place a role name is shown.
 function roleLabel(role) {
   if (!role) return role;
+  if (role === 'in_storage') return 'In Storage';
   const label = role === 'warehouse' ? 'Mover' : role;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
@@ -702,6 +730,15 @@ function statusLabel(status) {
 // rename elsewhere in the app.
 const ROLE_ICON_FILE = { washer: 'washer', filler: 'filler', driver: 'driver', warehouse: 'mover' };
 function roleIcon(role, variant) {
+  if (role === 'in_storage') {
+    // A box/package shape - this is a state (sitting in storage), not
+    // a person or role, so it gets its own icon rather than reusing
+    // any role's - same circle-background treatment as the other
+    // pseudo-role ('customer') below, for consistent visual weight.
+    const bg = variant === 'green' ? '#C7EDC7' : '#BBDCFC';
+    const fg = variant === 'green' ? '#1B5E20' : '#2699E6';
+    return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="${bg}"/><g transform="translate(14,15)" stroke="${fg}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M14 0L28 6.5V19.5L14 26L0 19.5V6.5Z"/><path d="M0 6.5L14 13L28 6.5"/><path d="M14 13V26"/></g></svg>`;
+  }
   if (role === 'customer') {
     // Not a system role, so there's no uploaded icon file for it - a
     // location pin drawn inline instead, matching the same shape used
@@ -833,8 +870,35 @@ function showHomeScreen() {
   const firstName = currentUser.name.split(' ')[0];
   document.getElementById('homeGreeting').textContent = `${timeGreeting}, ${firstName}!`;
 
+  // Only Mover gets both an Alerts overview and a full Inventory
+  // breakdown - everyone else either sees just their own simple
+  // "Allotted to you" list (no alerts overview to tab against) or
+  // nothing at all (Admin/Manager have index.html for this). Tabs let
+  // Mover look at one or the other on purpose, rather than always
+  // scrolling past one to reach the other on a single continuous page.
+  const tabBar = document.getElementById('moverTabBar');
+  if (currentUser.role === 'warehouse') {
+    tabBar.style.display = 'flex';
+    showMoverTab('alerts'); // default tab on arriving at the home screen
+  } else {
+    tabBar.style.display = 'none';
+    document.getElementById('moverAlertsOverview').style.display = 'none';
+    document.getElementById('dashboardLists').style.display = 'block';
+  }
+
   loadDashboardLists();
   loadMoverAlertsOverview();
+}
+
+// Switches which of Mover's two home-screen sections is visible -
+// both are already loaded/populated by loadDashboardLists() and
+// loadMoverAlertsOverview() regardless of which tab is showing, so
+// switching tabs is instant and doesn't need a fresh fetch each time.
+function showMoverTab(name) {
+  document.getElementById('moverTabBtn-alerts').classList.toggle('active', name === 'alerts');
+  document.getElementById('moverTabBtn-inventory').classList.toggle('active', name === 'inventory');
+  document.getElementById('moverAlertsOverview').style.display = name === 'alerts' ? 'block' : 'none';
+  document.getElementById('dashboardLists').style.display = name === 'inventory' ? 'block' : 'none';
 }
 
 // One list per relevant status, showing the actual keg IDs currently
@@ -932,7 +996,7 @@ async function loadDashboardLists() {
 // summary is the sum across every list inside, so the number is
 // visible even while the section itself is still collapsed.
 async function fetchGroupedListsHtml(groupLabel, statusLabels) {
-  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchKegListHtml(status, label)));
+  const parts = await Promise.all(statusLabels.map(([status, label]) => fetchNestedKegListHtml(status, label)));
   const totalMatch = parts.join('').match(/dash-list-count">(\d+)</g) || [];
   const total = totalMatch.reduce((sum, m) => sum + Number(m.match(/\d+/)[0]), 0);
   return `
@@ -941,6 +1005,35 @@ async function fetchGroupedListsHtml(groupLabel, statusLabels) {
       <div class="dash-group-content">${parts.join('')}</div>
     </details>
   `;
+}
+
+// A variant of fetchKegListHtml() specifically for use inside the
+// grouped Warehouse/In Transit sections above - each sub-category
+// (Uncleaned, Cleaned, Filled, Damaged, etc.) gets its own nested
+// <details>, individually collapsible, rather than all showing at
+// once as soon as the outer group is opened. Kept separate from
+// fetchKegListHtml() itself rather than adding a flag to it, since
+// Washer/Filler/Driver's simpler single-list views (which call that
+// function directly, with no outer group to nest inside) are meant to
+// stay exactly as they are - always-visible, no accordion needed for
+// a single list.
+async function fetchNestedKegListHtml(status, label) {
+  try {
+    const res = await fetch(`/api/kegs?status=${encodeURIComponent(status)}`, { credentials: 'include' });
+    if (!res.ok) return '';
+    const kegs = await res.json();
+    const itemsHtml = kegs.length
+      ? `<div class="dash-list-items">${kegs.map(k => `<span class="dash-list-item">${k.id}</span>`).join('')}</div>`
+      : `<div class="dash-list-empty">None right now.</div>`;
+    return `
+      <details class="dash-group dash-subgroup">
+        <summary class="dash-group-summary dash-subgroup-summary">${label} <span class="dash-list-count">${kegs.length}</span></summary>
+        <div class="dash-group-content">${itemsHtml}</div>
+      </details>
+    `;
+  } catch (err) {
+    return ''; // offline or fetch failed - skip this one list silently, same pattern loadMyAlerts already uses
+  }
 }
 
 async function loadMyAlerts() {
@@ -1329,7 +1422,7 @@ async function renderForm() {
   // would otherwise mean this section never gets a chance to show if
   // it were still nested inside "only when cfg is null" like before.
   const canEditDestination = (currentUser.role === 'warehouse' || currentUser.role === 'manager')
-    && (keg.status === 'dispatched' || keg.status === 'received_driver');
+    && keg.status === 'received_driver';
 
   if (!cfg && !canEditDestination) {
     // Nothing shown here when it's not this person's turn - the Now/Next
