@@ -148,7 +148,12 @@ router.get('/:id/qrcode.png', async (req, res) => {
     const { rows } = await pool.query('SELECT id FROM kegs WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Keg not found' });
 
-    const scanUrl = `${req.protocol}://${req.get('host')}/scan.html?keg=${rows[0].id}`;
+    // Points at scan-v2.html, not scan.html - this URL gets embedded in
+    // the actual printed QR code on the physical keg, so this is the
+    // single most consequential place the "clean cutover" needed to
+    // reach: every real-world scan of a real keg goes through whatever
+    // this generates, regardless of any other web-navigation fix.
+    const scanUrl = `${req.protocol}://${req.get('host')}/scan-v2.html?keg=${rows[0].id}`;
     res.type('png');
     QRCode.toFileStream(res, scanUrl, { width: 400, margin: 2 });
   } catch (err) {
