@@ -1078,6 +1078,17 @@ const ALERT_STAGE_GROUPS = {
   'In Transit': ['dispatched', 'received_driver', 'delivered', 'empty_at_customer', 'returned_to_warehouse'],
 };
 
+// Formats an overdue duration for display - plain hours below a day,
+// days (+ leftover hours) once it's been overdue that long, since
+// "127h overdue" is harder to read at a glance than "5d 7h overdue".
+function formatOverdueDuration(hours) {
+  const rounded = Math.round(hours);
+  if (rounded < 24) return `${rounded}h overdue`;
+  const days = Math.floor(rounded / 24);
+  const remHours = rounded % 24;
+  return remHours > 0 ? `${days}d ${remHours}h overdue` : `${days}d overdue`;
+}
+
 async function loadMoverAlertsOverview() {
   const container = document.getElementById('moverAlertsOverview');
   if (!container) return;
@@ -1091,7 +1102,7 @@ async function loadMoverAlertsOverview() {
     const groupsHtml = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, statuses]) => {
       const groupAlerts = alerts.filter((a) => statuses.includes(a.status));
       const itemsHtml = groupAlerts.length
-        ? `<div class="dash-list-items">${groupAlerts.map((a) => `<span class="dash-list-item alert-item">${a.kegId} <span class="alert-item-label">${a.label}</span></span>`).join('')}</div>`
+        ? `<div class="dash-list-items">${groupAlerts.map((a) => `<span class="dash-list-item alert-item">${a.kegId} <span class="alert-item-label">${a.label} \u00b7 ${formatOverdueDuration(a.hoursOverdue)}</span></span>`).join('')}</div>`
         : `<div class="dash-list-empty">Nothing overdue here.</div>`;
       return `
         <details class="dash-group">

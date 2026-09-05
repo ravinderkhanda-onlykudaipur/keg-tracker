@@ -62,6 +62,17 @@
   .alert-item:last-child { border-bottom: none; }
   .alert-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; background: var(--error-bg); color: var(--error-text); font-weight: 500; }
   .role-note { background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); border-radius: 10px; padding: 12px 16px; font-size: 13px; margin-bottom: 18px; }
+  /* Collapsible alert groups (At Washer/Filler, At Warehouse, In
+     Transit) - same visual language and interaction pattern as
+     scan.html's dashboard-list groups, replicated here since these
+     are two separate files with their own stylesheets. */
+  .alert-group { margin: 12px 0; }
+  .alert-group-summary { cursor: pointer; list-style: none; font-size: 15px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .alert-group-summary::-webkit-details-marker { display: none; }
+  .alert-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
+  .alert-group[open] > .alert-group-summary::before { transform: rotate(90deg); }
+  .alert-group-content { padding: 8px 16px 4px; }
+  .alert-group-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
   .bar-row { display: flex; align-items: center; margin: 8px 0; font-size: 13px; }
   .bar-label { width: 150px; flex-shrink: 0; }
   .bar-track { flex: 1; background: #EDEBE4; border-radius: 4px; height: 20px; overflow: hidden; margin: 0 8px; }
@@ -609,6 +620,26 @@ function renderKpiSummary(kegs) {
   `).join('');
 }
 
+// Same 3-stage grouping as scan.html's Mover alerts overview (that
+// file's ALERT_STAGE_GROUPS) - duplicated here rather than shared,
+// since these are two separate standalone HTML files with no module
+// system between them. Groups by pipeline stage rather than by status
+// or role directly, so Admin/Manager can see at a glance where the
+// pipeline is backing up, same reasoning as the Mover-facing version.
+const ALERT_STAGE_GROUPS = {
+  'At Washer/Filler': ['allotted_washer', 'received_washer', 'washed', 'received_filler'],
+  'At Warehouse': ['empty_returned', 'clean_storage', 'received_from_washer', 'filled', 'received_from_filler', 'received_from_driver', 'needs_repair'],
+  'In Transit': ['dispatched', 'received_driver', 'delivered', 'empty_at_customer', 'returned_to_warehouse'],
+};
+
+function formatOverdueDuration(hours) {
+  const rounded = Math.round(hours);
+  if (rounded < 24) return `${rounded}h overdue`;
+  const days = Math.floor(rounded / 24);
+  const remHours = rounded % 24;
+  return remHours > 0 ? `${days}d ${remHours}h overdue` : `${days}d overdue`;
+}
+
 async function loadAlerts() {
   const res = await fetch('/api/alerts', { credentials: 'include' });
   const el = document.getElementById('alertsList');
@@ -618,16 +649,28 @@ async function loadAlerts() {
     el.innerHTML = '<p class="muted">Nothing overdue right now.</p>';
     return;
   }
-  // Worst-overdue first - no cap, shows every overdue keg (per request:
-  // no more "7 most recent" limiting anywhere in the app).
-  const sorted = alerts.slice().sort((a, b) => b.hoursOverdue - a.hoursOverdue);
-  el.innerHTML = sorted.map(a => `
-    <div class="alert-item">
-      <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
-      <span class="alert-badge">${a.hoursOverdue}h overdue</span>
-      <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
-    </div>
-  `).join('');
+
+  el.innerHTML = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, statuses]) => {
+    // Worst-overdue first within each group - no cap, shows every
+    // overdue keg in that group (per an earlier request: no more
+    // "7 most recent" limiting anywhere in the app).
+    const groupAlerts = alerts.filter((a) => statuses.includes(a.status)).sort((a, b) => b.hoursOverdue - a.hoursOverdue);
+    const itemsHtml = groupAlerts.length
+      ? groupAlerts.map((a) => `
+        <div class="alert-item">
+          <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
+          <span class="alert-badge">${formatOverdueDuration(a.hoursOverdue)}</span>
+          <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
+        </div>
+      `).join('')
+      : '<p class="muted">Nothing overdue here.</p>';
+    return `
+      <details class="alert-group">
+        <summary class="alert-group-summary">${groupLabel} <span class="alert-group-count">${groupAlerts.length}</span></summary>
+        <div class="alert-group-content">${itemsHtml}</div>
+      </details>
+    `;
+  }).join('');
 }
 
 // rows: [{ label, value, displayValue }] - renders a simple horizontal
