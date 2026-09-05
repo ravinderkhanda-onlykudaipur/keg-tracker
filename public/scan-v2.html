@@ -108,7 +108,7 @@ const kegId = new URLSearchParams(location.search).get('keg');
 async function init() {
   let me = null;
   try {
-    const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+    const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
     me = await meRes.json();
   } catch (err) {
     document.getElementById('loginBlock').innerHTML = '<p class="error">No connection - connect once to log in.</p>';
@@ -116,7 +116,7 @@ async function init() {
   }
   if (me) { currentUser = me; showApp(); return; }
 
-  const res = await fetch('/api/auth/users');
+  const res = await fetch('/api/auth/users', { cache: 'no-store' });
   const users = await res.json();
   document.getElementById('userSelect').innerHTML =
     users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
@@ -127,7 +127,7 @@ async function login() {
   const password = document.getElementById('password').value;
   const res = await fetch('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
+    credentials: 'include', cache: 'no-store',
     body: JSON.stringify({ userId, password, deviceId: DeviceId.get() }),
   });
   if (!res.ok) {
@@ -140,7 +140,7 @@ async function login() {
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', cache: 'no-store' });
   location.reload();
 }
 
@@ -176,7 +176,7 @@ const DASHBOARD_GROUPS = [
 
 async function loadDashboard() {
   const el = document.getElementById('dashboardBlock');
-  const res = await fetch('/api/v2/kegs', { credentials: 'include' });
+  const res = await fetch('/api/v2/kegs', { credentials: 'include', cache: 'no-store' });
   if (!res.ok) { el.innerHTML = ''; return; }
   const kegs = await res.json();
 
@@ -202,7 +202,7 @@ const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned
 const REASON_LABELS = { forgot_to_deliver: 'Forgot to Deliver', damaged: 'Damaged Item/Keg', customer_refused: 'Customer Refused to Accept', customer_unavailable: 'Customer Unavailable', shop_closed: 'Shop Closed', other: 'Other' };
 
 async function loadKeg() {
-  const res = await fetch(`/api/v2/kegs/${kegId}`, { credentials: 'include' });
+  const res = await fetch(`/api/v2/kegs/${kegId}`, { credentials: 'include', cache: 'no-store' });
   if (!res.ok) {
     document.getElementById('kegBlock').innerHTML = '<p class="error">Could not load this keg.</p>';
     return;
@@ -322,7 +322,7 @@ function toggleReasonOther() {
 }
 
 async function populateCustomerSelect() {
-  const res = await fetch('/api/customers', { credentials: 'include' });
+  const res = await fetch('/api/customers', { credentials: 'include', cache: 'no-store' });
   const customers = res.ok ? await res.json() : [];
   document.getElementById('f_customerId').innerHTML =
     '<option value="">-- select customer --</option>' +
@@ -349,7 +349,7 @@ async function submitAction(transitionId, twoScan) {
   const endpoint = twoScan ? 'initiate' : 'execute';
   const res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
+    credentials: 'include', cache: 'no-store',
     body: JSON.stringify({ transitionId, details }),
   });
   const data = await res.json();
@@ -367,7 +367,7 @@ async function submitConfirm() {
   const msg = document.getElementById('confirmMsg');
   const res = await fetch(`/api/v2/kegs/${kegId}/confirm`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
+    credentials: 'include', cache: 'no-store',
   });
   const data = await res.json();
   if (!res.ok) {

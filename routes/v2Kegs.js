@@ -12,6 +12,21 @@ const { getAvailableTransitions, initiateHandover, confirmHandover, executeSingl
 
 const router = express.Router();
 
+// Applied to every route on this router, not just the GETs - these
+// endpoints reflect a keg's live custody state, so a stale cached
+// response (from the browser, a proxy, or a CDN) showing an action as
+// not having happened yet is a correctness bug, not a performance
+// tradeoff worth making. Found this the hard way: Safari caches GET
+// fetch() responses more aggressively than Chrome by default, which
+// made a real, successful action look like it hadn't done anything
+// when the page reloaded the keg afterward - fixed on the frontend
+// (cache: 'no-store' added to every fetch call in scan-v2.html) and
+// here too, for any caching layer between the browser and this server.
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 async function loadKeg(kegId) {
   const { rows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);
   return rows[0] || null;
