@@ -182,8 +182,13 @@ async function loadDashboard() {
 
   el.innerHTML = DASHBOARD_GROUPS.map((group) => {
     const matched = kegs.filter(group.match);
+    // Shows each keg's condition alongside its ID - without this, the
+    // only way to find (say) an Empty keg With Mover specifically was
+    // to click into every keg in that group one at a time to check.
+    // Condition labels reused from the ones already defined below for
+    // a single keg's own page, rather than a second copy of the map.
     const itemsHtml = matched.length
-      ? matched.map((k) => `<span class="dash-item${k.pending_handover_to ? ' pending' : ''}">${k.id}${k.pending_handover_to ? ' \u2013 pending' : ''}</span>`).join('')
+      ? matched.map((k) => `<span class="dash-item${k.pending_handover_to ? ' pending' : ''}">${k.id} \u2013 ${CONDITION_LABELS[k.current_condition] || k.current_condition}${k.pending_handover_to ? ', pending' : ''}</span>`).join('')
       : '<div class="dash-empty">None right now.</div>';
     return `
       <details class="dash-group">
