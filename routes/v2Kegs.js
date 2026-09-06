@@ -10,6 +10,7 @@ const { pool, withTransaction } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { getAvailableTransitions, initiateHandover, confirmHandover, executeSingleActor } = require('../lib/v2/transitionEngine');
 const { getOverdueKegsV2 } = require('../lib/v2/alerts');
+const { dbRoleCanActAsEntity } = require('../lib/v2/entityRoleMapping');
 const { csvEscape, formatForExcel } = require('../lib/csvHelpers');
 
 const router = express.Router();
@@ -97,6 +98,37 @@ router.get('/my-stats', requireAuth, async (req, res) => {
     [req.user.id]
   );
   res.json({ actionsCompletedTotal: rows[0].total, actionsCompletedToday: rows[0].today });
+});
+
+// GET /api/v2/kegs/my-tasks - three categories for the "Task" tab,
+// per explicit direction: Todo (kegs currently in this user's own
+// hands, nothing pending, next action not yet done - no overdue
+// threshold, unlike Alerts, this shows everything current), Incoming
+// (handovers sent TO this user, not yet confirmed by them), and
+// Outgoing (handovers this user sent, still awaiting the other side -
+// informational only, not actionable by this user).
+//
+// Reuses the same entity/DB-role mapping the transition engine itself
+// uses (dbRoleCanActAsEntity), so "does this keg belong in my Todo
+// list" is answered the exact same way "can I act on this keg" is
+// answered everywhere else in the app - not a second, separately
+// maintained notion of role ownership.
+router.get('/my-tasks', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT id, current_location, current_condition, warehouse_sublocation,
+           pending_handover_to, pending_handover_initiated_by
+    FROM kegs
+  `);
+
+  const todo = rows.filter((k) => !k.pending_handover_to && dbRoleCanActAsEntity(req.user.role, k.current_location));
+  const incoming = rows.filter((k) => k.pending_handover_to && dbRoleCanActAsEntity(req.user.role, k.pending_handover_to));
+  const outgoing = rows.filter((k) => k.pending_handover_to && k.pending_handover_initiated_by === req.user.id);
+
+  const shape = (k) => ({
+    kegId: k.id, currentLocation: k.current_location, currentCondition: k.current_condition,
+    warehouseSublocation: k.warehouse_sublocation, pendingHandoverTo: k.pending_handover_to,
+  });
+  res.json({ todo: todo.map(shape), incoming: incoming.map(shape), outgoing: outgoing.map(shape) });
 });
 
 // GET /api/v2/kegs/overview-stats - customer and product breakdowns

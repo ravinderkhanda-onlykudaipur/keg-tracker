@@ -111,8 +111,18 @@
      app version). */
   .alert-item { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 13px; }
   .alert-item a { color: var(--error-text); font-weight: 600; text-decoration: none; }
-  .alert-label { color: var(--error-text); }
   .alert-overdue { color: var(--text-secondary); font-size: 12px; }
+
+  /* Resting/Pending sub-tab groups - same nested collapsible pattern
+     already used on index.html, replicated here since these are
+     separate standalone files with their own stylesheets. */
+  .alert-group { margin: 12px 0; }
+  .alert-group-summary { cursor: pointer; list-style: none; font-size: 15px; font-weight: 500; color: var(--text); padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+  .alert-group-summary::-webkit-details-marker { display: none; }
+  .alert-group-summary::before { content: '\25B8'; color: var(--text-muted); transition: transform 0.15s; }
+  .alert-group[open] > .alert-group-summary::before { transform: rotate(90deg); }
+  .alert-group-content { padding: 8px 16px 4px; }
+  .alert-group-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -291,17 +301,41 @@
     </div>
 
     <div class="home-tab-panel" id="homeTab-alerts" style="display:none">
-      <div id="alertsBlock"></div>
+      <div class="tab-bar">
+        <button class="tab-btn active" id="alertSubTabBtn-resting" onclick="showAlertSubTab('resting')">Resting Phase</button>
+        <button class="tab-btn" id="alertSubTabBtn-pending" onclick="showAlertSubTab('pending')">Pending Phase</button>
+      </div>
+      <div id="alertSubTab-resting"></div>
+      <div id="alertSubTab-pending" style="display:none"></div>
       <div id="dashboardBlock"></div>
     </div>
 
     <div class="home-tab-panel" id="homeTab-task" style="display:none">
       <div class="card">
-        <label>New task</label>
-        <input type="text" id="newTaskText" placeholder="e.g. Refill washing detergent">
-        <button onclick="addTask()">Add task</button>
+        <h3 style="margin-top:0">To Do</h3>
+        <p class="muted" style="margin-top:0">Kegs currently in your hands, next action not yet done.</p>
+        <div id="taskTodoList"></div>
       </div>
-      <div id="taskList"></div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Incoming</h3>
+        <p class="muted" style="margin-top:0">Sent to you, not yet confirmed.</p>
+        <div id="taskIncomingList"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Outgoing</h3>
+        <p class="muted" style="margin-top:0">Sent by you, awaiting their confirmation.</p>
+        <div id="taskOutgoingList"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">My Notes</h3>
+        <label>New note</label>
+        <input type="text" id="newTaskText" placeholder="e.g. Refill washing detergent">
+        <button onclick="addTask()">Add note</button>
+        <div id="taskList"></div>
+      </div>
     </div>
 
     <div class="home-tab-panel" id="homeTab-feedback" style="display:none">
@@ -573,7 +607,7 @@ function showHomeTab(tab) {
     document.getElementById(`homeTab-${t}`).style.display = t === tab ? 'block' : 'none';
     document.getElementById(`homeTabBtn-${t}`).classList.toggle('active', t === tab);
   });
-  if (tab === 'task') loadTasks();
+  if (tab === 'task') { loadTasks(); loadMyTasks(); }
   if (tab === 'home') loadHomeTab();
 }
 
@@ -605,6 +639,41 @@ async function loadTasks() {
       <button class="task-delete" onclick="deleteTask(${t.id})">Delete</button>
     </div>
   `).join('');
+}
+
+// Auto-generated Todo/Incoming/Outgoing - derived entirely from live
+// keg state (see routes/v2Kegs.js's /my-tasks), no overdue threshold
+// unlike Alerts - shows everything current, not just what's crossed
+// a time limit. A keg with no icon mapping (customer) or a location
+// this role can't act on at all simply won't appear in Todo, which is
+// correct - "Todo" only ever means work THIS role can actually do.
+function taskKegItemHtml(k, extra) {
+  const locLabel = LOCATION_LABELS[k.currentLocation] || k.currentLocation;
+  const condLabel = CONDITION_LABELS[k.currentCondition] || k.currentCondition;
+  return `
+    <div class="task-item">
+      <a href="/scan.html?keg=${k.kegId}"><b>${k.kegId}</b></a> &mdash; ${locLabel}, ${condLabel}${extra ? ' ' + extra : ''}
+    </div>
+  `;
+}
+
+async function loadMyTasks() {
+  const res = await fetch('/api/v2/kegs/my-tasks', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) return;
+  const { todo, incoming, outgoing } = await res.json();
+
+  const todoEl = document.getElementById('taskTodoList');
+  todoEl.innerHTML = todo.length ? todo.map((k) => taskKegItemHtml(k)).join('') : '<p class="muted">Nothing to do right now.</p>';
+
+  const incomingEl = document.getElementById('taskIncomingList');
+  incomingEl.innerHTML = incoming.length
+    ? incoming.map((k) => taskKegItemHtml(k, `\u2192 awaiting your confirmation`)).join('')
+    : '<p class="muted">Nothing incoming right now.</p>';
+
+  const outgoingEl = document.getElementById('taskOutgoingList');
+  outgoingEl.innerHTML = outgoing.length
+    ? outgoing.map((k) => taskKegItemHtml(k, `\u2192 awaiting ${LOCATION_LABELS[k.pendingHandoverTo] || k.pendingHandoverTo}'s confirmation`)).join('')
+    : '<p class="muted">Nothing outgoing right now.</p>';
 }
 
 async function addTask() {
@@ -665,26 +734,117 @@ const DASHBOARD_GROUPS = [
   { label: 'With Customer', match: (k) => k.current_location === 'customer' },
 ];
 
-// Fetches overdue kegs and shows only the ones relevant to the
-// logged-in user's own role - Manager sees everything (matches the
-// same full-bypass permission Manager has everywhere else in v2),
-// Admin never reaches this page at all (redirected above).
-async function loadAlerts() {
-  const el = document.getElementById('alertsBlock');
-  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
-  if (!res.ok) { el.innerHTML = ''; return; }
-  const alerts = await res.json();
-  const relevant = currentUser.role === 'manager' ? alerts : alerts.filter((a) => a.role === currentUser.role);
+// Mover (warehouse role) gets the same comprehensive visibility as
+// Admin/Manager - the actual hub every other role hands off to or
+// receives from, per explicit direction. Washer/Filler/Driver
+// continue seeing only their own role's alerts.
+function alertsRelevantToMe(alerts) {
+  const seesEverything = ['manager', 'warehouse'].includes(currentUser.role);
+  return seesEverything ? alerts : alerts.filter((a) => a.role === currentUser.role);
+}
 
-  if (!relevant.length) { el.innerHTML = ''; return; }
-  el.innerHTML = relevant.map((a) => `
+function alertItemHtml(a) {
+  return `
     <div class="alert-item">
-      <a href="/scan.html?keg=${a.kegId}">${a.kegId}</a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''}
-      \u2014 <span class="alert-label">${a.label}</span>
+      <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
       <span class="alert-overdue">(${a.hoursOverdue}h overdue)</span>
       <div class="muted" style="font-size:11px">${a.transitionIds.join(' or ')}</div>
     </div>
-  `).join('');
+  `;
+}
+
+// Resting Phase: grouped by location, sub-grouped by condition only
+// when a location currently has more than one - a group with zero
+// alerts is never created in the first place (byLocation/byCondition
+// only ever get entries pushed into them for alerts that actually
+// exist), so there's nothing to explicitly hide.
+function renderRestingAlertSubTab(allAlerts) {
+  const el = document.getElementById('alertSubTab-resting');
+  const resting = alertsRelevantToMe(allAlerts).filter((a) => a.phaseType === 'resting');
+  if (!resting.length) { el.innerHTML = '<p class="muted">Nothing overdue right now.</p>'; return; }
+
+  const byLocation = {};
+  for (const a of resting) (byLocation[a.currentLocation] = byLocation[a.currentLocation] || []).push(a);
+
+  el.innerHTML = Object.entries(byLocation).map(([location, locAlerts]) => {
+    const conditions = new Set(locAlerts.map((a) => a.currentCondition));
+    let contentHtml;
+    if (conditions.size <= 1) {
+      contentHtml = locAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('');
+    } else {
+      const byCondition = {};
+      for (const a of locAlerts) (byCondition[a.currentCondition] = byCondition[a.currentCondition] || []).push(a);
+      contentHtml = Object.entries(byCondition).map(([cond, condAlerts]) => `
+        <details class="alert-group" open>
+          <summary class="alert-group-summary">${CONDITION_LABELS[cond] || cond} <span class="alert-group-count">${condAlerts.length}</span></summary>
+          <div class="alert-group-content">${condAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('')}</div>
+        </details>
+      `).join('');
+    }
+    return `
+      <details class="alert-group" open>
+        <summary class="alert-group-summary">${LOCATION_LABELS[location] || location} <span class="alert-group-count">${locAlerts.length}</span></summary>
+        <div class="alert-group-content">${contentHtml}</div>
+      </details>
+    `;
+  }).join('');
+}
+
+// Pending Phase: grouped by receiving location, sub-grouped by
+// receiving user only when more than one appears - same "never
+// create an empty group" principle as Resting Phase above.
+function renderPendingAlertSubTab(allAlerts) {
+  const el = document.getElementById('alertSubTab-pending');
+  const pending = alertsRelevantToMe(allAlerts).filter((a) => a.phaseType === 'pending');
+  if (!pending.length) { el.innerHTML = '<p class="muted">Nothing overdue right now.</p>'; return; }
+
+  const byLocation = {};
+  for (const a of pending) (byLocation[a.receivingLocation] = byLocation[a.receivingLocation] || []).push(a);
+
+  el.innerHTML = Object.entries(byLocation).map(([location, locAlerts]) => {
+    const users = new Set(locAlerts.map((a) => a.receivingUserName || 'Unassigned'));
+    let contentHtml;
+    if (users.size <= 1) {
+      contentHtml = locAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('');
+    } else {
+      const byUser = {};
+      for (const a of locAlerts) {
+        const key = a.receivingUserName || 'Unassigned';
+        (byUser[key] = byUser[key] || []).push(a);
+      }
+      contentHtml = Object.entries(byUser).map(([user, userAlerts]) => `
+        <details class="alert-group" open>
+          <summary class="alert-group-summary">${user} <span class="alert-group-count">${userAlerts.length}</span></summary>
+          <div class="alert-group-content">${userAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('')}</div>
+        </details>
+      `).join('');
+    }
+    return `
+      <details class="alert-group" open>
+        <summary class="alert-group-summary">${LOCATION_LABELS[location] || location} <span class="alert-group-count">${locAlerts.length}</span></summary>
+        <div class="alert-group-content">${contentHtml}</div>
+      </details>
+    `;
+  }).join('');
+}
+
+function showAlertSubTab(tab) {
+  ['resting', 'pending'].forEach((t) => {
+    document.getElementById(`alertSubTab-${t}`).style.display = t === tab ? 'block' : 'none';
+    document.getElementById(`alertSubTabBtn-${t}`).classList.toggle('active', t === tab);
+  });
+}
+
+async function loadAlerts() {
+  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) {
+    document.getElementById('alertSubTab-resting').innerHTML = '<p class="muted">Could not load alerts.</p>';
+    document.getElementById('alertSubTab-pending').innerHTML = '<p class="muted">Could not load alerts.</p>';
+    return;
+  }
+  const alerts = await res.json();
+  renderRestingAlertSubTab(alerts);
+  renderPendingAlertSubTab(alerts);
 }
 
 async function loadDashboard() {
