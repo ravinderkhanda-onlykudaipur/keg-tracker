@@ -293,7 +293,7 @@
     <div class="home-tab-panel" id="homeTab-feedback" style="display:none">
       <div class="card">
         <p class="muted" style="margin-top:0">
-          Sent directly to Admin. This is completely anonymous \u2014
+          Sent directly to Admin. This is completely anonymous &mdash;
           nothing about who sent it is stored, not even for Admin to see.
         </p>
         <label>Your feedback</label>
@@ -330,8 +330,13 @@
      decoding (image processing + Reed-Solomon error correction) isn't
      practical, so this is the one exception to the app's otherwise
      dependency-free footprint (the only other external script
-     anywhere is device-id.js). -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+     anywhere is device-id.js). URL verified directly against the
+     library's own GitHub source (github.com/cozmo/jsQR/dist/jsQR.js)
+     after an earlier guessed URL (a ".min.js" filename that doesn't
+     actually exist in this package) silently failed to load - a
+     script tag with a broken src fails silently in the browser, which
+     is exactly why the defensive check in scanLoop() below exists now. -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <script src="/device-id.js"></script>
 <script>
 let currentUser = null;
@@ -441,6 +446,18 @@ async function startScan() {
   const statusEl = document.getElementById('scanStatus');
   statusEl.textContent = '';
 
+  // Defensive check: a script tag with a broken/unreachable src fails
+  // silently in the browser (no thrown error, jsQR just never becomes
+  // defined) - without this check, that failure mode looks exactly
+  // like "the camera opened but scanning does nothing", with no error
+  // message anywhere to explain why. Caught exactly this once already
+  // from a guessed CDN URL that didn't actually exist - see the
+  // comment on the script tag itself.
+  if (typeof jsQR !== 'function') {
+    alert('The QR scanning library failed to load. Check your internet connection and try again.');
+    return;
+  }
+
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
   } catch (err) {
@@ -466,18 +483,27 @@ function scanLoop() {
   const video = document.getElementById('scanVideo');
   const canvas = document.getElementById('scanCanvas');
 
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height);
+  // Wrapped in try/catch as defense-in-depth beyond the startup check
+  // in startScan() - an uncaught exception anywhere in this function
+  // would otherwise silently kill the requestAnimationFrame loop with
+  // no visible error, looking exactly like "the camera opened but
+  // scanning does nothing" with no clue why.
+  try {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-    if (code && code.data) {
-      handleScannedUrl(code.data);
-      return; // stop the loop - handleScannedUrl navigates away or shows an error
+      if (code && code.data) {
+        handleScannedUrl(code.data);
+        return; // stop the loop - handleScannedUrl navigates away or shows an error
+      }
     }
+  } catch (err) {
+    document.getElementById('scanStatus').textContent = 'Scanning error: ' + err.message;
   }
   scanAnimationFrame = requestAnimationFrame(scanLoop);
 }
