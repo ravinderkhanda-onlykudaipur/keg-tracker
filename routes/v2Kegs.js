@@ -85,6 +85,37 @@ router.get('/alerts', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+// GET /api/v2/kegs/overview-stats - customer and product breakdowns
+// for the Overview page's pie charts. Admin/Manager only, same access
+// level as the rest of index.html's oversight features.
+//
+// Customer breakdown is filtered to current_location = 'customer'
+// specifically, not just "has a customer_id set" - current_customer_id
+// is never cleared once a keg comes back empty, so an unfiltered count
+// would include kegs that already returned and are sitting with Mover,
+// not genuinely still out with that customer.
+//
+// Product breakdown is filtered to conditions where the keg still
+// actually contains that product (filled, to_be_delivered, delivered) -
+// current_product_id has the same "never cleared" property, so once a
+// keg empties and gets washed again, its last-filled product is stale
+// until refilled.
+router.get('/overview-stats', requireRole('admin', 'manager'), async (req, res) => {
+  const { rows: byCustomer } = await pool.query(`
+    SELECT c.name, COUNT(*)::int AS count
+    FROM kegs k JOIN customers c ON c.id = k.current_customer_id
+    WHERE k.current_location = 'customer'
+    GROUP BY c.name ORDER BY count DESC
+  `);
+  const { rows: byProduct } = await pool.query(`
+    SELECT p.name, COUNT(*)::int AS count
+    FROM kegs k JOIN products p ON p.id = k.current_product_id
+    WHERE k.current_condition IN ('filled', 'to_be_delivered', 'delivered')
+    GROUP BY p.name ORDER BY count DESC
+  `);
+  res.json({ byCustomer, byProduct });
+});
+
 // GET /api/v2/kegs/export-events.csv - every v2 event (WHERE phase IS
 // NOT NULL, so v1-only history rows are excluded), one row per scan -
 // a two-scan handover produces two rows (initiated + confirmed), a

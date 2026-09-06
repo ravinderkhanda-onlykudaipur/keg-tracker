@@ -271,8 +271,23 @@
       <div class="kpi-row" id="kpiRow"></div>
 
       <div class="card">
-        <h3>Alerts</h3>
-        <div id="alertsList"><p class="muted">Loading...</p></div>
+        <h3>Kegs by Customer</h3>
+        <div id="customerPieChart"></div>
+      </div>
+      <div class="card">
+        <h3>Kegs by Product</h3>
+        <div id="productPieChart"></div>
+      </div>
+
+      <div class="card">
+        <h3>Alerts \u2014 Resting Phase</h3>
+        <p class="muted" style="margin-top:0">Kegs sitting at a location, nothing pending.</p>
+        <div id="restingAlertsList"><p class="muted">Loading...</p></div>
+      </div>
+      <div class="card">
+        <h3>Alerts \u2014 Pending Phase</h3>
+        <p class="muted" style="margin-top:0">Kegs mid-handover, awaiting receipt.</p>
+        <div id="pendingAlertsList"><p class="muted">Loading...</p></div>
       </div>
     </div>
 
@@ -531,6 +546,7 @@ function showMain(user) {
 
   loadKegs();
   loadAlerts();
+  loadOverviewCharts();
   showTab('overview');
 }
 
@@ -619,17 +635,11 @@ function renderKpiSummary(kegs) {
   `).join('');
 }
 
-// Same 3-stage grouping as scan.html's Mover alerts overview (that
-// file's ALERT_STAGE_GROUPS) - duplicated here rather than shared,
-// since these are two separate standalone HTML files with no module
-// system between them. Groups by pipeline stage rather than by status
-// or role directly, so Admin/Manager can see at a glance where the
-// pipeline is backing up, same reasoning as the Mover-facing version.
-const ALERT_STAGE_GROUPS = {
-  'At Washer/Filler': ['washer', 'filler'],
-  'At Warehouse': ['mover', 'warehouse'],
-  'In Transit': ['driver', 'customer'],
-};
+// Label maps - not previously needed in index.html (scan.html has its
+// own copy; these are separate standalone files with no module system
+// between them, same reasoning as ALERT_STAGE_GROUPS below used to be).
+const LOCATION_LABELS = { customer: 'Customer', driver: 'Driver', mover: 'Mover', washer: 'Washer', filler: 'Filler', warehouse: 'Warehouse' };
+const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned', filling: 'Filling', filled: 'Filled', to_be_delivered: 'To Be Delivered', delivered: 'Delivered', delivery_failed: 'Delivery Failed', damaged: 'Damaged' };
 
 function formatOverdueDuration(hours) {
   const rounded = Math.round(hours);
@@ -639,37 +649,154 @@ function formatOverdueDuration(hours) {
   return remHours > 0 ? `${days}d ${remHours}h overdue` : `${days}d overdue`;
 }
 
-async function loadAlerts() {
-  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
-  const el = document.getElementById('alertsList');
-  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load alerts.</p>'; return; }
-  const alerts = await res.json();
-  if (!alerts.length) {
-    el.innerHTML = '<p class="muted">Nothing overdue right now.</p>';
-    return;
+function alertItemHtml(a) {
+  return `
+    <div class="alert-item">
+      <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
+      <span class="alert-badge">${formatOverdueDuration(a.hoursOverdue)}</span>
+      <br><span class="muted">${a.transitionIds.join(' or ')}</span>
+    </div>
+  `;
+}
+
+// Resting Phase: grouped by location, sub-grouped by condition only
+// when a location has more than one condition among its current
+// alerts - a single-condition location (e.g. only ever "Customer:
+// Delivered") doesn't need a redundant one-item sub-group.
+async function loadRestingAlerts(allAlerts) {
+  const el = document.getElementById('restingAlertsList');
+  const resting = allAlerts.filter((a) => a.phaseType === 'resting');
+  if (!resting.length) { el.innerHTML = '<p class="muted">Nothing overdue right now.</p>'; return; }
+
+  const byLocation = {};
+  for (const a of resting) {
+    (byLocation[a.currentLocation] = byLocation[a.currentLocation] || []).push(a);
   }
 
-  el.innerHTML = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, locations]) => {
-    // Worst-overdue first within each group - no cap, shows every
-    // overdue keg in that group (per an earlier request: no more
-    // "7 most recent" limiting anywhere in the app).
-    const groupAlerts = alerts.filter((a) => locations.includes(a.currentLocation)).sort((a, b) => b.hoursOverdue - a.hoursOverdue);
-    const itemsHtml = groupAlerts.length
-      ? groupAlerts.map((a) => `
-        <div class="alert-item">
-          <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
-          <span class="alert-badge">${formatOverdueDuration(a.hoursOverdue)}</span>
-          <br><span class="muted">waiting on: ${roleLabel(a.role)} \u00b7 ${a.transitionIds.join(' or ')}</span>
-        </div>
-      `).join('')
-      : '<p class="muted">Nothing overdue here.</p>';
+  el.innerHTML = Object.entries(byLocation).map(([location, locAlerts]) => {
+    const conditions = new Set(locAlerts.map((a) => a.currentCondition));
+    let contentHtml;
+    if (conditions.size <= 1) {
+      contentHtml = locAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('');
+    } else {
+      const byCondition = {};
+      for (const a of locAlerts) (byCondition[a.currentCondition] = byCondition[a.currentCondition] || []).push(a);
+      contentHtml = Object.entries(byCondition).map(([cond, condAlerts]) => `
+        <details class="alert-group" open>
+          <summary class="alert-group-summary">${CONDITION_LABELS[cond] || cond} <span class="alert-group-count">${condAlerts.length}</span></summary>
+          <div class="alert-group-content">${condAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('')}</div>
+        </details>
+      `).join('');
+    }
     return `
       <details class="alert-group">
-        <summary class="alert-group-summary">${groupLabel} <span class="alert-group-count">${groupAlerts.length}</span></summary>
-        <div class="alert-group-content">${itemsHtml}</div>
+        <summary class="alert-group-summary">${LOCATION_LABELS[location] || location} <span class="alert-group-count">${locAlerts.length}</span></summary>
+        <div class="alert-group-content">${contentHtml}</div>
       </details>
     `;
   }).join('');
+}
+
+// Pending Phase: grouped by receiving location, sub-grouped by the
+// receiving user only when more than one user appears within that
+// location's current alerts - with "one person, one job" this will
+// almost always collapse to a single sub-group, but the structure
+// stays correct if that ever changes.
+async function loadPendingAlerts(allAlerts) {
+  const el = document.getElementById('pendingAlertsList');
+  const pending = allAlerts.filter((a) => a.phaseType === 'pending');
+  if (!pending.length) { el.innerHTML = '<p class="muted">Nothing overdue right now.</p>'; return; }
+
+  const byLocation = {};
+  for (const a of pending) {
+    (byLocation[a.receivingLocation] = byLocation[a.receivingLocation] || []).push(a);
+  }
+
+  el.innerHTML = Object.entries(byLocation).map(([location, locAlerts]) => {
+    const users = new Set(locAlerts.map((a) => a.receivingUserName || 'Unassigned'));
+    let contentHtml;
+    if (users.size <= 1) {
+      contentHtml = locAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('');
+    } else {
+      const byUser = {};
+      for (const a of locAlerts) {
+        const key = a.receivingUserName || 'Unassigned';
+        (byUser[key] = byUser[key] || []).push(a);
+      }
+      contentHtml = Object.entries(byUser).map(([user, userAlerts]) => `
+        <details class="alert-group" open>
+          <summary class="alert-group-summary">${user} <span class="alert-group-count">${userAlerts.length}</span></summary>
+          <div class="alert-group-content">${userAlerts.sort((a, b) => b.hoursOverdue - a.hoursOverdue).map(alertItemHtml).join('')}</div>
+        </details>
+      `).join('');
+    }
+    return `
+      <details class="alert-group">
+        <summary class="alert-group-summary">${LOCATION_LABELS[location] || location} <span class="alert-group-count">${locAlerts.length}</span></summary>
+        <div class="alert-group-content">${contentHtml}</div>
+      </details>
+    `;
+  }).join('');
+}
+
+async function loadAlerts() {
+  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) {
+    document.getElementById('restingAlertsList').innerHTML = '<p class="muted">Could not load alerts.</p>';
+    document.getElementById('pendingAlertsList').innerHTML = '<p class="muted">Could not load alerts.</p>';
+    return;
+  }
+  const alerts = await res.json();
+  await loadRestingAlerts(alerts);
+  await loadPendingAlerts(alerts);
+}
+
+// Minimal, self-contained SVG pie chart - no external charting library
+// dependency, consistent with the rest of this app (the only external
+// script anywhere is device-id.js). data: [{name, count}, ...].
+function renderPieChart(containerId, data) {
+  const el = document.getElementById(containerId);
+  if (!data.length) { el.innerHTML = '<p class="muted">No data yet.</p>'; return; }
+
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  const colors = ['#2FA8F5', '#F5A623', '#7ED321', '#D0021B', '#9013FE', '#50E3C2', '#B8860B', '#4A4A4A'];
+  const cx = 60, cy = 60, r = 55;
+  let angleStart = -Math.PI / 2; // start at 12 o'clock
+
+  const slices = data.map((d, i) => {
+    const fraction = d.count / total;
+    const angleEnd = angleStart + fraction * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angleStart), y1 = cy + r * Math.sin(angleStart);
+    const x2 = cx + r * Math.cos(angleEnd), y2 = cy + r * Math.sin(angleEnd);
+    const largeArc = fraction > 0.5 ? 1 : 0;
+    const path = fraction >= 0.999
+      ? `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z` // full circle edge case
+      : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+    angleStart = angleEnd;
+    return `<path d="${path}" fill="${colors[i % colors.length]}"></path>`;
+  }).join('');
+
+  const legend = data.map((d, i) => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:13px;margin:3px 0">
+      <span style="width:10px;height:10px;border-radius:2px;background:${colors[i % colors.length]};display:inline-block"></span>
+      ${d.name} <span class="muted">(${d.count})</span>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <svg width="120" height="120" viewBox="0 0 120 120">${slices}</svg>
+      <div>${legend}</div>
+    </div>
+  `;
+}
+
+async function loadOverviewCharts() {
+  const res = await fetch('/api/v2/kegs/overview-stats', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) return;
+  const { byCustomer, byProduct } = await res.json();
+  renderPieChart('customerPieChart', byCustomer);
+  renderPieChart('productPieChart', byProduct);
 }
 
 // rows: [{ label, value, displayValue }] - renders a simple horizontal
