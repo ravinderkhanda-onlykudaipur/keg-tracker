@@ -204,4 +204,68 @@ router.post('/:id/execute', requireAuth, async (req, res) => {
   res.status(201).json(updated);
 });
 
+// POST /api/v2/kegs/:id/revert - undo the single most recent v2 event
+// on a keg. Mover (warehouse role), Admin, and Manager only - matches
+// v1's own revert scope (routes/events.js), not a general-purpose undo
+// for any action by anyone.
+//
+// Unlike v1's revert, which had to replay every earlier event through
+// resolveNextStatus() to derive the previous status (since v1 never
+// stored a "before" state on the event itself), v2 events already
+// record from_location/from_warehouse_sublocation/from_condition
+// directly - so undoing is just restoring those values, no replay
+// needed. Works correctly for both an 'initiated' event (clears the
+// pending fields; location was never actually touched at initiate
+// time, so restoring from_location is a no-op there, but from_condition
+// correctly reverts an initiate that used conditionAtInitiate, like
+// a failed-delivery report) and a 'confirmed' event (fully reverses
+// the location/condition change).
+//
+// The revert itself is logged as a new event (phase: 'confirmed', so
+// it correctly resets the alert-timing clock - see lib/v2/alerts.js -
+// rather than leaving the keg looking instantly overdue again from
+// the pre-revert timestamp), never deleting or altering the original
+// event - same audit-trail principle as v1.
+router.post('/:id/revert', requireRole('admin', 'warehouse', 'manager'), async (req, res) => {
+  const keg = await loadKeg(req.params.id);
+  if (!keg) return res.status(404).json({ error: 'Keg not found' });
+
+  const { rows: recentEvents } = await pool.query(
+    `SELECT * FROM events WHERE keg_id = $1 AND phase IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [keg.id]
+  );
+  const lastEvent = recentEvents[0];
+  if (!lastEvent) return res.status(409).json({ error: 'This keg has no logged v2 actions to revert.' });
+  if (lastEvent.action_type === 'revert') {
+    return res.status(409).json({ error: 'The most recent event is already a revert - nothing further to undo.' });
+  }
+
+  await withTransaction(async (client) => {
+    await client.query(`
+      UPDATE kegs SET
+        current_location = $1, warehouse_sublocation = $2, current_condition = $3,
+        pending_handover_to = NULL, pending_handover_warehouse_sublocation = NULL,
+        pending_handover_initiated_at = NULL, pending_handover_initiated_by = NULL, pending_handover_transition_id = NULL
+      WHERE id = $4
+    `, [lastEvent.from_location, lastEvent.from_warehouse_sublocation, lastEvent.from_condition, keg.id]);
+
+    await client.query(`
+      INSERT INTO events (
+        keg_id, user_id, role, action_type, details, phase,
+        sender, receiver, from_location, from_warehouse_sublocation, from_condition,
+        to_location, to_warehouse_sublocation, to_condition
+      ) VALUES ($1,$2,$3,'revert',$4,'confirmed',$5,$6,$7,$8,$9,$10,$11,$12)
+    `, [
+      keg.id, req.user.id, req.user.role,
+      JSON.stringify({ reverted_transition_id: lastEvent.action_type, reverted_phase: lastEvent.phase }),
+      lastEvent.receiver, lastEvent.sender,
+      lastEvent.to_location, lastEvent.to_warehouse_sublocation, lastEvent.to_condition,
+      lastEvent.from_location, lastEvent.from_warehouse_sublocation, lastEvent.from_condition,
+    ]);
+  });
+
+  const updated = await loadKeg(keg.id);
+  res.status(201).json(updated);
+});
+
 module.exports = router;

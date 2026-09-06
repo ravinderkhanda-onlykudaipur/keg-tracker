@@ -268,6 +268,7 @@
     <div id="confirmSection"></div>
     <div id="actionsSection"></div>
     <div id="actionFormSection"></div>
+    <div id="revertSection"></div>
   </div>
 </div>
 
@@ -459,6 +460,7 @@ function renderKeg() {
     pendingWrap.innerHTML = '';
   }
   renderConfirmSection();
+  renderRevertSection();
   renderAvailableActions();
 }
 
@@ -475,6 +477,34 @@ function renderConfirmSection() {
     return;
   }
   el.innerHTML = `<button onclick="submitConfirm()">Confirm receipt</button><div id="confirmMsg"></div>`;
+}
+
+// Mover (warehouse role), Admin, and Manager can undo the single most
+// recent event on a keg - matches v1's own revert scope. Shown
+// regardless of pending-handover state, since an in-progress two-scan
+// handover's own 'initiated' event is itself undoable (cancels the
+// pending handover cleanly).
+function renderRevertSection() {
+  const el = document.getElementById('revertSection');
+  const canRevert = ['admin', 'warehouse', 'manager'].includes(currentUser.role);
+  if (!canRevert) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="secondary" onclick="submitRevert()">Undo last action</button><div id="revertMsg"></div>`;
+}
+
+async function submitRevert() {
+  const msg = document.getElementById('revertMsg');
+  const res = await fetch(`/api/v2/kegs/${kegId}/revert`, {
+    method: 'POST', credentials: 'include', cache: 'no-store',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  msg.className = 'success';
+  msg.textContent = 'Reverted.';
+  setTimeout(loadKeg, 800);
 }
 
 function renderAvailableActions() {
