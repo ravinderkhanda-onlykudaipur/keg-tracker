@@ -89,7 +89,24 @@ async function init() {
         CHECK (pending_handover_warehouse_sublocation IN ('uncleaned','cleaned','filled','damaged')),
       pending_handover_initiated_at TIMESTAMPTZ,
       pending_handover_initiated_by TEXT REFERENCES users(id),
-      pending_handover_transition_id TEXT
+      pending_handover_transition_id TEXT,
+      -- v2's own destination tracking, deliberately separate from v1's
+      -- customer_id/destination/destination_address/destination_phone
+      -- columns above - part of the clean cutover (see
+      -- lib/v2/DATA_MODEL.md): v2 owns its own data end to end rather
+      -- than reusing v1's mutable columns, which is exactly the kind
+      -- of shared-state coupling that caused the sync bugs this
+      -- cutover was meant to eliminate.
+      current_customer_id TEXT REFERENCES customers(id),
+      -- v2's own fill-details tracking, same reasoning as
+      -- current_customer_id above - v1's fill action captured product/
+      -- batch/ABV, but v2's original filler_completes_fill transition
+      -- captured nothing at all about what was actually filled, a real
+      -- functional regression found during a later audit rather than
+      -- built correctly the first time.
+      current_product_id TEXT REFERENCES products(id),
+      current_batch_number TEXT,
+      current_abv NUMERIC
     );
 
     CREATE TABLE IF NOT EXISTS events (
@@ -195,6 +212,10 @@ async function init() {
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS pending_handover_initiated_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS pending_handover_initiated_by TEXT REFERENCES users(id);`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS pending_handover_transition_id TEXT;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_customer_id TEXT REFERENCES customers(id);`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_product_id TEXT REFERENCES products(id);`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_batch_number TEXT;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_abv NUMERIC;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS sender TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS receiver TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS from_location TEXT;`);
@@ -249,11 +270,41 @@ async function init() {
   if (migrationDone !== 'true') {
     for (const [status, v2] of Object.entries(STATUS_TO_V2)) {
       await pool.query(
-        `UPDATE kegs SET current_location = $1, current_condition = $2, pending_handover_to = $3 WHERE status = $4`,
-        [v2.current_location, v2.current_condition, v2.pending_handover_to || null, status]
+        `UPDATE kegs SET current_location = $1, current_condition = $2, pending_handover_to = $3, pending_handover_transition_id = $4 WHERE status = $5`,
+        [v2.current_location, v2.current_condition, v2.pending_handover_to || null, v2.pending_handover_transition_id || null, status]
       );
     }
     await setSetting(pool, 'v2_status_migration_done', 'true');
+  }
+
+  // Self-healing repair, run on every boot rather than gated behind a
+  // one-time flag: fixes any keg stuck with pending_handover_to set
+  // but pending_handover_transition_id NULL - the exact bug that
+  // caused "Could not find the transition definition for this pending
+  // handover" on confirm. This should never happen for a keg created
+  // through initiateHandover() (which always sets both together), but
+  // did happen for every keg the migration above touched before this
+  // fix, since the original migration set pending_handover_to without
+  // ever setting the matching transition ID. Can't just re-run that
+  // migration with the fix now in place, since it keys off the frozen
+  // v1 `status` column - a keg that has since progressed through real
+  // v2 actions could still have an old status value, and blindly
+  // re-applying the migration would incorrectly reset it. This instead
+  // matches directly against the keg's CURRENT state (confirmed there's
+  // no ambiguity: no two two-scan transitions share the same
+  // from-state + receiver combination), so it only ever repairs
+  // genuinely broken rows and never touches anything else. Safe to run
+  // every boot since it's a no-op once nothing is left to repair.
+  const { TRANSITION_MATRIX } = require('./lib/v2/transitionMatrix');
+  const twoScanTransitions = TRANSITION_MATRIX.filter((t) => t.twoScan);
+  for (const t of twoScanTransitions) {
+    await pool.query(
+      `UPDATE kegs SET pending_handover_transition_id = $1
+       WHERE pending_handover_to = $2 AND pending_handover_transition_id IS NULL
+         AND current_location = $3 AND current_condition = $4
+         AND (warehouse_sublocation = $5 OR ($5 IS NULL AND warehouse_sublocation IS NULL))`,
+      [t.id, t.receiver, t.from.location, t.from.condition, t.from.warehouseSublocation || null]
+    );
   }
 
   // Device registration moved from per-ROLE to per-USER: a device
