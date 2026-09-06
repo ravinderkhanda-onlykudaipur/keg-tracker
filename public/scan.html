@@ -76,6 +76,13 @@
      Visually modeled on the original Now/Next icon-and-label layout,
      just showing one fact instead of a now/next pair. */
   .custody-card { text-align: center; }
+
+  /* Merged "Keg ID + Information Filled by Filler" card, replicated
+     from v1: Keg ID centered at top, three icon columns below. */
+  .filled-keg-id { text-align: center; font-size: 20px; font-weight: 600; margin-bottom: 14px; }
+  .filled-columns { display: flex; justify-content: space-around; text-align: center; }
+  .filled-column img { width: 40px; height: 40px; margin-bottom: 6px; }
+  .filled-column { flex: 1; }
   .custody-icon-wrap { margin: 6px auto 4px; }
   .custody-location { font-size: 20px; font-weight: 600; }
   .custody-sublocation { font-size: 14px; color: var(--text-secondary); }
@@ -83,7 +90,7 @@
 
   .pending-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 500; text-align: center; margin: 10px 0; }
 
-  .action-btn-wrap { margin-top: 10px; }
+
 
   /* Dashboard groups - same collapsible pattern also used on
      index.html, kept consistent across both. */
@@ -104,6 +111,14 @@
      standalone files with their own stylesheets. */
   .tab-bar { display: flex; gap: 4px; margin: 12px 0; border-bottom: 1px solid var(--card-border); }
   .tab-btn { flex: 1; background: none; border: none; padding: 10px 4px; font-size: 14px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin: 0; width: auto; }
+
+  /* Available-action buttons - same tab-like structure/border-bottom
+     treatment as the tab-bar above, but each one gets its own distinct
+     color (via inline style, one per action) rather than sharing the
+     tab-bar's single active/inactive color scheme, since these are
+     independent choices to make, not a single selection to switch
+     between. */
+  .action-tab-btn { flex: 1; background: none; border: none; border-bottom: 3px solid; padding: 12px 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin: 0; width: auto; }
   .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 
   .task-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 6px 0; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; }
@@ -386,9 +401,29 @@
 
     <div id="pendingBannerWrap"></div>
 
-    <div class="card" id="kegDetailsCard">
-      <h3 style="margin-top:0">Keg Details</h3>
-      <div id="kegDetailsBody"></div>
+    <!-- Merged "Keg ID + Information Filled by Filler" card, replicated
+         from v1 exactly: Keg ID centered at top, three icon columns
+         (Beer/Batch/ABV) below. Replaces the two separate Keg Details
+         and Filled Detail cards this page previously had. -->
+    <div class="card" id="filledDetailsCard" style="display:none">
+      <div class="filled-keg-id" id="filledDetailsKegId"></div>
+      <div class="filled-columns">
+        <div class="filled-column">
+          <img src="/icons/beer.svg" alt="">
+          <div class="muted">Beer</div>
+          <div id="filledDetailsBeer"></div>
+        </div>
+        <div class="filled-column">
+          <img src="/icons/batch.svg" alt="">
+          <div class="muted">Batch No</div>
+          <div id="filledDetailsBatch"></div>
+        </div>
+        <div class="filled-column">
+          <img src="/icons/abv.svg" alt="">
+          <div class="muted">ABV</div>
+          <div id="filledDetailsAbv"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Customer Details normally shows here - but when there's a
@@ -398,11 +433,6 @@
          the required action." Once confirmed, Customer Details
          reappears here on the next load. -->
     <div id="customerOrActionCard"></div>
-
-    <div class="card" id="filledDetailsCard" style="display:none">
-      <h3 style="margin-top:0">Filled Detail</h3>
-      <div id="filledDetailsBody"></div>
-    </div>
 
     <div id="actionsSection"></div>
     <div id="actionFormSection"></div>
@@ -958,7 +988,6 @@ function renderKeg() {
     pendingWrap.innerHTML = '';
   }
 
-  renderKegDetails();
   renderCustomerOrActionCard();
   renderFilledDetails();
   renderHistory();
@@ -967,18 +996,14 @@ function renderKeg() {
 }
 
 // Basic identity info - same for every keg regardless of role.
-function renderKegDetails() {
-  const addedDate = currentKeg.created_at ? new Date(currentKeg.created_at).toLocaleDateString() : '\u2013';
-  document.getElementById('kegDetailsBody').innerHTML = `
-    <div class="muted">Manufacturing Number</div>
-    <div style="margin-bottom:8px">${currentKeg.manufacturing_number || '\u2013'}</div>
-    <div class="muted">Size</div>
-    <div style="margin-bottom:8px">${currentKeg.size_liters ? currentKeg.size_liters + 'L' : '\u2013'}</div>
-    <div class="muted">Material</div>
-    <div style="margin-bottom:8px">${currentKeg.material || '\u2013'}</div>
-    <div class="muted">Added</div>
-    <div>${addedDate}</div>
-  `;
+function renderFilledDetails() {
+  const card = document.getElementById('filledDetailsCard');
+  if (!currentKeg.current_product_name) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('filledDetailsKegId').textContent = currentKeg.id;
+  document.getElementById('filledDetailsBeer').textContent = currentKeg.current_product_name;
+  document.getElementById('filledDetailsBatch').textContent = currentKeg.current_batch_number || '\u2013';
+  document.getElementById('filledDetailsAbv').textContent = currentKeg.current_abv != null ? currentKeg.current_abv + '%' : '\u2013';
 }
 
 // This position shows EITHER Customer Details OR the required action
@@ -1017,19 +1042,6 @@ function renderCustomerOrActionCard() {
   el.innerHTML = '';
 }
 
-function renderFilledDetails() {
-  const card = document.getElementById('filledDetailsCard');
-  if (!currentKeg.current_product_name) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
-  document.getElementById('filledDetailsBody').innerHTML = `
-    <div class="muted">Beer</div>
-    <div style="margin-bottom:8px">${currentKeg.current_product_name}</div>
-    <div class="muted">Batch Number</div>
-    <div style="margin-bottom:8px">${currentKeg.current_batch_number || '\u2013'}</div>
-    <div class="muted">ABV</div>
-    <div>${currentKeg.current_abv != null ? currentKeg.current_abv + '%' : '\u2013'}</div>
-  `;
-}
 
 // Admin only - the backend itself only ever includes `history` in the
 // response for an Admin request (see routes/v2Kegs.js's GET /:id), so
@@ -1083,6 +1095,11 @@ async function submitRevert() {
   setTimeout(loadKeg, 800);
 }
 
+// Distinct color per available action, reusing the same palette
+// already used for the Overview's pie charts elsewhere in the app -
+// cycles if there are ever more actions than colors.
+const ACTION_BTN_COLORS = ['#2FA8F5', '#F5A623', '#7ED321', '#D0021B', '#9013FE', '#50E3C2'];
+
 function renderAvailableActions() {
   const el = document.getElementById('actionsSection');
   document.getElementById('actionFormSection').innerHTML = '';
@@ -1094,11 +1111,10 @@ function renderAvailableActions() {
     el.innerHTML = '<p class="muted">No actions available for your role on this keg right now.</p>';
     return;
   }
-  el.innerHTML = availableTransitions.map((t) => `
-    <div class="action-btn-wrap">
-      <button class="${availableTransitions.length > 1 ? 'secondary' : ''}" onclick="selectAction('${t.id}')">${t.label}</button>
-    </div>
-  `).join('');
+  el.innerHTML = `<div class="tab-bar">` + availableTransitions.map((t, i) => {
+    const color = ACTION_BTN_COLORS[i % ACTION_BTN_COLORS.length];
+    return `<button class="action-tab-btn" style="color:${color}; border-bottom-color:${color}" onclick="selectAction('${t.id}')">${t.label}</button>`;
+  }).join('') + `</div>`;
 }
 
 function selectAction(transitionId) {
@@ -1238,6 +1254,11 @@ async function submitAction(transitionId, twoScan) {
     msg.textContent = 'Save the new beer first, or pick an existing one.';
     return;
   }
+
+  // Confirmation popup AFTER details are filled in, before the action
+  // actually executes - per explicit direction: the details form and
+  // the final "are you sure" step are two separate moments, not one.
+  if (!confirm(`Confirm: ${t.label}?`)) return;
 
   const endpoint = twoScan ? 'initiate' : 'execute';
   const res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
