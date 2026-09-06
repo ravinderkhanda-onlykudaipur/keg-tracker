@@ -1160,7 +1160,785 @@ Roughly in priority order:
     wanted. Now `href="#"` with `return false` in the click handler
     prevents any navigation at all - clicking the Keg ID does nothing
     but pop the QR code open in a new tab.
-59. **Custom domain + always-on hosting**, once the free tier's sleep
+59. ~~**Root cause found for "my fix isn't showing up": stale service
+    worker cache.**~~ Both the "Fill Details invisible to Admin/
+    Manager" and "Keg ID click does two things" reports turned out to
+    have zero bug in the actual source code - re-verified both
+    directly and confirmed correct. The real cause: `sw.js`'s
+    `CACHE_NAME` was still `v4`, unchanged since the in-app scanner was
+    added many rounds ago. Every `scan.html`/`index.html` edit since
+    then (Fill Details for Admin/Manager, the whole icon overhaul, the
+    Destination card redesign, the Keg ID click fix, all of it) was
+    genuinely correct and genuinely deployed - it just never reached
+    the browser, because the service worker's **cache-first** strategy
+    kept serving the old `v4`-cached copies regardless of what the
+    server actually had. Fixed two ways: bumped to `v5` (forces a fresh
+    fetch immediately), and - more importantly - **switched the
+    strategy from cache-first to network-first** for the app shell.
+    Cache-first is the right choice for a stable app that rarely
+    changes; network-first is the right choice while still under this
+    much active iteration, so a real fix reaches users the moment
+    it's deployed, with the cached copy only used as a genuine offline
+    fallback (which was always the actual point of caching this
+    content in the first place) rather than a default that can mask
+    real updates.
+60. ~~**Kegs table's Keg ID had no way to reach a keg's page at all -
+    turned out to be the real root cause behind the "Fill Details not
+    showing" report.**~~ The previous round's "Keg ID only opens QR"
+    change (an earlier explicit request) had an unintended side effect
+    that only surfaced once actually tested: it removed the only way
+    to navigate to a keg's page from that table at all, meaning there
+    was no way to reach Fill Details from there to check it in the
+    first place - not a Fill Details bug, a navigation dead-end.
+    Restored Keg ID as a real link to the keg's page, now opening in a
+    **new tab** (rather than the original same-tab behavior) per this
+    round's clarification; "QR" remains its own fully independent link.
+61. ~~**Overview's Alerts Keg ID matches the Kegs table's new-tab
+    behavior; Fill Details now sits above History.**~~ Done:
+    - Overview tab's Alerts list Keg ID link now opens in a new tab too,
+      consistent with the Kegs table link fixed last round.
+    - Fill Details card moved above the History card in the HTML order
+      for Admin/Manager - purely a DOM reordering (`fillDetailsCard`
+      now appears before `historyCard`), no JS changes needed since the
+      visibility-toggling logic only sets `display` by element ID and
+      doesn't depend on their position.
+62. ~~**Filler form's auto-filled ABV field font matched to
+    Destination card's Name style.**~~ Done - scoped specifically to
+    `#f_abv` rather than changing the shared `input, select` base rule,
+    since that rule is deliberately kept at 16px to avoid iOS Safari's
+    auto-zoom-on-focus bug across every other form field. **Worth
+    flagging**: this specific field now sits below that 16px floor
+    (13px, matching Name), which technically reintroduces the zoom risk
+    for this one field if someone taps into it - accepted as a
+    reasonable tradeoff since it's normally just auto-filled and
+    glanced at rather than retyped, but noted clearly in case that
+    assumption doesn't hold in practice.
+63. ~~**Beer/Batch/ABV values shown in Fill Details had drifted out of
+    sync with Name's font weight - not the Filler form's ABV input.**~~
+    Corrected a wrong guess from the previous round (that had targeted
+    the Filler form's auto-filled ABV *input field*, and has been
+    reverted): the actual complaint was about the *displayed* Beer/
+    Batch/ABV values in the Fill Details card, visible to Mover and
+    other roles after a keg's been filled. Root cause found: `.dest-
+    name` was bolded to `font-weight: 700` in a later round, but
+    `.detail-col-value` (Beer/Batch/ABV) was never updated to match,
+    leaving it at the older `600`. Fixed, and while investigating,
+    found `.dest-address` had the exact same drift (also still `600`)
+    - fixed that too, since leaving it out would've just created a
+    new mismatch between Address and the other two. All three (Name,
+    Address, Beer/Batch/ABV) now genuinely share `font-weight: 700`.
+64. ~~**New top banner on both pages, matching the provided reference
+    image's style.**~~ Done - added above the existing compact logo
+    header (not replacing it, per explicit confirmation), on both
+    `scan.html` and `index.html`. A blue gradient background, a faint
+    dashed route line with location pins, a faint city skyline and
+    delivery truck silhouette, and the real Only K logo centered in a
+    white glow circle, with a curved bottom edge - built as an inline
+    SVG rather than image assets, so it scales cleanly at any width.
+    **Deliberately kept compact (140px)** rather than a full hero
+    section - this is a tool people use to move fast (scanning kegs),
+    not a marketing page, so the goal was brand presence without
+    pushing the actual work content further down a small phone screen.
+    Designed and rendered the concept first, then re-rendered the exact
+    SVG as it actually exists in each source file afterward to confirm
+    nothing was lost in translation, and verified the embedded SVG is
+    valid XML in both files (a real risk given its complexity - nested
+    groups, gradients, a clip-path). `index.html`'s wider container
+    uses `preserveAspectRatio="xMidYMid slice"` (uniform scaling,
+    cropped as needed) rather than stretching to fit, to avoid
+    distortion on its wider layout compared to `scan.html`'s fixed
+    480px width.
+65. ~~**Removed the now-redundant lower logo, moved User/Logout snug
+    below the banner.**~~ Done:
+    - The smaller logo images (login screen, app header, `index.html`'s
+      title) removed - the new top banner already carries the logo, so
+      these were duplicating it right below.
+    - `scan.html`'s User/Logout chip row now sits directly under the
+      banner's curve (gap reduced from 16px to 8px), instead of having
+      its own logo above it first.
+    - `index.html`'s title simplified to plain text now that it's not
+      pairing an image with it; the now-unnecessary flex layout on its
+      `h1` rule was removed too rather than left as dead styling.
+      **Scoped narrower on this page** than on `scan.html`: its "Logged
+      in as X · log out" line is plain text inside a different
+      structure (not a chip-style row like `scan.html`'s), so it was
+      left where it already sits reasonably close to the banner, rather
+      than restructuring that page to force an identical layout.
+    Rendered a mockup of the final banner-plus-header spacing before
+    finalizing, and confirmed the old logo classes were fully removed
+    as dead code, not just unreferenced.
+66. ~~**Themed brewery/bar icons added to the banner's route line.**~~
+    Done, on both `scan.html` and `index.html` - discussed the
+    "unnecessary load" concern first (confirmed: zero cost, since the
+    whole banner is already inline SVG, not separate image files - a
+    few more path elements add a negligible number of bytes, no new
+    requests) before implementing. Route now has 4 points: a
+    microbrewery icon (two fermentation tanks on a base) at the start,
+    two plain waypoint pins in the middle, and a bar glass icon at the
+    end - deliberately kept the two middle points as simple pins rather
+    than themed icons at all 4, since a compact 140px banner with that
+    much detail would compete with the centered logo rather than
+    support it. Went through 2 rounds on the brewery icon specifically
+    - the first attempt read as an unclear crate/box shape at actual
+    size, rendered a zoomed-in close-up to see why, and redesigned it
+    with clearer twin-tank shapes that read correctly up close before
+    committing either icon to the actual files.
+67. ~~**Customer-possession gap: honest Now/Next display, real overdue
+    alerts, days-since-delivered indicator.**~~ Built all three
+    suggestions discussed:
+    - Now/Next shows "Customer" (with a location-pin icon, matching
+      the Destination card's icon shape) instead of attributing a keg
+      at `delivered`/`empty_at_customer` to a staff role that doesn't
+      actually have it - those two statuses genuinely mean the keg is
+      with the customer, not with any staff member. Went through 2
+      rounds on the icon specifically: the first version looked
+      visibly thinner than a real role icon in the same row (it lacked
+      the background circle every uploaded icon has baked in) -
+      rendered a direct side-by-side comparison, added a matching
+      circle background, and re-verified before committing.
+    - **Added the two missing alert rules** (`delivered`,
+      `empty_at_customer`) that genuinely didn't exist before - a keg
+      with a customer had zero overdue signal at all. Defaults are a
+      week for a normal in-use rental and a day for an already-empty
+      keg awaiting pickup - starting guesses, worth tuning via the new
+      `ALERT_CUSTOMER_HOURS`/`ALERT_PICKUP_HOURS` env vars to match
+      actual typical rental duration. Tested both new rules directly
+      against realistic overdue scenarios.
+    - Added a "Delivered N days ago" line under the Now/Next card
+      while a keg is with a customer, using the delivery event's own
+      timestamp (already logged, no new data needed). Tested the
+      calculation across 5 cases including same-day, singular "1 day",
+      and the no-matching-event fallback.
+    - While implementing, found and removed `STATUS_EXPECTED_ROLE` -
+      a second, now-completely-unused mapping left over from an
+      earlier round (only the Now/Next-based `STATUS_ROLE_FLOW` was
+      actually still in use).
+68. ~~**Replaced the top banner with the detailed illustrated version
+    (mountains, brewery, bar, truck), numbered pins dropped.**~~ Done,
+    on both `scan.html` and `index.html`. This went through a full
+    evaluation before implementing:
+    - The first version supplied (a 1600x520 wide-format illustration)
+      was rendered and checked at the app's actual banner proportions
+      - confirmed a real problem: "MICROBREWERY" text, the truck, and
+      most of the "BAR" building were cropped off at both the mobile
+      (480x140) and desktop (780x140) sizes, since the artwork was
+      composed for a much wider aspect ratio than the app actually
+      uses anywhere.
+    - A second version, correctly authored at the real 480x140
+      proportions, was rendered and confirmed nothing gets cropped -
+      swapped its placeholder "K" letter for the real uploaded Only K
+      logo and verified that specifically, then rendered a direct
+      side-by-side comparison against the previous banner (at true
+      pixel size, not scaled up) before asking which to keep.
+    - Implemented with the 4 numbered location pins replaced by plain
+      dots along the route, per explicit request - kept the dashed
+      route line connecting brewery to bar, dropped the numbers, which
+      didn't carry inherent meaning the way "brewery -> bar" already
+      does on its own.
+    - Adjusted the logo overlay's CSS position/size to match this
+      design's actual logo-circle coordinates (`top: 34px`, `46px`
+      instead of the previous `60px`/`52px`), re-verified the SVG
+      stayed valid XML in both files afterward, and rendered the
+      final implementation directly from each source file (not just
+      the design draft) to confirm nothing was lost in translation.
+69. ~~**Corrected a misread: pin shapes were meant to stay, only the
+    numbers needed removing.**~~ The previous round replaced the 4
+    pins with plain dots entirely, misreading "drop the numbered pins"
+    as "remove the pins" rather than "remove the numbers from the
+    pins." Fixed: restored the full pin marker (white teardrop shape +
+    route-node circle) at all 4 original positions on both
+    `scan.html` and `index.html`, with only the number `<text>`
+    elements left out. Rendered the corrected result from the actual
+    source file to confirm before considering it done.
+70. ~~**Logo misaligned and a gap below the banner on real phone
+    widths.**~~ Root cause found: the new banner used
+    `preserveAspectRatio="xMidYMid meet"`, which shrinks the SVG to
+    fit *within* its box rather than filling it - on any phone
+    narrower than the design's native 480px (most real phones), this
+    left a letterboxed gap top and bottom, and shifted the SVG's own
+    content away from where the separately-positioned logo `<img>`
+    overlay expected it (that overlay uses a fixed CSS pixel position,
+    which doesn't move when the SVG shrinks). Switched back to
+    `preserveAspectRatio="xMidYMid slice"` (crops to always fill the
+    box exactly, no letterboxing) on both files - confirmed the fix by
+    simulating a real 375px-wide phone screen both ways: `meet` showed
+    a clearly visible white gap and a misaligned logo circle; `slice`
+    filled the full height with the logo landing exactly in place.
+71. ~~**Two real bugs found from actual device testing: double logo
+    circle, brewery/bar cropped off on narrow phones.**~~ Both root-
+    caused and fixed:
+    - **Double circle**: `icon-192.png` has a solid white background
+      baked in (no transparency - confirmed by sampling its pixels
+      directly). The banner also drew its own blue-circle-with-white-
+      stroke behind it, and since the logo image was smaller, the gap
+      between the two showed as a visible ring. Removed the banner's
+      own hard circle entirely, replaced with just the soft glow
+      (matching how the very first compact banner handled this
+      correctly) - rendered with an accurately circular-clipped test
+      composite (matching what the real CSS `border-radius:50%`
+      produces) to confirm no artifacts before implementing.
+    - **Brewery/bar nearly invisible on real phones**: confirmed the
+      cause mathematically first - `preserveAspectRatio="slice"` crops
+      from the edges on any screen narrower than this design's native
+      480px, and the brewery/bar sat close enough to x=0/x=480 that a
+      realistic 375px-wide phone would crop away nearly all of both.
+      Fixed by wrapping the foreground content (route, pins, brewery,
+      truck, bar - explicitly excluding the backgrounds and the logo
+      group, which needs to stay uncompressed and centered or it would
+      distort into an ellipse) in a 25% horizontal compression around
+      the banner's center, pulling both buildings safely inward.
+      Verified by rendering the actual implemented file at both a
+      realistic narrow width (375px) and the full native width
+      (480px) - both buildings clearly visible at the narrow width,
+      nothing looks broken at full width either.
+    - Copied the fixed banner content verbatim from `scan.html` into
+      `index.html` (rather than hand-editing both) specifically to
+      guarantee they're byte-identical, and confirmed that directly.
+72. ~~**Banner recolored to match the actual logo's color, not a
+    generic blue.**~~ Sampled `icon-192.png`'s real pixel values
+    directly (`#29AFFD`) rather than guessing, since the banner's
+    existing palette (deep navy blues like `#0759D9`, `#063F8D`) never
+    actually matched the logo it was built around. Built a full
+    palette as HSL lightness variations of that single real hue
+    (sky, ground, buildings, truck all now share the logo's exact
+    hue at different lightness levels), rendered a direct before/after
+    comparison, and got confirmation before applying it to both files.
+    While implementing, found and removed `bannerLogoBg` - a gradient
+    definition left over from before the double-circle fix a few
+    rounds back, no longer referenced anywhere. Re-verified both
+    files are syntactically valid, their banner SVGs are valid XML,
+    and remain byte-identical to each other afterward.
+73. ~~**Reduced the gap below the banner to 0.**~~ `scan.html`'s
+    User/Log out row now sits directly against the banner's curve
+    (was 8px); `index.html`'s gap below the banner reduced the same
+    way (was 16px, hadn't been touched in earlier gap-tightening
+    rounds since scan.html was the focus at the time).
+74. ~~**Major keg lifecycle redesign: Mover as central hub, with a
+    branching wash-to-storage-or-filler path.**~~ Done - the biggest
+    state-machine change in the project's history, planned through
+    several rounds of clarifying questions before any code was
+    touched (given how foundational and hard-to-reverse this is), then
+    built and tested end-to-end:
+    - **2 new statuses**: `allotted_washer` (Mover has released a
+      returned keg to Washer - Washer can't act until this happens)
+      and `clean_storage` (Washer sent a freshly-washed keg back to
+      Mover instead of straight to Filler, and it's sitting there
+      until Mover releases it).
+    - **2 new Mover actions**: "Allot to Washer" and "Allot to
+      Filler" - Mover is now the explicit central hub for most
+      handoffs, matching the real physical workflow described.
+    - **Washer's wash action now branches**: a new "Send to" choice
+      (Filler or Mover) on the same form, reusing the existing
+      dynamic-`to`-function pattern already used for the pass/fail
+      inspection routing - both are resolved together, with a failed
+      inspection correctly overriding the routing choice regardless of
+      which "send to" option was picked (tested directly).
+    - **No per-person assignment system was needed** - since there's
+      only one person per role today, role-based permission already
+      means person-based permission; adding a "pick a specific person"
+      layer would have been unnecessary complexity for no real benefit
+      at the current team size.
+    - Database: added a real migration (drop + re-add the status CHECK
+      constraint) for existing installations, not just the fresh-install
+      schema - this is a live production database, so a schema-only
+      change without a migration would have broken on the next deploy.
+    - Verified thoroughly before considering this done: built a full
+      role x status matrix confirming exactly one role can act at
+      every one of the 9 statuses with no dead ends and no overlaps;
+      ran a complete end-to-end simulation of both branches (straight
+      to Filler, and via Mover's clean storage) from empty_returned
+      all the way back around to empty_returned; confirmed
+      `lib/reports.js` needed no changes at all since it already
+      imports the transition rules from `lib/stateMachine.js` rather
+      than duplicating them; confirmed the cooldown and location-
+      required-actions logic both gracefully ignore action types
+      they don't know about, so neither needed updating for the 2 new
+      actions; updated the alert rules for the 2 new statuses (with a
+      new alert rule specifically added for `empty_returned` itself,
+      now pointing at Mover rather than Washer, since Washer can no
+      longer act on it directly); and added the new statuses to
+      `index.html`'s status filter dropdown.
+75. ~~**Device approval pause switch, for the current testing phase.**~~
+    Done - a new `app_settings` key/value table (written generically,
+    since a future similar on/off setting would fit the same shape)
+    backs a toggle Admin can flip from the Devices tab, no redeploy
+    needed. While paused, every device is let through for every
+    operational role with nothing logged or registered at all;
+    switching it back off returns to exactly the normal per-user
+    approval behavior, unaffected by whatever devices were used while
+    paused. Deliberately left out of `admin`/`manager`'s own gating
+    the same way the underlying device system already does (those
+    roles were never gated to begin with, so there's nothing to
+    pause for them). Tested directly: blocked-by-default behavior
+    confirmed unchanged, then confirmed the same blocked scenario
+    passes through while paused, then confirmed unpausing restores
+    the original blocking behavior exactly, and confirmed admin/
+    manager logins are unaffected by the pause state either way.
+76. ~~**Dashboard lists per role, Mover's receive-time branching
+    choice, Now/Next clears after task completion, "Pending at
+    Driver" relabeling.**~~ Done - worked through several clarifying
+    questions first, since "receiving button" turned out to mean
+    something different from its literal reading (see below):
+    - **Home-screen dashboard lists**: Mover now sees 6 live lists
+      (Uncleaned, Cleaned, Filled, Pending for Deliver, Pending at
+      Customer, Pending at Driver) instead of just a greeting; Washer
+      and Filler each see an "Allotted to you" list; Driver sees "To
+      deliver" and "To mark empty". This turned out to be the actual
+      fix for "Washer needs to receive kegs to be liable" - the real
+      gap wasn't a missing confirmation step, it was that Washer had
+      no way to know *which* keg was allotted to them until they
+      happened to scan it. Reused the existing `/api/kegs?status=X`
+      endpoint rather than building a new one.
+    - **Mover's receive action now branches**: choosing "Uncleaned
+      storage" (default) or "straight to Washer" (skip storage
+      entirely) at the moment of receiving a returned keg, using the
+      same dynamic-`to`-function pattern already established for
+      Washer's wash-routing choice. Verified with a full end-to-end
+      cycle test through the skip-storage path.
+    - **Now/Next genuinely clears after a task completes** now,
+      instead of persisting into the newly-updated status - shows the
+      success message for 1.5s, then returns to the home screen and
+      strips `?keg=...` from the URL so a refresh doesn't silently
+      reload the same now-stale keg view.
+    - **"Pending at driver" replaces "empty at customer"** everywhere
+      a person actually sees it (success messages, history, the Kegs
+      table, both report charts, the status filter dropdown) via a
+      new `statusLabel()` helper, while the underlying database value
+      stays `empty_at_customer` unchanged - same display-only-rename
+      pattern already used for Warehouse->Mover.
+    - **Found and fixed a related bug while implementing the
+      relabeling**: the overdue alert for this status was still
+      targeting Mover, even though Driver is now the one who
+      physically carries the keg back - re-targeted to Driver.
+77. ~~**Found and fixed the "receive keg not working" report, plus 5
+    related items in the same batch.**~~ Investigated the bug report
+    first by tracing the entire pipeline (form config -> validation ->
+    submission -> backend route -> state machine -> database) end to
+    end, found nothing broken in the actual transition logic - the
+    real cause turned out to be a separate bug: `showHomeScreen()`
+    never hid the Destination card, so stale customer details from the
+    previous keg stayed on screen after returning home, making a
+    successful action look like it hadn't done anything. Fixed
+    alongside:
+    - Now/Next shows "Driver" instead of "Customer" for
+      `empty_at_customer` - marking a keg empty means Driver has
+      already picked it up from the customer, not that it's still
+      sitting there.
+    - Damaged kegs: Mover now classifies a repaired keg as "filled" or
+      "empty" at the time of damage, with a required reason field that
+      **genuinely shows/hides** based on that choice (not just
+      validated-but-always-visible, which is what the one existing
+      example of this pattern - the wash form's damage notes - was
+      actually doing) - built a real generic show/hide mechanism and
+      applied it to both fields for consistency, tested the visibility
+      computation and the toggle logic directly.
+    - Mover's dashboard lists reorganized into two collapsible
+      sections ("Warehouse": Uncleaned/Cleaned/Filled/Damaged, "In
+      Transit": To be delivered/At customer/To be received) using
+      native `<details>`/`<summary>` rather than custom JS toggle
+      logic - added a "Damaged" list that wasn't in the original 6.
+    - A confirmation prompt now summarizes what's about to be logged
+      before it's actually submitted, to catch an accidental submit.
+78. ~~**Mover can undo the single most recent Washer/Filler/Driver
+    action, audit trail preserved.**~~ Scoped through 3 clarifying
+    questions first (full undo vs. edit details; how far back; keep or
+    remove the original record), then built:
+    - New `POST /api/kegs/:id/revert` endpoint (Admin or Mover/
+      Warehouse only) - rejects if the keg has no events, if the most
+      recent event wasn't by Washer/Filler/Driver (this is scoped to
+      correcting an operational mistake, not a general-purpose undo
+      for anyone's action), or if the most recent event is already a
+      revert (no double-undo).
+    - The keg's prior status is derived by replaying every event
+      **except** the most recent one - there's no stored "previous
+      status" to just read back, so this has to be computed. Rather
+      than duplicate that replay logic (which already existed once, in
+      `lib/reports.js`, for turnover-time stats), moved
+      `resolveNextStatus` into `lib/stateMachine.js` itself and had
+      both places import the single shared copy.
+    - The original event is never touched - a new `revert` event is
+      added on top with what was undone and what the status was
+      restored to, so the audit trail shows the full story: what
+      happened, and that Mover corrected it, not just the end result.
+    - A new "Correct a mistake" card appears on a keg's page, but only
+      when there's actually something revertable and the viewer has
+      permission - checked client-side too so the button doesn't even
+      show for a case the backend would reject anyway.
+    - Tested the status-replay logic across 3 scenarios (undoing a
+      wash, undoing with only one prior event, undoing a fill deep in
+      the cycle), tested the role/double-revert rejection logic
+      directly, and ran a full integration test through the actual
+      `withTransaction` helper from `db.js` (not just the isolated
+      logic) to confirm the whole request handler's behavior end to
+      end, not merely its pieces in isolation.
+79. ~~**Allotted/Received two-stage workflow for all four operational
+    roles.**~~ The largest state-machine expansion in the project so
+    far - scoped through several rounds of clarifying questions before
+    any code was touched, given how much this changes:
+    - **4 new statuses**: `received_washer`, `received_filler`,
+      `received_driver`, `received_from_driver`. Every "X has been
+      handed off to role R" status now splits into two stages -
+      notified (allotted, not yet picked up) and received (R has
+      scanned to confirm physical custody, ready to act whenever they
+      choose). This is what actually enables scanning through a whole
+      batch (e.g. ten kegs allotted for washing) to confirm custody of
+      each first, then coming back to do the real work one at a time.
+    - Mover's own case (receiving the empty keg Driver brings back) now
+      splits the same way: confirming custody is a separate step from
+      the "Uncleaned storage vs. straight to Washer" decision that
+      follows it.
+    - Kegs table's status filter, `lib/alerts.js` (each existing "hasn't
+      done their job" alert split into a short-fuse "hasn't even
+      received it" and the original-style "received but hasn't done
+      the work"), the dashboard lists (each role now shows an
+      "Allotted" list and a "Received" list separately), and Now/Next's
+      role-flow mapping were all updated to match.
+    - Verified thoroughly given the scale: rebuilt the full role x
+      status matrix (now 13 statuses x 4 roles) confirming still
+      exactly one actionable role per status, no dead ends, no
+      overlaps; ran the complete cycle end to end through all 11 steps;
+      confirmed the old direct actions are now correctly rejected
+      (Washer can no longer wash straight from `allotted_washer` -
+      must receive first); confirmed Driver can't report damage on a
+      merely-dispatched (not yet received) keg, since they don't
+      physically have it yet; re-tested the clean-storage branch and
+      the skip-storage receive branch still work correctly alongside
+      the new steps; tested all 3 updated/new alert rules directly;
+      and confirmed the revert feature (built two rounds ago) works
+      correctly against the expanded cycle with no changes needed,
+      since it's built on generic event replay rather than anything
+      specific to the old status list.
+    - Also removed the Keg ID link from every dashboard list (Washer,
+      Filler, Mover, Driver all share one rendering function, so this
+      was a single fix applying everywhere at once) - the point of
+      requiring a physical QR scan is defeated if a list makes it just
+      as easy to tap through and act on a keg without ever touching it.
+80. ~~**Rounded out the Allotted/Received pattern to Mover's own
+    remaining handoffs, plus several related fixes.**~~
+    - **Receive buttons now say "Confirm received"** (approved choice,
+      confirmed before implementing) instead of the longer "Confirm
+      you have this keg" text.
+    - **Found the actual gap**: Mover had no explicit receive step for
+      a completed fill from Filler, or for a clean keg sent by Washer
+      to storage instead of straight to Filler - both went directly
+      into an actionable status with no confirmation step, unlike
+      every other handoff. Two new statuses fix this:
+      `received_from_filler`, `received_from_washer`. Re-verified the
+      Driver-to-Mover handoff specifically, since it was flagged as
+      "missing" too - confirmed directly in the code that it was
+      already correctly built in an earlier round, not actually
+      missing.
+    - `mark_empty` now displays as **"Received from Customer"**
+      (matches its actual meaning - Driver has already picked the keg
+      up by the time this is logged, not that it's still sitting at
+      the customer's premises).
+    - **New "Pending for receipt" badge** on the Now/Next card,
+      shown only for a "notified, not yet received" status (as
+      opposed to its "received" counterpart) - lets anyone checking on
+      a keg that isn't their own (Mover checking whether Washer has
+      actually picked something up, Admin/Manager's oversight view)
+      tell the two stages apart at a glance, since the role shown is
+      otherwise identical either way. Rendered and visually verified
+      the badge design before implementing.
+    - Database schema, `lib/alerts.js` (each of the two newly-split
+      statuses gets a short-fuse "not received yet" alert, mirroring
+      every other receive step), the dashboard lists, and the status
+      filter dropdown were all extended to match.
+    - Verified thoroughly given this touches the core cycle again:
+      rebuilt the full role x status matrix (now 15 statuses x 4
+      roles, still zero gaps or overlaps), ran the complete end-to-end
+      cycle through both the direct-to-filler and clean-storage paths
+      with all the new steps included, tested the 2 new alert rules
+      directly, and confirmed the revert feature (built several rounds
+      ago) still works correctly against this further-expanded cycle
+      with no code changes needed at all, since it's built on generic
+      event replay rather than anything specific to the status list.
+81. ~~**Now/Next corrected to a genuine possession model, badge moved
+    to the middle, operational roles redirected off the admin page.**~~
+    - **Real logic correction**: "Now" previously showed the *notified*
+      party even before they'd confirmed receiving anything - e.g.
+      `allotted_washer` showed Washer, when Mover still actually has
+      the keg until Washer scans to confirm. Rewrote the entire status
+      -> role mapping around actual possession: "Now" shows whoever
+      last *confirmed* holding it (via a receive_* action), with the
+      previous holder still shown - correctly, not as a bug - until
+      the handoff is confirmed. Verified this fully with a table across
+      all 15 statuses plus 3 targeted checks on the specific corrections called out.
+    - `delivered`'s "next" was `warehouse` - flagged as not physically
+      possible, since Driver is who actually collects it from the
+      customer, not Mover directly. Fixed to `driver`.
+    - **"Pending for receipt" badge moved to the middle** of the
+      Now/Next row, replacing the arrow when a handoff is awaiting
+      confirmation, instead of sitting below the Now column. Rendered
+      a proportional mockup at the card's actual width to confirm it
+      fits properly without crowding either column before implementing.
+    - Re-confirmed the Driver-to-Mover handoff was never actually
+      missing (checked directly in code, same as last round).
+    - **Operational roles (Washer/Filler/Driver/Warehouse) now
+      redirect straight to scan.html on login**, instead of landing on
+      index.html and seeing Overview/Alerts/Kegs/Customers tabs that
+      were never gated to admin/manager in the first place, unlike
+      Reports/Users/Devices which already were. Confirmed before
+      making this change that scan.html already has equivalent "add
+      new customer"/"add new product" capability inline on the
+      relevant action forms, so nothing is actually lost - and left
+      the backend permission checks in `routes/customers.js`/
+      `routes/products.js` completely untouched, since those inline
+      forms call the exact same endpoints.
+82. ~~**Home screen icon sometimes launched the admin page instead of
+    the scanner app.**~~ Root cause: `manifest.json` had no
+    `start_url` at all, so the browser defaulted to whichever page was
+    open when "Add to Home Screen" was tapped - if that happened to be
+    `index.html`, the resulting icon opened the admin dashboard every
+    time (no scan button, a table-based layout, nothing like the
+    actual app UI), exactly matching what was reported. Fixed two
+    ways: added an explicit `start_url: "/scan.html"` to the manifest
+    (fixes Android/Chrome, which does respect the manifest), and
+    removed `index.html`'s standalone-app capability tags entirely,
+    since iOS Safari ignores the manifest's `start_url` completely and
+    just uses whatever page had those tags - `index.html` can still be
+    bookmarked, but now only ever opens as a normal browser tab
+    (visible address bar), not a fullscreen "app", which also makes it
+    immediately obvious if this class of mix-up ever happens again.
+    **Anyone who already has the wrong icon on their home screen needs
+    to delete it and re-add it from scan.html specifically** - this
+    fix prevents new mistakes, it doesn't retroactively fix an
+    already-existing shortcut.
+83. ~~**"Pending for receipt" badge no longer shifts the row's layout,
+    and Mover can edit a dispatched keg's destination.**~~
+    - The badge previously replaced the arrow in the middle column,
+      which changed the row's width depending on state. Moved to its
+      own line below the whole row instead - same position/pattern as
+      "Delivered today" already used, with its own warning-style color
+      and bold weight to stand apart from that neutral line. Rendered
+      both states side by side to confirm the row itself stays pixel-
+      identical regardless of whether the badge is showing.
+    - **New**: Mover can now correct a wrong customer on an already-
+      dispatched keg via a new "Edit destination" action, without a
+      full revert or touching the keg's status. This needed a real
+      exception in `renderForm()`'s "not your turn, show nothing"
+      logic - Mover isn't normally offered anything at `dispatched`/
+      `received_driver` (that's Driver's turn), so without special-
+      casing it, the early-return would have hidden the form entirely
+      before any edit button had a chance to render, unlike Driver's
+      report-damage button, which only works because Driver always has
+      a primary form to append to at those same statuses. `to: null`
+      in the new `edit_destination` transition rule reuses
+      validateTransition's existing "no status change" support, rather
+      than needing anything new there. Verified with a full integration
+      test through the actual field-resolution logic in
+      `routes/events.js` - destination genuinely changes, status stays
+      exactly as it was.
+84. ~~**Found the real Driver-to-Mover gap: it was never a bug, it was
+    a genuinely missing step.**~~ After the code review found nothing
+    broken (again), asked for the exact symptom rather than guessing a
+    third time - the actual answer: every other handoff in the cycle
+    has both a sender-side scan and a receiver-side scan, but Driver-
+    to-Mover only ever had Mover's side. Driver marking a keg empty
+    (received from the customer) went straight to Mover being able to
+    confirm receipt, with no record of Driver actually bringing it to
+    the warehouse in between. New status `returned_to_warehouse` and a
+    new Driver action `return_to_warehouse` fix this - Driver now scans
+    once to mark it empty, and scans again on arrival at the warehouse,
+    matching the two-scan pattern every other handoff already follows.
+    Database schema, `lib/alerts.js` (empty_at_customer's label
+    narrowed to specifically "not yet returned"; new short-fuse
+    "not received yet" alert for the new status), `getActionConfig()`
+    for both Driver and Warehouse, `STATUS_ROLE_FLOW`, the dashboard
+    lists, and the status filter dropdown were all updated. Rebuilt
+    the full role x status matrix (now 16 statuses, still zero gaps or
+    overlaps), ran the complete 13-action cycle end to end, and
+    confirmed the revert feature needs no changes at all to work
+    correctly with the new step, same as every previous expansion.
+85. ~~**Manager elevated to full operational capability - everything
+    Mover can do, plus everything every other role can do too - while
+    Admin stays a pure observer.**~~ This directly solves the original
+    "how do I test the whole app without switching logins" need,
+    without touching Admin at all:
+    - `validateTransition`'s role check now has exactly one bypass:
+      Manager can perform any action regardless of which role the
+      transition rule specifies. Admin gets no bypass - still
+      completely unable to perform any operational action, matching
+      "pure observer" exactly.
+    - Frontend `getActionConfig()` was restructured around a single
+      `STATUS_ACTION_MAP` (status -> the one role whose turn it is)
+      instead of one role-scoped branch per role - this is what let
+      Manager's bypass be a single, obviously-correct check rather
+      than duplicating the same status list four times over.
+    - Extended the same elevation to the two secondary, non-primary-
+      form actions that exist outside `getActionConfig()`: Mover's
+      "Edit destination" and Driver's "Report damage" both now also
+      show for Manager. This needed a real restructure of
+      `renderForm()` - edit_destination used to live entirely inside
+      the "cfg is null" branch, but Manager's bypass now means cfg is
+      often non-null even when it's not genuinely Mover's turn (Manager
+      sees Driver's own form instead), so the old structure would have
+      silently stopped showing the edit option for Manager specifically.
+      Found and fixed a real, pre-existing bug while doing this: the
+      report-damage button's status check (`dispatched`/`delivered`)
+      never actually matched the backend's own rule
+      (`received_driver`/`delivered`) - meaning it could show at a
+      status where submitting would have been rejected, and stayed
+      hidden at a status where it should have worked.
+    - The revert feature (built several rounds ago) gets the same
+      elevation: Manager can now revert Mover's own actions too, not
+      just Washer/Filler/Driver's - Admin's and plain Mover's revert
+      scope is untouched, unchanged from before.
+    - Verified thoroughly: simulated the full status x role matrix
+      confirming Manager can act at literally every one of the 16
+      statuses and Admin can act at none, tested the revert permission
+      logic across both elevated and unelevated cases, and ran a
+      complete 13-step cycle with Manager performing every single step
+      solo, without switching accounts once.
+86. ~~**Admin's home screen icon stopped reaching the admin
+    dashboard.**~~ A real side effect of the earlier PWA fix: pinning
+    `start_url` to `/scan.html` correctly solved operational roles
+    launching the wrong page, but it meant Admin now *always* lands on
+    `scan.html` first too - a page with no oversight functionality for
+    them at all (no dashboard lists, no action forms, since Admin is a
+    pure observer). Fixed with the mirror-image of the redirect
+    `index.html` already does for operational roles: Admin landing on
+    `scan.html` with no specific keg requested now redirects straight
+    to `index.html`. Scoped narrowly - skipped when a keg *is* already
+    in the URL (a direct scan or a Keg ID link clicked from Admin's own
+    Kegs table), since redirecting away from a keg Admin deliberately
+    opened would undo the exact oversight capability that page exists
+    to provide.
+87. ~~**Alerts redesigned for Mover, categorized by pipeline stage.**~~
+    Suggested the design first (3 stage-based groups rather than
+    role-based, since Mover cares about *where* the pipeline is
+    backing up, not just which role's turn it is) and got confirmation
+    before building. No backend changes needed - `/api/alerts` already
+    returned the full company-wide list, just filtered client-side for
+    everyone else's small badge. Mover's home screen now shows a real
+    "Alerts" section above the existing dashboard lists, using the same
+    collapsible `<details>` groups already established: **At Washer/
+    Filler**, **At Warehouse**, **In Transit** - each with a count badge
+    and, expanded, the actual overdue keg IDs with their specific
+    label (plain text, not clickable - matches the dashboard lists'
+    reasoning: a one-tap shortcut to the action form would undercut
+    the physical-scan requirement). Verified the 3 groups cover all 16
+    statuses exactly once (no gaps, no double-counting) and tested the
+    grouping logic directly against sample alert data before
+    considering it done. Rendered a mockup first to confirm the
+    warning-tinted alert items read as visually distinct from the
+    dashboard lists' normal (non-overdue) items.
+88. ~~**Full setup review.**~~ A systematic audit of the whole app given
+    how much has changed - not just re-running syntax checks, but
+    actually cross-referencing consistency across files:
+    - Extracted the canonical 16-status list directly from
+      `lib/stateMachine.js`'s `TRANSITIONS` (the real source of truth)
+      and diffed it against every other place a status list is
+      duplicated: `db.js`'s CHECK constraint, `lib/alerts.js`'s
+      `ALERT_RULES`, `scan.html`'s `STATUS_ACTION_MAP` and
+      `STATUS_ROLE_FLOW`, `scan.html`'s `ALERT_STAGE_GROUPS`, and
+      `index.html`'s status filter dropdown. **Zero missing statuses,
+      zero stale/extra ones, anywhere** - a genuinely clean result
+      given how many rounds have touched this list.
+    - Cross-checked every `ROLE_ACTIONS` sub-config against
+      `STATUS_ACTION_MAP`'s references to it: all 16 defined, all 16
+      referenced, no dead entries, no dangling references.
+    - Re-ran the full cycle test (direct path, clean-storage branch,
+      failed-inspection branch, skip-storage receive branch), a check
+      that Manager can perform every single action type, and a revert-
+      compatibility check - all in one pass, all still passing.
+    - Verified `lib/cooldown.js`'s `COOLDOWNS` and
+      `routes/events.js`'s `LOCATION_REQUIRED_ACTIONS` still reference
+      valid, current action names, and both login redirects (Admin ->
+      index.html, operational roles -> scan.html) are still correctly
+      in place.
+    - **Found one genuine bug this way**: `loadKeg()` clears
+      `dashboardLists` when navigating from the home screen to a
+      specific keg, but never cleared the newer `moverAlertsOverview`
+      section the same way - meaning Mover's Alerts overview could
+      linger on screen below a keg's own card, the identical class of
+      bug the Destination card had several rounds back. Fixed by
+      adding it to the same clearing block, which (since that block
+      runs unconditionally at the very top of `loadKeg()`, before the
+      online/offline branch splits) automatically covers the offline
+      fallback path too, with no separate fix needed there.
+89. ~~**Edit-destination window narrowed, "In Storage" display added,
+    Mover's home screen split into Alerts/Inventory tabs.**~~ Suggested
+    the last two as options first, confirmed before building:
+    - **Real fix**: `edit_destination` could previously be used at
+      `dispatched` (before Driver even confirms receipt), not just
+      `received_driver` as intended. Narrowed to `received_driver`
+      only, in both the backend transition rule and the frontend
+      condition gating the button - tested both accept/reject cases
+      directly.
+    - **"In Storage" display**: the 4 statuses that mean "confirmed
+      with Mover, not yet allotted anywhere" (`empty_returned`,
+      `received_from_washer`, `received_from_filler`,
+      `received_from_driver`) previously showed "Now: Mover, Next:
+      [whoever's eventually involved]", implying an active handoff in
+      progress when really nothing has moved yet. Now shows "Now: In
+      Storage, Next: Mover" - a new display-only pseudo-value (same
+      pattern as the existing 'customer' pseudo-role), with its own
+      box/package icon, rendered and visually confirmed before wiring
+      it in. Purely cosmetic - the underlying `STATUS_ACTION_MAP` that
+      actually governs who can act is completely unaffected.
+    - **Mover's home screen split into two tabs**: "Alerts" and
+      "Inventory", reusing `index.html`'s existing tab visual pattern
+      (replicated into `scan.html`'s own stylesheet, since they're
+      separate files) rather than inventing a new one. Both sections
+      still load/populate on arrival regardless of which tab is
+      active, so switching is instant. Scoped to Mover only - other
+      roles' simpler single-list views and Admin/Manager (who use
+      index.html for this) are unaffected.
+    - **Still open**: nested per-category collapsing (Uncleaned,
+      Cleaned, Filled, Damaged each individually expandable inside the
+      Warehouse/In Transit groups, rather than all showing at once) -
+      confirmed the intended interaction with a direct question, not
+      yet implemented.
+90. ~~**Nested accordion for Mover's sub-categories.**~~ Confirmed the
+    exact interaction before building it. Each sub-category
+    (Uncleaned, Cleaned, Filled, Damaged, and the same for In Transit)
+    is now its own individually-collapsible `<details>`, nested inside
+    the Warehouse/In Transit outer groups, instead of all showing at
+    once as soon as the outer group opens. Kept as a new function
+    (`fetchNestedKegListHtml`) separate from the existing
+    `fetchKegListHtml` rather than adding a flag to it, since Washer/
+    Filler/Driver's simpler single-list views call the original
+    directly and were never meant to change - they have no outer group
+    to nest inside in the first place. **Found and fixed a real CSS
+    bug while building this**: the arrow-rotation rule
+    (`.dash-group[open] .dash-group-summary::before`) used a plain
+    descendant selector, which - once nesting existed - would have
+    incorrectly rotated a nested sub-group's arrow to look "open"
+    merely because its *outer* parent was open, even while the
+    sub-group itself was still genuinely collapsed. Fixed by scoping
+    it to a direct-child combinator instead, verified against the
+    actual DOM structure (summary is always a direct child of its own
+    `<details>`; nested `<details>` sit inside a wrapping div, never as
+    a direct child of an ancestor), and re-confirmed the total-count
+    aggregation logic still sums correctly against the new nested HTML
+    shape.
+91. ~~**Overdue time added to Mover's alerts, Admin/Manager's alerts
+    redesigned to match the same stage-based grouping.**~~
+    - Mover's alert items now show a formatted overdue duration
+      (`formatOverdueDuration()`) alongside the label - plain hours
+      below a day, days-plus-leftover-hours once it's been overdue
+      that long, since "127h overdue" is harder to read at a glance
+      than "5d 7h overdue".
+    - Admin/Manager's alerts on `index.html` were still the original
+      flat, sorted list - redesigned to the same 3-stage grouping
+      (At Washer/Filler, At Warehouse, In Transit) as Mover's view,
+      using new collapsible `<details>` groups added to `index.html`'s
+      own stylesheet (that file had no collapsible pattern yet).
+      Preserved everything the original list already did well -
+      clickable Keg IDs opening in a new tab, the manufacturing number,
+      worst-overdue-first sorting (now scoped within each group rather
+      than across the whole list), and no display cap.
+    - `ALERT_STAGE_GROUPS` is necessarily duplicated between
+      `scan.html` and `index.html` (two standalone files, no shared
+      module system) - confirmed both copies are byte-identical rather
+      than assuming it from having written them the same way.
+    - Applied the direct-child arrow-rotation selector
+      (`.alert-group[open] > .alert-group-summary::before`) correctly
+      from the start this time, rather than repeating the descendant-
+      selector bug found and fixed in `scan.html`'s equivalent CSS a
+      couple rounds back.
+92. **Custom domain + always-on hosting**, once the free tier's sleep
     behavior becomes a real annoyance rather than a demo-time curiosity.
 
 ## Design system
@@ -1271,20 +2049,52 @@ A full code review turned up a few real bugs, now fixed:
 | Customer | id, name, address, phone |
 | Product | id, name, default_abv |
 
-Status flow: `empty_returned → washed → filled → dispatched → delivered →
-empty_at_customer → empty_returned` (cycle repeats), with each status
-owned by exactly one role: Washer (`empty_returned`), Filler (`washed`),
-Warehouse (`filled`), Driver (`dispatched` and `delivered`), Warehouse
-again (`empty_at_customer`). The `filled → dispatched` transition happens
-in a single step: Warehouse runs `assign_destination`, which both sets
-the keg's destination and moves its status to `dispatched` at the same
-time - there's no separate driver-initiated dispatch action. The driver's
-first involvement is `deliver` (confirming delivery location + customer
-signature) once the keg is already dispatched.
+Status flow (Mover is the central hub for most handoffs; every
+handoff to Washer, Filler, Driver, or Mover-from-Driver is now a
+two-stage "notified, then received" pair - see the detailed writeup
+in the gap list above for the full reasoning):
 
-There's a branch off this main cycle: a **failed wash inspection** sends
-the keg to `needs_repair` instead of `washed` (also owned by Warehouse),
-which blocks it from being filled until `mark_repaired` sends it back to
-`empty_returned` for a full wash + inspection cycle again. See
+`empty_returned → allotted_washer → received_washer → washed → filled
+→ dispatched → received_driver → delivered → empty_at_customer →
+received_from_driver → empty_returned` (cycle repeats), with two
+branches:
+
+- After washing: Washer can send a freshly-washed keg either straight
+  to Filler (`washed`, where it's still a notified/received pair -
+  `received_filler` - before Filler actually fills it) or back to
+  Mover to hold as clean stock (`clean_storage`, released to `washed`
+  later via Mover's own `allot_filler` action, on their own schedule).
+- At the moment Mover actually confirms receiving a returned keg back
+  from Driver (`received_from_driver`): straight back into
+  `empty_returned` (the default), or directly into `allotted_washer`,
+  skipping the storage stop entirely.
+
+Each status is owned by exactly one role - see `lib/stateMachine.js`
+for the authoritative table (13 statuses x role, no gaps or overlaps
+between them). The `filled → dispatched` transition happens in a
+single step: Warehouse runs `assign_destination`, which both sets the
+keg's destination and moves its status to `dispatched` at the same
+time - there's no separate driver-initiated dispatch action. Driver's
+first involvement from there is `receive_driver` (confirming they're
+actually holding the keg), then `deliver` (confirming delivery
+location + customer signature) whenever they're actually there.
+
+There's a third branch off this main cycle: a **failed wash
+inspection** sends the keg to `needs_repair` instead of `washed`/
+`clean_storage` (also owned by Warehouse), which blocks it from being
+filled until `mark_repaired` sends it back to `empty_returned` for a
+full wash + inspection cycle again (via a fresh `allot_washer` from
+Mover, same as any other returned keg) - this override applies
+regardless of which "send to" choice Washer made, since a failed
+inspection means the keg isn't going anywhere in the normal cycle
+either way. A driver can also flag a keg as damaged via
+`report_damage`, but only once they've actually received it
+(`received_driver` or `delivered` - not the earlier `dispatched`,
+since there's nothing physical to report as damaged before that). See
 `lib/stateMachine.js` for the exact role/transition rules.
-for the exact role/transition rules.
+
+A **third branch** sits at `receive_empty` itself: Mover chooses, at
+the moment of receiving a returned keg, between routing it to
+`empty_returned` (Uncleaned storage, the default) or straight to
+`allotted_washer` (skipping storage entirely). Same dynamic-`to`-
+function pattern as the other two branches above.

@@ -141,6 +141,30 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_kegs_status ON kegs(status);
     CREATE INDEX IF NOT EXISTS idx_kegs_current_location ON kegs(current_location);
 
+    -- Personal to-do list per user, shown in their own "Task" tab.
+    -- Deliberately scoped to one user's own tasks only (enforced in
+    -- routes/tasks.js, not just the UI) - this is a personal list, not
+    -- a shared/assignable one.
+    CREATE TABLE IF NOT EXISTS tasks (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      text TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id);
+
+    -- Anonymous feedback to Admin. Deliberately has NO user_id or any
+    -- other identifying column at all - not even for Admin's own view,
+    -- not encrypted, not hashed, genuinely nothing. This is permanent
+    -- by design: once submitted, there is no way for anyone, ever, to
+    -- trace a submission back to who sent it.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id SERIAL PRIMARY KEY,
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS device_registrations (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),

@@ -16,7 +16,6 @@ const { pool, withTransaction } = require('../db');
 const { validateTransition, resolveNextStatus } = require('../lib/stateMachine');
 const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { checkCooldown } = require('../lib/cooldown');
-const { mapStatusToV2 } = require('../lib/v2/statusMapping');
 
 const router = express.Router();
 
@@ -97,10 +96,7 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
   // address + phone + customer_id together; every other action updates
   // keg.location_note as before. Kept as separate columns since they
   // mean different things - "where the keg physically is right now" vs
-  // "which customer it's assigned to". Renamed from current_location to
-  // location_note when the v2 custody model needed that name for its
-  // own entity field (see db.js) - this free-text note (GPS
-  // coordinates, "Zone A", etc.) is a different concept entirely.
+  // "which customer it's assigned to".
   const destinationActions = ['assign_destination', 'edit_destination'];
   const nextLocationNote = destinationActions.includes(actionType)
     ? keg.location_note
@@ -110,16 +106,17 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
   const nextDestinationPhone = destinationActions.includes(actionType) ? resolvedDestinationPhone : keg.destination_phone;
   const nextCustomerId = destinationActions.includes(actionType) ? resolvedCustomerId : keg.customer_id;
 
-  // Keeps the v2 custody model in sync with every v1 action, for as
-  // long as both coexist - without this, v1 actions (from scan.html)
-  // would keep moving `status` forward while `current_location`/
-  // `current_condition` stayed frozen at whatever the one-time
-  // migration set them to, making scan-v2.html look like kegs never
-  // move even though scan.html itself was working correctly. Reuses
-  // the exact same status->v2 mapping the migration in db.js uses,
-  // imported from a shared module rather than duplicated in both places.
-  const v2Fields = mapStatusToV2(nextStatus);
-
+  // v1-only again, deliberately - v2 (routes/v2Kegs.js) owns the
+  // current_location/current_condition/pending_handover_* fields
+  // completely on its own now. The two systems briefly kept both
+  // models in sync on every action, which sounded like the safe,
+  // conservative choice but was actually the opposite: it produced two
+  // real bugs (a sync gap that let the fields silently freeze, and
+  // stale references left behind by a column rename) with no actual
+  // benefit, since scan.html and scan-v2.html were never meant to be
+  // used for real actions at the same time. v1 stays fully functional
+  // here on its own terms; v2 is a clean, independent system - see
+  // lib/v2/DATA_MODEL.md's "Clean cutover" note for the full reasoning.
   await withTransaction(async (client) => {
     await client.query(`
       INSERT INTO events (keg_id, user_id, role, action_type, details)
@@ -127,15 +124,8 @@ router.post('/:kegId/events', requireAuth, async (req, res) => {
     `, [kegId, user.id, user.role, actionType, JSON.stringify(details || {})]);
 
     await client.query(`
-      UPDATE kegs SET
-        status = $1, location_note = $2, destination = $3, destination_address = $4, destination_phone = $5, customer_id = $6,
-        current_location = $7, warehouse_sublocation = $8, current_condition = $9, pending_handover_to = $10
-      WHERE id = $11
-    `, [
-      nextStatus, nextLocationNote, nextDestination, nextDestinationAddress, nextDestinationPhone, nextCustomerId,
-      v2Fields.current_location, v2Fields.warehouse_sublocation || null, v2Fields.current_condition, v2Fields.pending_handover_to || null,
-      kegId,
-    ]);
+      UPDATE kegs SET status = $1, location_note = $2, destination = $3, destination_address = $4, destination_phone = $5, customer_id = $6 WHERE id = $7
+    `, [nextStatus, nextLocationNote, nextDestination, nextDestinationAddress, nextDestinationPhone, nextCustomerId, kegId]);
   });
 
   const { rows: updatedRows } = await pool.query('SELECT * FROM kegs WHERE id = $1', [kegId]);

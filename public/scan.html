@@ -93,6 +93,18 @@
   .dash-item.pending { background: var(--warn-bg); border-color: var(--warn-text); color: var(--warn-text); }
   .dash-empty { font-size: 13px; color: var(--text-muted); padding: 4px; }
 
+  /* Home tabs (Alerts/Task/Feedback) - same tab-bar pattern already
+     used on index.html, replicated here since these are separate
+     standalone files with their own stylesheets. */
+  .tab-bar { display: flex; gap: 4px; margin: 12px 0; border-bottom: 1px solid var(--card-border); }
+  .tab-btn { flex: 1; background: none; border: none; padding: 10px 4px; font-size: 14px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin: 0; width: auto; }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  .task-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 6px 0; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; }
+  .task-item.completed .task-text { text-decoration: line-through; color: var(--text-muted); }
+  .task-text { flex: 1; font-size: 14px; }
+  .task-delete { width: auto; margin: 0; padding: 4px 10px; background: none; color: var(--error-text); font-size: 13px; }
+
   /* Alerts - kegs overdue per lib/v2/alerts.js, filtered to the
      logged-in user's own role (Admin/Manager see everything via
      index.html's own overview instead - this is the operational, in-
@@ -247,9 +259,50 @@
 
   <div id="noKegBlock" class="card" style="display:none">
     <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
+    <button onclick="startScan()">Scan QR Code</button>
   </div>
-  <div id="alertsBlock"></div>
-  <div id="dashboardBlock"></div>
+
+  <div id="scanModal" style="display:none; position:fixed; inset:0; background:#000; z-index:1000;">
+    <video id="scanVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+    <canvas id="scanCanvas" style="display:none;"></canvas>
+    <button class="secondary" onclick="stopScan()" style="position:absolute; top:16px; right:16px; width:auto; padding:10px 18px;">Cancel</button>
+    <div id="scanStatus" style="position:absolute; bottom:24px; left:0; right:0; text-align:center; color:#fff; font-size:14px;"></div>
+  </div>
+
+  <div id="homeTabs" style="display:none">
+    <div class="tab-bar">
+      <button class="tab-btn active" id="homeTabBtn-alerts" onclick="showHomeTab('alerts')">Alerts</button>
+      <button class="tab-btn" id="homeTabBtn-task" onclick="showHomeTab('task')">Task</button>
+      <button class="tab-btn" id="homeTabBtn-feedback" onclick="showHomeTab('feedback')">Feedback</button>
+    </div>
+
+    <div class="home-tab-panel" id="homeTab-alerts">
+      <div id="alertsBlock"></div>
+      <div id="dashboardBlock"></div>
+    </div>
+
+    <div class="home-tab-panel" id="homeTab-task" style="display:none">
+      <div class="card">
+        <label>New task</label>
+        <input type="text" id="newTaskText" placeholder="e.g. Refill washing detergent">
+        <button onclick="addTask()">Add task</button>
+      </div>
+      <div id="taskList"></div>
+    </div>
+
+    <div class="home-tab-panel" id="homeTab-feedback" style="display:none">
+      <div class="card">
+        <p class="muted" style="margin-top:0">
+          Sent directly to Admin. This is completely anonymous \u2014
+          nothing about who sent it is stored, not even for Admin to see.
+        </p>
+        <label>Your feedback</label>
+        <textarea id="feedbackText" rows="4" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:16px;padding:12px;border:1px solid var(--input-border);border-radius:8px"></textarea>
+        <button onclick="submitFeedback()">Send anonymously</button>
+        <div id="feedbackMsg"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="kegBlock" style="display:none">
     <h3 id="kegIdHeading"></h3>
@@ -272,6 +325,13 @@
   </div>
 </div>
 
+<!-- jsQR is a well-known, lightweight, pure-JS QR decoding library -
+     there's no browser-native API for this, and hand-rolling QR
+     decoding (image processing + Reed-Solomon error correction) isn't
+     practical, so this is the one exception to the app's otherwise
+     dependency-free footprint (the only other external script
+     anywhere is device-id.js). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script src="/device-id.js"></script>
 <script>
 let currentUser = null;
@@ -359,12 +419,164 @@ function showApp() {
 
   if (!kegId) {
     document.getElementById('noKegBlock').style.display = 'block';
+    document.getElementById('homeTabs').style.display = 'block';
     loadAlerts();
     loadDashboard();
     return;
   }
   document.getElementById('kegBlock').style.display = 'block';
   loadKeg();
+}
+
+// In-app QR scanner - opens the rear camera directly, rather than
+// relying on the phone's separate camera app to scan a printed code
+// and then open a link. Uses jsQR (loaded via CDN above) to decode
+// each captured video frame.
+let scanStream = null;
+let scanAnimationFrame = null;
+
+async function startScan() {
+  const modal = document.getElementById('scanModal');
+  const video = document.getElementById('scanVideo');
+  const statusEl = document.getElementById('scanStatus');
+  statusEl.textContent = '';
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (err) {
+    alert('Could not access the camera: ' + err.message);
+    return;
+  }
+
+  video.srcObject = scanStream;
+  modal.style.display = 'block';
+  scanLoop();
+}
+
+function stopScan() {
+  document.getElementById('scanModal').style.display = 'none';
+  if (scanAnimationFrame) cancelAnimationFrame(scanAnimationFrame);
+  if (scanStream) {
+    scanStream.getTracks().forEach((track) => track.stop());
+    scanStream = null;
+  }
+}
+
+function scanLoop() {
+  const video = document.getElementById('scanVideo');
+  const canvas = document.getElementById('scanCanvas');
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+    if (code && code.data) {
+      handleScannedUrl(code.data);
+      return; // stop the loop - handleScannedUrl navigates away or shows an error
+    }
+  }
+  scanAnimationFrame = requestAnimationFrame(scanLoop);
+}
+
+// Accepts either a full URL (from a real printed QR code, e.g.
+// https://.../scan.html?keg=KEG-ABC123) or just a bare keg ID, and
+// navigates to that keg's page - never trusts the scanned content
+// beyond extracting a keg ID from it, never eval's or otherwise
+// executes anything from the decoded text.
+function handleScannedUrl(scanned) {
+  const statusEl = document.getElementById('scanStatus');
+  let extractedKegId = null;
+  try {
+    const url = new URL(scanned);
+    extractedKegId = url.searchParams.get('keg');
+  } catch (err) {
+    // Not a full URL - treat the scanned text itself as the keg ID.
+    extractedKegId = scanned.trim();
+  }
+
+  if (!extractedKegId) {
+    statusEl.textContent = 'That QR code doesn\'t look like a keg code. Try again.';
+    scanAnimationFrame = requestAnimationFrame(scanLoop);
+    return;
+  }
+
+  stopScan();
+  location.href = `/scan.html?keg=${encodeURIComponent(extractedKegId)}`;
+}
+
+function showHomeTab(tab) {
+  ['alerts', 'task', 'feedback'].forEach((t) => {
+    document.getElementById(`homeTab-${t}`).style.display = t === tab ? 'block' : 'none';
+    document.getElementById(`homeTabBtn-${t}`).classList.toggle('active', t === tab);
+  });
+  if (tab === 'task') loadTasks();
+}
+
+// Personal to-do list - scoped server-side to the logged-in user's own
+// tasks (see routes/tasks.js), not just hidden in this UI.
+async function loadTasks() {
+  const el = document.getElementById('taskList');
+  const res = await fetch('/api/tasks', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load tasks.</p>'; return; }
+  const tasks = await res.json();
+  if (!tasks.length) { el.innerHTML = '<p class="muted">No tasks yet.</p>'; return; }
+  el.innerHTML = tasks.map((t) => `
+    <div class="task-item${t.completed ? ' completed' : ''}">
+      <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTask(${t.id}, this.checked)">
+      <span class="task-text">${t.text}</span>
+      <button class="task-delete" onclick="deleteTask(${t.id})">Delete</button>
+    </div>
+  `).join('');
+}
+
+async function addTask() {
+  const input = document.getElementById('newTaskText');
+  const text = input.value.trim();
+  if (!text) return;
+  await fetch('/api/tasks', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+    body: JSON.stringify({ text }),
+  });
+  input.value = '';
+  await loadTasks();
+}
+
+async function toggleTask(id, completed) {
+  await fetch(`/api/tasks/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+    body: JSON.stringify({ completed }),
+  });
+  await loadTasks();
+}
+
+async function deleteTask(id) {
+  await fetch(`/api/tasks/${id}`, { method: 'DELETE', credentials: 'include', cache: 'no-store' });
+  await loadTasks();
+}
+
+// Anonymous feedback - see routes/feedback.js for why this genuinely
+// never sends or stores any identifying information.
+async function submitFeedback() {
+  const textEl = document.getElementById('feedbackText');
+  const text = textEl.value.trim();
+  const msg = document.getElementById('feedbackMsg');
+  if (!text) { msg.className = 'error'; msg.textContent = 'Enter some feedback first.'; return; }
+
+  const res = await fetch('/api/feedback', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', cache: 'no-store',
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) { msg.className = 'error'; msg.textContent = 'Could not send feedback.'; return; }
+  textEl.value = '';
+  msg.className = 'success';
+  msg.textContent = 'Sent anonymously. Thank you.';
 }
 
 const DASHBOARD_GROUPS = [

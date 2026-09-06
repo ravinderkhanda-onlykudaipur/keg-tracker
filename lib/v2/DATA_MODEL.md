@@ -515,3 +515,82 @@ two-scan/single-actor sequence (had to fix a sequencing mistake in the
 test itself - a skipped `filler_to_mover` handover - before it passed)
 and confirmed the whole cycle, plus the fill-details capture,
 survives correctly end to end.
+
+## Overview rebuilt: Resting/Pending alert split, plus pie charts
+
+`getOverdueKegsV2()` now tags every alert with `phaseType` ('resting'
+or 'pending'). Pending alerts also carry `receivingUserName`, looked
+up from the `users` table by role - the business runs one person per
+operational role, so this is a simple lookup, not a real assignment
+mechanism (confirmed with the person building this before doing it
+this way, rather than building a heavier per-handover assignment
+feature that wasn't actually needed).
+
+`index.html`'s Overview tab now shows two separate alert sections:
+Resting Phase (grouped by location, sub-grouped by condition only when
+a location currently has more than one) and Pending Phase (grouped by
+receiving location, sub-grouped by receiving user only when more than
+one appears - with one person per role this usually collapses to a
+single sub-group, but the structure holds if that changes).
+
+New endpoint `GET /api/v2/kegs/overview-stats` (Admin/Manager only)
+backs two new pie charts - kegs by customer, kegs by product. Both
+correctly filter to only genuinely-current data:
+`current_customer_id`/`current_product_id` are never cleared once a
+keg moves on, so an unfiltered count would include stale kegs no
+longer actually with that customer or containing that product.
+Verified directly with mixed test data including exactly this stale
+case, confirming it's excluded.
+
+No external charting library - `renderPieChart()` is a small,
+self-contained SVG function, consistent with the app's existing
+"only external script is device-id.js" footprint.
+
+Verified with full runtime simulation, not just syntax checks:
+constructed realistic mixed alert data (two conditions at one
+location, a pending alert with a receiving user) and confirmed the
+resting alerts correctly nest into two condition sub-groups, the
+pending alert correctly shows the receiving user's name, and the pie
+chart renders real SVG with the correct legend data. Two of my own
+initial test assertions were themselves wrong (checking for `>Empty<`
+literally, when the real markup has a count badge immediately after)
+- caught by printing and inspecting the actual rendered HTML directly
+rather than trusting the automated check alone.
+
+## Task tab, Feedback tab, and in-app QR scanner
+
+**Task**: a personal to-do list per user, on their own profile
+(`scan.html`, new "Task" home tab). New `tasks` table and
+`routes/tasks.js` - every query scoped to `req.user.id` server-side
+(not just hidden in the UI), verified directly: a mocked cross-user
+delete attempt affects 0 rows.
+
+Found and fixed a real bug while building this: `addTask()`,
+`toggleTask()`, and `deleteTask()` all called `loadTasks()` without
+`await`, creating a race condition where the list could still show
+stale data by the time the calling function's own promise resolved.
+Fixed to `await loadTasks()` in all three, then re-verified the full
+add/toggle/delete flow end to end.
+
+**Feedback**: sent directly to Admin, genuinely anonymous - the
+`feedback` table has no user-identifying column at all, not even for
+Admin's own view, not encrypted or hashed, nothing. Confirmed directly
+that no request-logging middleware exists in `server.js` that could
+leak identity at the infrastructure level either. Worth restating
+here since it's a real caveat, not a formality: this guarantee is at
+the application level only - the hosting platform's own infrastructure
+logs (IP address, etc.) are outside this application's control.
+Admin-only read access (`requireRole('admin')`, not Manager, per
+explicit direction - unlike every other oversight feature in this app).
+
+**QR scanner**: `jsQR` added via CDN - the one exception to the app's
+otherwise dependency-free footprint (no browser-native API for QR
+decoding, and hand-rolling it isn't practical). Opens the rear camera,
+decodes video frames in a loop, and navigates to the matched keg's
+page. Never trusts scanned content beyond extracting a keg ID from
+it - no `eval()` or code execution from decoded text. Verified the
+core extraction logic with 3 cases (a full printed-QR-code URL, a bare
+keg ID, and an irrelevant QR code that correctly gets rejected rather
+than navigating anywhere) - actual camera access and live video frame
+decoding couldn't be tested in this environment and would need
+real-device verification.
