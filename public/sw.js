@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v7'; // bumped: scan.html now contains the v2 custody model (the separate scan-v2.html file was consolidated back into scan.html to eliminate confusion between the two similarly-named files) - v6's cache had scan.html and scan-v2.html as two separate entries, which no longer matches reality now that there's only one file.
+const CACHE_NAME = 'keg-tracker-shell-v8'; // bumped: scan.html has had many substantial changes since v7 (app header removed, banner made conditional, noKegBlock removed, Task tab redesigned with 3 new categories, Keg/Filled Details cards merged, confirmation popup added, action buttons recolored) with no matching cache bump - since this file's own bytes hadn't changed, the browser may never have re-triggered the install event to refresh the cached shell files, meaning a stale scan.html could still be served from the v7 cache regardless of what was actually redeployed to the server. This is exactly the class of bug the CACHE_NAME comment two versions ago already warned about.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
