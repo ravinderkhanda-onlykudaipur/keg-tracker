@@ -280,9 +280,6 @@
 </div>
 
 <div id="appBlock" style="display:none">
-  <div id="noKegBlock" class="card" style="display:none">
-    <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
-  </div>
 
   <!-- Floating scan button - fixed position, visible on every screen
        (not just the home screen), so a user can scan a new keg
@@ -328,23 +325,29 @@
     </div>
 
     <div class="home-tab-panel" id="homeTab-task" style="display:none">
-      <div class="card">
-        <h3 style="margin-top:0">To Do</h3>
-        <p class="muted" style="margin-top:0">Kegs currently in your hands, next action not yet done.</p>
-        <div id="taskTodoList"></div>
-      </div>
+      <details class="alert-group">
+        <summary class="alert-group-summary">To Do <span class="alert-group-count" id="taskTodoCount">0</span></summary>
+        <div class="alert-group-content">
+          <p class="muted" style="margin-top:0">Kegs currently in your hands, next action not yet done.</p>
+          <div id="taskTodoList"></div>
+        </div>
+      </details>
 
-      <div class="card">
-        <h3 style="margin-top:0">Incoming</h3>
-        <p class="muted" style="margin-top:0">Sent to you, not yet confirmed.</p>
-        <div id="taskIncomingList"></div>
-      </div>
+      <details class="alert-group">
+        <summary class="alert-group-summary">Incoming <span class="alert-group-count" id="taskIncomingCount">0</span></summary>
+        <div class="alert-group-content">
+          <p class="muted" style="margin-top:0">Sent to you, not yet confirmed.</p>
+          <div id="taskIncomingList"></div>
+        </div>
+      </details>
 
-      <div class="card">
-        <h3 style="margin-top:0">Outgoing</h3>
-        <p class="muted" style="margin-top:0">Sent by you, awaiting their confirmation.</p>
-        <div id="taskOutgoingList"></div>
-      </div>
+      <details class="alert-group">
+        <summary class="alert-group-summary">Outgoing <span class="alert-group-count" id="taskOutgoingCount">0</span></summary>
+        <div class="alert-group-content">
+          <p class="muted" style="margin-top:0">Sent by you, awaiting their confirmation.</p>
+          <div id="taskOutgoingList"></div>
+        </div>
+      </details>
 
       <div class="card">
         <h3 style="margin-top:0">My Notes</h3>
@@ -523,7 +526,6 @@ function showApp() {
   }
 
   if (!kegId) {
-    document.getElementById('noKegBlock').style.display = 'block';
     document.getElementById('homeTabs').style.display = 'block';
     loadHomeTab();
     loadAlerts();
@@ -715,16 +717,19 @@ async function loadMyTasks() {
 
   const todoEl = document.getElementById('taskTodoList');
   todoEl.innerHTML = todo.length ? todo.map((k) => taskKegItemHtml(k)).join('') : '<p class="muted">Nothing to do right now.</p>';
+  document.getElementById('taskTodoCount').textContent = todo.length;
 
   const incomingEl = document.getElementById('taskIncomingList');
   incomingEl.innerHTML = incoming.length
     ? incoming.map((k) => taskKegItemHtml(k, `\u2192 awaiting your confirmation`)).join('')
     : '<p class="muted">Nothing incoming right now.</p>';
+  document.getElementById('taskIncomingCount').textContent = incoming.length;
 
   const outgoingEl = document.getElementById('taskOutgoingList');
   outgoingEl.innerHTML = outgoing.length
     ? outgoing.map((k) => taskKegItemHtml(k, `\u2192 awaiting ${LOCATION_LABELS[k.pendingHandoverTo] || k.pendingHandoverTo}'s confirmation`)).join('')
     : '<p class="muted">Nothing outgoing right now.</p>';
+  document.getElementById('taskOutgoingCount').textContent = outgoing.length;
 }
 
 async function addTask() {
