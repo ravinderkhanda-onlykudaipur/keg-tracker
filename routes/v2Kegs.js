@@ -226,13 +226,31 @@ router.get('/:id', requireAuth, async (req, res) => {
   // (initiate/confirm/execute) only ever need the IDs for their own
   // logic, not the display names.
   if (keg.current_customer_id) {
-    const { rows } = await pool.query('SELECT name FROM customers WHERE id = $1', [keg.current_customer_id]);
+    const { rows } = await pool.query('SELECT name, address, phone FROM customers WHERE id = $1', [keg.current_customer_id]);
     keg.current_customer_name = rows[0]?.name || null;
+    keg.current_customer_address = rows[0]?.address || null;
+    keg.current_customer_phone = rows[0]?.phone || null;
   }
   if (keg.current_product_id) {
     const { rows } = await pool.query('SELECT name FROM products WHERE id = $1', [keg.current_product_id]);
     keg.current_product_name = rows[0]?.name || null;
   }
+
+  // History - Admin only, per explicit direction: "No other can see
+  // the history of keg" - not even Manager or Mover. v1's own
+  // GET /api/kegs/:id (routes/kegs.js) already returns this same data
+  // completely ungated - this is a separate, deliberately-restricted
+  // copy for v2 rather than loosening that endpoint's existing access.
+  if (req.user.role === 'admin') {
+    const { rows: events } = await pool.query(`
+      SELECT e.id, e.action_type, e.phase, e.role, e.details, e.created_at, u.name AS user_name
+      FROM events e JOIN users u ON u.id = e.user_id
+      WHERE e.keg_id = $1 AND e.phase IS NOT NULL
+      ORDER BY e.created_at ASC
+    `, [keg.id]);
+    keg.history = events.map((e) => ({ ...e, details: JSON.parse(e.details) }));
+  }
+
   const availableTransitions = getAvailableTransitions(keg, req.user.role);
   res.json({ keg, availableTransitions });
 });

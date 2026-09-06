@@ -269,8 +269,12 @@
 
   <div id="noKegBlock" class="card" style="display:none">
     <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
-    <button onclick="startScan()">Scan QR Code</button>
   </div>
+
+  <!-- Floating scan button - fixed position, visible on every screen
+       (not just the home screen), so a user can scan a new keg
+       immediately even while viewing a different keg's page. -->
+  <button id="floatingScanBtn" onclick="startScan()" style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); width:auto; padding:16px 28px; border-radius:30px; box-shadow:0 4px 16px rgba(0,0,0,0.25); z-index:500; display:none;">Scan QR Code</button>
 
   <div id="scanModal" style="display:none; position:fixed; inset:0; background:#000; z-index:1000;">
     <video id="scanVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
@@ -362,15 +366,36 @@
       <div class="custody-location" id="custodyLocation"></div>
       <div class="custody-sublocation" id="custodySublocation"></div>
       <div class="custody-condition" id="custodyCondition"></div>
-      <div id="custodyCustomer" class="muted" style="margin-top:6px"></div>
-      <div id="custodyFillDetails" class="muted"></div>
     </div>
 
     <div id="pendingBannerWrap"></div>
-    <div id="confirmSection"></div>
+
+    <div class="card" id="kegDetailsCard">
+      <h3 style="margin-top:0">Keg Details</h3>
+      <div id="kegDetailsBody"></div>
+    </div>
+
+    <!-- Customer Details normally shows here - but when there's a
+         pending handover THIS user can confirm, the required action
+         (Confirm Receipt) takes this exact position instead, per
+         explicit direction: "Destination card will be replaced by
+         the required action." Once confirmed, Customer Details
+         reappears here on the next load. -->
+    <div id="customerOrActionCard"></div>
+
+    <div class="card" id="filledDetailsCard" style="display:none">
+      <h3 style="margin-top:0">Filled Detail</h3>
+      <div id="filledDetailsBody"></div>
+    </div>
+
     <div id="actionsSection"></div>
     <div id="actionFormSection"></div>
     <div id="revertSection"></div>
+
+    <div class="card" id="historyCard" style="display:none">
+      <h3 style="margin-top:0">History</h3>
+      <div id="historyBody"></div>
+    </div>
   </div>
 </div>
 
@@ -458,6 +483,10 @@ function showApp() {
   document.getElementById('loginBlock').style.display = 'none';
   document.getElementById('appBlock').style.display = 'block';
   document.getElementById('whoami').textContent = `${currentUser.name} (${currentUser.role})`;
+  // Shown for any logged-in user on any screen (home or a specific
+  // keg's page) - if Admin gets redirected away below, the page
+  // navigates immediately anyway, so this line running first is harmless.
+  document.getElementById('floatingScanBtn').style.display = 'block';
 
   // Admin lands here first now that this page is the PWA's start_url,
   // but has no oversight functionality here at all - a pure observer
@@ -894,10 +923,6 @@ function renderKeg() {
   document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
     ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
   document.getElementById('custodyCondition').textContent = CONDITION_LABELS[currentKeg.current_condition] || currentKeg.current_condition;
-  document.getElementById('custodyCustomer').textContent = currentKeg.current_customer_name
-    ? `Destination: ${currentKeg.current_customer_name}` : '';
-  document.getElementById('custodyFillDetails').textContent = currentKeg.current_product_name
-    ? `${currentKeg.current_product_name} \u00b7 Batch ${currentKeg.current_batch_number} \u00b7 ${currentKeg.current_abv}% ABV` : '';
 
   const pendingWrap = document.getElementById('pendingBannerWrap');
   if (currentKeg.pending_handover_to) {
@@ -905,24 +930,102 @@ function renderKeg() {
   } else {
     pendingWrap.innerHTML = '';
   }
-  renderConfirmSection();
+
+  renderKegDetails();
+  renderCustomerOrActionCard();
+  renderFilledDetails();
+  renderHistory();
   renderRevertSection();
   renderAvailableActions();
+}
+
+// Basic identity info - same for every keg regardless of role.
+function renderKegDetails() {
+  const addedDate = currentKeg.created_at ? new Date(currentKeg.created_at).toLocaleDateString() : '\u2013';
+  document.getElementById('kegDetailsBody').innerHTML = `
+    <div class="muted">Manufacturing Number</div>
+    <div style="margin-bottom:8px">${currentKeg.manufacturing_number || '\u2013'}</div>
+    <div class="muted">Size</div>
+    <div style="margin-bottom:8px">${currentKeg.size_liters ? currentKeg.size_liters + 'L' : '\u2013'}</div>
+    <div class="muted">Material</div>
+    <div style="margin-bottom:8px">${currentKeg.material || '\u2013'}</div>
+    <div class="muted">Added</div>
+    <div>${addedDate}</div>
+  `;
+}
+
+// This position shows EITHER Customer Details OR the required action
+// (Confirm Receipt), never both - per explicit direction: "Destination
+// card will be replaced by the required action" when one is pending
+// for this user specifically. Once confirmed, Customer Details
+// reappears here on the next load, since pending_handover_to clears.
+function renderCustomerOrActionCard() {
+  const el = document.getElementById('customerOrActionCard');
+
+  if (currentKeg.pending_handover_to && dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
+    el.innerHTML = `
+      <div class="card">
+        <h3 style="margin-top:0">Action Required</h3>
+        <p class="muted" style="margin-top:0">Awaiting your confirmation of receipt.</p>
+        <button onclick="submitConfirm()">Confirm receipt</button>
+        <div id="confirmMsg"></div>
+      </div>
+    `;
+    return;
+  }
+
+  if (currentKeg.current_customer_name) {
+    el.innerHTML = `
+      <div class="card">
+        <h3 style="margin-top:0">Customer Details</h3>
+        <div class="muted">Name</div>
+        <div style="margin-bottom:8px">${currentKeg.current_customer_name}</div>
+        ${currentKeg.current_customer_address ? `<div class="muted">Address</div><div style="margin-bottom:8px">${currentKeg.current_customer_address}</div>` : ''}
+        ${currentKeg.current_customer_phone ? `<div class="muted">Phone</div><div>${currentKeg.current_customer_phone}</div>` : ''}
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = '';
+}
+
+function renderFilledDetails() {
+  const card = document.getElementById('filledDetailsCard');
+  if (!currentKeg.current_product_name) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('filledDetailsBody').innerHTML = `
+    <div class="muted">Beer</div>
+    <div style="margin-bottom:8px">${currentKeg.current_product_name}</div>
+    <div class="muted">Batch Number</div>
+    <div style="margin-bottom:8px">${currentKeg.current_batch_number || '\u2013'}</div>
+    <div class="muted">ABV</div>
+    <div>${currentKeg.current_abv != null ? currentKeg.current_abv + '%' : '\u2013'}</div>
+  `;
+}
+
+// Admin only - the backend itself only ever includes `history` in the
+// response for an Admin request (see routes/v2Kegs.js's GET /:id), so
+// this check is a display convenience, not the actual access control -
+// no other role ever receives this data from the server at all.
+function renderHistory() {
+  const card = document.getElementById('historyCard');
+  if (!currentKeg.history) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('historyBody').innerHTML = currentKeg.history.length
+    ? currentKeg.history.map((e) => `
+      <div style="padding:8px 0; border-bottom:1px solid var(--card-border); font-size:13px">
+        <b>${e.action_type}</b> (${e.phase}) \u2014 ${e.user_name}
+        <div class="muted">${new Date(e.created_at).toLocaleString()}</div>
+      </div>
+    `).join('')
+    : '<p class="muted">No history yet.</p>';
 }
 
 const ENTITY_TO_DB_ROLE = { customer: 'driver', driver: 'driver', mover: 'warehouse', washer: 'washer', filler: 'filler', warehouse: 'warehouse' };
 function dbRoleCanActAsEntity(dbRole, entity) {
   if (dbRole === 'manager') return true;
   return ENTITY_TO_DB_ROLE[entity] === dbRole;
-}
-
-function renderConfirmSection() {
-  const el = document.getElementById('confirmSection');
-  if (!currentKeg.pending_handover_to || !dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
-    el.innerHTML = '';
-    return;
-  }
-  el.innerHTML = `<button onclick="submitConfirm()">Confirm receipt</button><div id="confirmMsg"></div>`;
 }
 
 // Mover (warehouse role), Admin, and Manager can undo the single most
