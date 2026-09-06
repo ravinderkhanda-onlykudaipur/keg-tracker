@@ -85,6 +85,20 @@ router.get('/alerts', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+// GET /api/v2/kegs/my-stats - the logged-in user's own activity count,
+// for their personal "Home" tab (name/role/actions-completed summary).
+// Scoped entirely to req.user.id - this is "how much have I done",
+// not an oversight feature, so no role restriction beyond being logged in.
+router.get('/my-stats', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)::int AS today
+     FROM events WHERE user_id = $1 AND phase IS NOT NULL`,
+    [req.user.id]
+  );
+  res.json({ actionsCompletedTotal: rows[0].total, actionsCompletedToday: rows[0].today });
+});
+
 // GET /api/v2/kegs/overview-stats - customer and product breakdowns
 // for the Overview page's pie charts. Admin/Manager only, same access
 // level as the rest of index.html's oversight features.
