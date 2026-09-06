@@ -594,3 +594,59 @@ keg ID, and an irrelevant QR code that correctly gets rejected rather
 than navigating anywhere) - actual camera access and live video frame
 decoding couldn't be tested in this environment and would need
 real-device verification.
+
+## Fixed: QR scanner opened the camera but never detected anything
+
+Confirmed on real-device testing: the camera and video feed worked,
+but scanning a real QR code never did anything. Root cause was the
+CDN URL for jsQR - I'd guessed a `.min.js` filename
+(`jsQR.min.js` on cdnjs) that doesn't actually exist in this package.
+A script tag with a broken `src` fails silently in the browser - no
+console error surfaces to the page itself - so `jsQR` was simply
+`undefined` the whole time, and `scanLoop()`'s call to it threw
+immediately on every frame, silently killing the
+`requestAnimationFrame` loop with nothing visible to explain why.
+
+Verified the correct URL directly against the library's own GitHub
+source before changing anything, rather than guessing again -
+`github.com/cozmo/jsQR`'s `dist/jsQR.js` (not minified, no `.min.js`
+variant exists), served via jsDelivr's confirmed listing for
+`jsqr@1.4.0`:
+`https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js`.
+
+Added two layers of defense against this exact failure mode recurring
+silently in the future: `startScan()` now checks `typeof jsQR ===
+'function'` before ever opening the camera, and `scanLoop()` itself is
+wrapped in try/catch so any other runtime error shows a message on
+screen instead of just stopping the loop with no explanation. Verified
+directly: simulated the exact original bug (jsQR left undefined) and
+confirmed the new check surfaces a clear, actionable alert instead of
+silently failing.
+
+## Fixed: entire home screen (tabs AND scan button) disappeared
+
+A more serious variant of the previous bug, reported as "no tab, no
+button" - not just the scanner failing, but the whole page's init
+never running. Root cause: the jsQR CDN script tag was a plain,
+parser-blocking `<script src="...">`, placed BEFORE device-id.js and
+the main inline script. A blocking script tag halts the rest of the
+page's script execution until it resolves - if that CDN request is
+slow, blocked by the user's network, or hangs, the main script
+(including the `init()` call that shows the home tabs and scan button)
+never runs at all, regardless of how correct the rest of the page's
+code is.
+
+Fixed by adding the `defer` attribute - the script downloads in the
+background without blocking parsing, and only executes after the
+document is ready, letting the rest of the page's own scripts run on
+their normal schedule. Since `jsQR` is only ever referenced inside
+`scanLoop()`, which only runs after a user explicitly taps "Scan"
+(well after page load, giving the deferred script ample time to
+finish), this doesn't affect actual scanning functionality at all -
+it only removes the dependency's ability to block everything else.
+
+Also fixed a small but real cosmetic bug found while investigating
+this: the Feedback tab's description text had a literal `\u2014`
+string left in static HTML (a JS-style unicode escape that only
+means something inside a JS string, not in plain HTML content) -
+replaced with the actual `&mdash;` HTML entity.
