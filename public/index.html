@@ -626,9 +626,9 @@ function renderKpiSummary(kegs) {
 // or role directly, so Admin/Manager can see at a glance where the
 // pipeline is backing up, same reasoning as the Mover-facing version.
 const ALERT_STAGE_GROUPS = {
-  'At Washer/Filler': ['allotted_washer', 'received_washer', 'washed', 'received_filler'],
-  'At Warehouse': ['empty_returned', 'clean_storage', 'received_from_washer', 'filled', 'received_from_filler', 'received_from_driver', 'needs_repair'],
-  'In Transit': ['dispatched', 'received_driver', 'delivered', 'empty_at_customer', 'returned_to_warehouse'],
+  'At Washer/Filler': ['washer', 'filler'],
+  'At Warehouse': ['mover', 'warehouse'],
+  'In Transit': ['driver', 'customer'],
 };
 
 function formatOverdueDuration(hours) {
@@ -640,7 +640,7 @@ function formatOverdueDuration(hours) {
 }
 
 async function loadAlerts() {
-  const res = await fetch('/api/alerts', { credentials: 'include' });
+  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
   const el = document.getElementById('alertsList');
   if (!res.ok) { el.innerHTML = '<p class="muted">Could not load alerts.</p>'; return; }
   const alerts = await res.json();
@@ -649,17 +649,17 @@ async function loadAlerts() {
     return;
   }
 
-  el.innerHTML = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, statuses]) => {
+  el.innerHTML = Object.entries(ALERT_STAGE_GROUPS).map(([groupLabel, locations]) => {
     // Worst-overdue first within each group - no cap, shows every
     // overdue keg in that group (per an earlier request: no more
     // "7 most recent" limiting anywhere in the app).
-    const groupAlerts = alerts.filter((a) => statuses.includes(a.status)).sort((a, b) => b.hoursOverdue - a.hoursOverdue);
+    const groupAlerts = alerts.filter((a) => locations.includes(a.currentLocation)).sort((a, b) => b.hoursOverdue - a.hoursOverdue);
     const itemsHtml = groupAlerts.length
       ? groupAlerts.map((a) => `
         <div class="alert-item">
           <a href="/scan.html?keg=${a.kegId}" target="_blank"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
           <span class="alert-badge">${formatOverdueDuration(a.hoursOverdue)}</span>
-          <br><span class="muted">waiting on: ${roleLabel(a.role)}</span>
+          <br><span class="muted">waiting on: ${roleLabel(a.role)} \u00b7 ${a.transitionIds.join(' or ')}</span>
         </div>
       `).join('')
       : '<p class="muted">Nothing overdue here.</p>';

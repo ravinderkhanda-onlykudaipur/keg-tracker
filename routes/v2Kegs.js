@@ -7,8 +7,10 @@
 
 const express = require('express');
 const { pool, withTransaction } = require('../db');
-const { requireAuth } = require('../middleware/requireAuth');
+const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { getAvailableTransitions, initiateHandover, confirmHandover, executeSingleActor } = require('../lib/v2/transitionEngine');
+const { getOverdueKegsV2 } = require('../lib/v2/alerts');
+const { csvEscape, formatForExcel } = require('../lib/csvHelpers');
 
 const router = express.Router();
 
@@ -68,6 +70,73 @@ router.get('/', requireAuth, async (req, res) => {
   res.json(rows);
 });
 
+// GET /api/v2/kegs/alerts - overdue kegs per the v2 custody model.
+// Placed before the /:id route below - Express matches routes in
+// definition order, and /:id would otherwise treat "alerts" as a keg
+// ID and never reach this handler at all. Same access rule as v1's
+// routes/alerts.js: manufacturingNumber stripped for anyone who isn't
+// Admin/Manager.
+router.get('/alerts', requireAuth, async (req, res) => {
+  const overdue = await getOverdueKegsV2(pool);
+  const canSeeMfg = req.user && (req.user.role === 'admin' || req.user.role === 'manager');
+  const result = canSeeMfg
+    ? overdue
+    : overdue.map(({ manufacturingNumber, ...rest }) => rest);
+  res.json(result);
+});
+
+// GET /api/v2/kegs/export-events.csv - every v2 event (WHERE phase IS
+// NOT NULL, so v1-only history rows are excluded), one row per scan -
+// a two-scan handover produces two rows (initiated + confirmed), a
+// single-actor action produces one. Admin/Manager only, same access
+// rule as v1's export-history.csv in routes/kegs.js. Placed before
+// /:id for the same routing reason as /alerts above.
+//
+// Timestamps use formatForExcel() (lib/csvHelpers.js) - YYYY-MM-DD
+// HH:MM:SS in IST - which Excel sorts correctly as plain text, unlike
+// a raw ISO string with a literal "T"/"Z" that some Excel versions
+// treat as text rather than a real date/time value.
+router.get('/export-events.csv', requireRole('admin', 'manager'), async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT e.keg_id, k.manufacturing_number, e.created_at, e.action_type, e.phase,
+           e.sender, e.receiver, e.from_location, e.from_warehouse_sublocation, e.from_condition,
+           e.to_location, e.to_warehouse_sublocation, e.to_condition,
+           e.role, u.name AS user_name, e.details
+    FROM events e
+    JOIN kegs k ON k.id = e.keg_id
+    JOIN users u ON u.id = e.user_id
+    WHERE e.phase IS NOT NULL
+    ORDER BY e.keg_id ASC, e.created_at ASC
+  `);
+  const headers = [
+    'keg_id', 'manufacturing_number', 'timestamp', 'transition_id', 'phase',
+    'sender', 'receiver', 'from_location', 'from_warehouse_sublocation', 'from_condition',
+    'to_location', 'to_warehouse_sublocation', 'to_condition', 'role', 'user_name', 'details',
+  ];
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push([
+      csvEscape(row.keg_id),
+      csvEscape(row.manufacturing_number),
+      csvEscape(formatForExcel(row.created_at)),
+      csvEscape(row.action_type),
+      csvEscape(row.phase),
+      csvEscape(row.sender),
+      csvEscape(row.receiver),
+      csvEscape(row.from_location),
+      csvEscape(row.from_warehouse_sublocation),
+      csvEscape(row.from_condition),
+      csvEscape(row.to_location),
+      csvEscape(row.to_warehouse_sublocation),
+      csvEscape(row.to_condition),
+      csvEscape(row.role),
+      csvEscape(row.user_name),
+      csvEscape(row.details),
+    ].join(','));
+  }
+  res.type('text/csv').send(lines.join('\n'));
+});
+
 // GET /api/v2/kegs/:id - the keg's current v2 state, plus every
 // transition available to the requesting user right now. No "next" -
 // see DATA_MODEL.md's Section 9 note - just whatever's genuinely
@@ -75,6 +144,18 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   const keg = await loadKeg(req.params.id);
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
+  // Customer/product names looked up specifically here, not folded
+  // into loadKeg() itself - the other routes that share that helper
+  // (initiate/confirm/execute) only ever need the IDs for their own
+  // logic, not the display names.
+  if (keg.current_customer_id) {
+    const { rows } = await pool.query('SELECT name FROM customers WHERE id = $1', [keg.current_customer_id]);
+    keg.current_customer_name = rows[0]?.name || null;
+  }
+  if (keg.current_product_id) {
+    const { rows } = await pool.query('SELECT name FROM products WHERE id = $1', [keg.current_product_id]);
+    keg.current_product_name = rows[0]?.name || null;
+  }
   const availableTransitions = getAvailableTransitions(keg, req.user.role);
   res.json({ keg, availableTransitions });
 });
@@ -112,10 +193,10 @@ router.post('/:id/confirm', requireAuth, async (req, res) => {
 router.post('/:id/execute', requireAuth, async (req, res) => {
   const keg = await loadKeg(req.params.id);
   if (!keg) return res.status(404).json({ error: 'Keg not found' });
-  const { transitionId } = req.body || {};
+  const { transitionId, details } = req.body || {};
   if (!transitionId) return res.status(400).json({ error: 'transitionId is required' });
 
-  const result = executeSingleActor(keg, transitionId, req.user.role);
+  const result = executeSingleActor(keg, transitionId, req.user.role, details || {});
   if (!result.ok) return res.status(409).json({ error: result.error });
 
   await persist(keg.id, req.user.id, req.user.role, result);

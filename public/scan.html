@@ -92,6 +92,15 @@
   .dash-item:active { background: var(--primary-tint-bg); }
   .dash-item.pending { background: var(--warn-bg); border-color: var(--warn-text); color: var(--warn-text); }
   .dash-empty { font-size: 13px; color: var(--text-muted); padding: 4px; }
+
+  /* Alerts - kegs overdue per lib/v2/alerts.js, filtered to the
+     logged-in user's own role (Admin/Manager see everything via
+     index.html's own overview instead - this is the operational, in-
+     app version). */
+  .alert-item { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 13px; }
+  .alert-item a { color: var(--error-text); font-weight: 600; text-decoration: none; }
+  .alert-label { color: var(--error-text); }
+  .alert-overdue { color: var(--text-secondary); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -239,6 +248,7 @@
   <div id="noKegBlock" class="card" style="display:none">
     <p class="muted">Scan a keg's QR code to see its current status and available actions.</p>
   </div>
+  <div id="alertsBlock"></div>
   <div id="dashboardBlock"></div>
 
   <div id="kegBlock" style="display:none">
@@ -348,6 +358,7 @@ function showApp() {
 
   if (!kegId) {
     document.getElementById('noKegBlock').style.display = 'block';
+    loadAlerts();
     loadDashboard();
     return;
   }
@@ -366,6 +377,28 @@ const DASHBOARD_GROUPS = [
   { label: 'With Driver', match: (k) => k.current_location === 'driver' },
   { label: 'With Customer', match: (k) => k.current_location === 'customer' },
 ];
+
+// Fetches overdue kegs and shows only the ones relevant to the
+// logged-in user's own role - Manager sees everything (matches the
+// same full-bypass permission Manager has everywhere else in v2),
+// Admin never reaches this page at all (redirected above).
+async function loadAlerts() {
+  const el = document.getElementById('alertsBlock');
+  const res = await fetch('/api/v2/kegs/alerts', { credentials: 'include', cache: 'no-store' });
+  if (!res.ok) { el.innerHTML = ''; return; }
+  const alerts = await res.json();
+  const relevant = currentUser.role === 'manager' ? alerts : alerts.filter((a) => a.role === currentUser.role);
+
+  if (!relevant.length) { el.innerHTML = ''; return; }
+  el.innerHTML = relevant.map((a) => `
+    <div class="alert-item">
+      <a href="/scan.html?keg=${a.kegId}">${a.kegId}</a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''}
+      \u2014 <span class="alert-label">${a.label}</span>
+      <span class="alert-overdue">(${a.hoursOverdue}h overdue)</span>
+      <div class="muted" style="font-size:11px">${a.transitionIds.join(' or ')}</div>
+    </div>
+  `).join('');
+}
 
 async function loadDashboard() {
   const el = document.getElementById('dashboardBlock');
