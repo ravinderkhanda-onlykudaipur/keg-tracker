@@ -750,12 +750,27 @@ async function loadTasks() {
 // a time limit. A keg with no icon mapping (customer) or a location
 // this role can't act on at all simply won't appear in Todo, which is
 // correct - "Todo" only ever means work THIS role can actually do.
+// Shared by both Task's three lists and both Alert sub-tabs - keeps
+// the keg ID clickable only for Manager, per explicit direction: any
+// other role could otherwise click straight through to a keg's page
+// and perform the actual action there without ever physically
+// scanning the keg, defeating the whole point of QR-based physical
+// verification. Manager is a pure oversight role, not expected to
+// physically do the work the same way Washer/Filler/Driver/Mover do,
+// even though the system's own permission checks would technically
+// allow Manager to act too.
+function kegIdMaybeLinked(kegId) {
+  return currentUser.role === 'manager'
+    ? `<a href="/scan.html?keg=${kegId}"><b>${kegId}</b></a>`
+    : `<b>${kegId}</b>`;
+}
+
 function taskKegItemHtml(k, extra) {
   const locLabel = LOCATION_LABELS[k.currentLocation] || k.currentLocation;
   const condLabel = CONDITION_LABELS[k.currentCondition] || k.currentCondition;
   return `
     <div class="task-item">
-      <a href="/scan.html?keg=${k.kegId}"><b>${k.kegId}</b></a> &mdash; ${locLabel}, ${condLabel}${extra ? ' ' + extra : ''}
+      ${kegIdMaybeLinked(k.kegId)} &mdash; ${locLabel}, ${condLabel}${extra ? ' ' + extra : ''}
     </div>
   `;
 }
@@ -840,7 +855,7 @@ function alertsRelevantToMe(alerts) {
 function alertItemHtml(a) {
   return `
     <div class="alert-item">
-      <a href="/scan.html?keg=${a.kegId}"><b>${a.kegId}</b></a>${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
+      ${kegIdMaybeLinked(a.kegId)}${a.manufacturingNumber ? ` <span class="muted">(Serial: ${a.manufacturingNumber})</span>` : ''} &mdash; ${a.label}
       <span class="alert-overdue">(${a.hoursOverdue}h overdue)</span>
       <div class="muted" style="font-size:11px">${a.transitionIds.join(' or ')}</div>
     </div>
