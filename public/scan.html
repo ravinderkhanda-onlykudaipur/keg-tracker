@@ -92,6 +92,7 @@
   .customer-field { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
   .customer-field:last-child { margin-bottom: 0; }
   .dest-icon { color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+  .customer-name { font-size: 16px; font-weight: 600; }
   .call-icon-link { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--success-bg); color: var(--success-text); text-decoration: none; }
   .custody-icon-wrap { margin: 6px auto 4px; }
   .custody-location { font-size: 20px; font-weight: 600; }
@@ -1046,18 +1047,10 @@ function renderCustomerOrActionCard() {
             <div class="customer-field">
               <svg class="dest-icon" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
               <div>
-                <div class="muted" style="font-size:12px">Name</div>
-                <div>${currentKeg.current_customer_name}</div>
+                <div class="customer-name">${currentKeg.current_customer_name}</div>
+                ${currentKeg.current_customer_address ? `<div>${currentKeg.current_customer_address}</div>` : ''}
               </div>
             </div>
-            ${currentKeg.current_customer_address ? `
-            <div class="customer-field">
-              <svg class="dest-icon" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
-              <div>
-                <div class="muted" style="font-size:12px">Address</div>
-                <div>${currentKeg.current_customer_address}</div>
-              </div>
-            </div>` : ''}
           </div>
           <div class="customer-phone">
             ${currentKeg.current_customer_phone ? `
