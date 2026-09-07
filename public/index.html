@@ -325,7 +325,7 @@
         <a href="/api/kegs/export.csv" id="exportCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export CSV</button></a>
         <a href="/api/kegs/export-history.csv" id="exportHistoryCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export full history CSV</button></a>
         <table id="kegTable">
-          <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Status</th><th>Location</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Location</th><th>Situation</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div id="kegTableNote"></div>
@@ -433,6 +433,60 @@ function statusLabel(status) {
   if (!status) return status;
   if (status === 'empty_at_customer') return 'pending at driver';
   return status.replace(/_/g, ' ');
+}
+
+// v2's "situation" - one of the 38 named phases (18 resting + 20
+// pending) worked out earlier, replacing v1's stale `status` column
+// entirely for this table. Resting phases keyed by (location,
+// condition, sub-location); pending phases keyed directly by the
+// stored transition ID, matching exactly which of the 20 two-scan
+// transitions is actually in progress, not a generic "awaiting X" guess.
+const RESTING_PHASE_NAMES = {
+  'driver|empty|': 'Driver Holding Empty',
+  'customer|delivered|': 'With Customer',
+  'mover|empty|': 'Mover Holding Empty',
+  'mover|delivery_failed|': 'Delivery Failed At Mover',
+  'driver|to_be_delivered|': 'Out For Delivery',
+  'mover|damaged|': 'Damaged At Mover',
+  'washer|empty|': 'At Washer Awaiting Wash',
+  'washer|washing|': 'Washing In Progress',
+  'washer|cleaned|': 'Washed At Washer',
+  'mover|cleaned|': 'Mover Holding Cleaned',
+  'filler|cleaned|': 'At Filler Awaiting Fill',
+  'warehouse|empty|uncleaned': 'Uncleaned Storage',
+  'filler|filling|': 'Filling In Progress',
+  'filler|filled|': 'Filled At Filler',
+  'mover|filled|': 'Mover Holding Filled',
+  'warehouse|cleaned|cleaned': 'Cleaned Storage',
+  'warehouse|filled|filled': 'Filled Storage',
+  'warehouse|damaged|damaged': 'Damaged Storage',
+};
+// Only the 12 transitions that are actually still two-scan (the 8
+// Mover<->Warehouse storage transitions were converted to single-actor
+// in an earlier round, per direction that they shouldn't require
+// confirmation - they can never produce a pending state anymore, so
+// their pending-phase names were removed here too, rather than left
+// as stale entries that could never actually be matched).
+const PENDING_PHASE_NAMES = {
+  driver_to_mover_empty: 'Awaiting Mover Receipt Of Empty Return',
+  driver_to_mover_delivery_failed: 'Awaiting Mover Receipt Of Failed Delivery',
+  mover_retry_dispatch_after_failed_delivery: 'Awaiting Driver Receipt Of Redispatch',
+  mover_to_washer: 'Awaiting Washer Receipt',
+  washer_to_mover_cleaned: 'Awaiting Mover Receipt Of Cleaned',
+  washer_to_filler_direct: 'Awaiting Filler Receipt Direct',
+  mover_to_filler: 'Awaiting Filler Receipt',
+  filler_to_mover: 'Awaiting Mover Receipt Of Filled',
+  mover_to_driver_dispatch: 'Awaiting Driver Receipt Of Dispatch',
+  driver_to_mover_damaged: 'Awaiting Mover Receipt Of Driver Damage Report',
+  washer_to_mover_damaged: 'Awaiting Mover Receipt Of Washer Damage Report',
+  filler_to_mover_damaged: 'Awaiting Mover Receipt Of Filler Damage Report',
+};
+function situationLabel(keg) {
+  if (keg.pending_handover_to) {
+    return PENDING_PHASE_NAMES[keg.pending_handover_transition_id] || `Awaiting ${roleLabel(keg.pending_handover_to)} Receipt`;
+  }
+  const key = `${keg.current_location}|${keg.current_condition}|${keg.warehouse_sublocation || ''}`;
+  return RESTING_PHASE_NAMES[key] || `${roleLabel(keg.current_location)} - ${keg.current_condition}`;
 }
 
 function showTab(name) {
@@ -590,20 +644,35 @@ async function loadKegs() {
   // Admin/Manager would never see it either.
   const res = await fetch('/api/kegs' + (status ? `?status=${status}` : ''), { credentials: 'include' });
   const kegs = await res.json(); // already newest-first from the server
+
+  // v2's own state (current_location/condition/pending_handover_*) is
+  // fetched separately and merged in by id, purely for the Situation
+  // column below - the status filter dropdown above still works
+  // against v1's status field unchanged, since that's a separate
+  // concern from what this round actually asked for (replacing the
+  // displayed Situation text, not the filtering behavior).
+  const v2Res = await fetch('/api/v2/kegs', { credentials: 'include', cache: 'no-store' });
+  const v2Kegs = v2Res.ok ? await v2Res.json() : [];
+  const v2ById = {};
+  v2Kegs.forEach((k) => { v2ById[k.id] = k; });
+
   // No display cap here (unlike Alerts/Devices) - Admin specifically
   // asked to see every keg, not a "most recent N" summary. The backend
   // still caps at 200 (routes/kegs.js) as a sane upper bound; worth
   // raising that too if the business ever has more kegs than that.
   const tbody = document.querySelector('#kegTable tbody');
-  tbody.innerHTML = kegs.map(k => `
+  tbody.innerHTML = kegs.map(k => {
+    const v2 = v2ById[k.id];
+    return `
     <tr>
       <td><a href="/scan.html?keg=${k.id}" target="_blank">${k.id}</a></td>
       ${canSeeMfgNumber ? `<td class="mfg-number">${k.manufacturing_number || '-'}</td>` : ''}
-      <td><span class="status">${statusLabel(k.status)}</span></td>
-      <td>${k.location_note || '-'}</td>
+      <td>${v2 ? roleLabel(v2.current_location) : (k.location_note || '-')}</td>
+      <td>${v2 ? situationLabel(v2) : statusLabel(k.status)}</td>
       <td><a href="/api/kegs/${k.id}/qrcode.png" target="_blank">QR</a></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
   document.getElementById('kegTableNote').textContent = `${kegs.length} keg${kegs.length === 1 ? '' : 's'} total.`;
 
   // Only render the Overview KPI row from the UNFILTERED full list - if

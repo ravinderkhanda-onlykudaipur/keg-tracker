@@ -65,10 +65,16 @@ async function persist(kegId, userId, dbRole, result) {
 // statuses to ask for individually.
 router.get('/', requireAuth, async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT id, current_location, warehouse_sublocation, current_condition, pending_handover_to
+    SELECT id, manufacturing_number, current_location, warehouse_sublocation, current_condition,
+           pending_handover_to, pending_handover_transition_id
     FROM kegs ORDER BY id
   `);
-  res.json(rows);
+  // Manufacturing number restricted to Admin/Manager, matching the
+  // exact same rule v1's routes/kegs.js already applies - not a new
+  // restriction invented here, kept consistent with it.
+  const canSeeMfg = req.user.role === 'admin' || req.user.role === 'manager';
+  const result = canSeeMfg ? rows : rows.map(({ manufacturing_number, ...rest }) => rest);
+  res.json(result);
 });
 
 // GET /api/v2/kegs/alerts - overdue kegs per the v2 custody model.

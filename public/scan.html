@@ -83,6 +83,7 @@
   .filled-columns { display: flex; justify-content: space-around; text-align: center; }
   .filled-column img { width: 40px; height: 40px; margin-bottom: 6px; }
   .filled-column { flex: 1; }
+  .filled-value { font-weight: 600; font-size: 15px; }
 
   /* Customer card - 3:1 row split (Name/Address take the larger 3
      portion, Phone the remaining 1), replicated from v1. */
@@ -129,7 +130,7 @@
      tab-bar's single active/inactive color scheme, since these are
      independent choices to make, not a single selection to switch
      between. */
-  .action-tab-btn { flex: 1; background: none; border: none; border-bottom: 3px solid; padding: 12px 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin: 0; width: auto; }
+
   .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 
   .task-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 6px 0; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; }
@@ -430,18 +431,15 @@
       <div class="filled-columns">
         <div class="filled-column">
           <img src="/icons/beer.svg" alt="">
-          <div class="muted">Beer</div>
-          <div id="filledDetailsBeer"></div>
+          <div id="filledDetailsBeer" class="filled-value"></div>
         </div>
         <div class="filled-column">
           <img src="/icons/batch.svg" alt="">
-          <div class="muted">Batch No</div>
-          <div id="filledDetailsBatch"></div>
+          <div id="filledDetailsBatch" class="filled-value"></div>
         </div>
         <div class="filled-column">
           <img src="/icons/abv.svg" alt="">
-          <div class="muted">ABV</div>
-          <div id="filledDetailsAbv"></div>
+          <div id="filledDetailsAbv" class="filled-value"></div>
         </div>
       </div>
     </div>
@@ -470,6 +468,7 @@
      is exactly why the defensive check in scanLoop() below exists now. -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
 <script src="/device-id.js"></script>
+<script src="/offline-queue-v2.js" defer></script>
 <script>
 let currentUser = null;
 let currentKeg = null;
@@ -1125,11 +1124,6 @@ async function submitRevert() {
   setTimeout(loadKeg, 800);
 }
 
-// Distinct color per available action, reusing the same palette
-// already used for the Overview's pie charts elsewhere in the app -
-// cycles if there are ever more actions than colors.
-const ACTION_BTN_COLORS = ['#2FA8F5', '#F5A623', '#7ED321', '#D0021B', '#9013FE', '#50E3C2'];
-
 function renderAvailableActions() {
   const el = document.getElementById('actionsSection');
   document.getElementById('actionFormSection').innerHTML = '';
@@ -1141,10 +1135,25 @@ function renderAvailableActions() {
     el.innerHTML = '<p class="muted">No actions available for your role on this keg right now.</p>';
     return;
   }
-  el.innerHTML = `<div class="tab-bar">` + availableTransitions.map((t, i) => {
-    const color = ACTION_BTN_COLORS[i % ACTION_BTN_COLORS.length];
-    return `<button class="action-tab-btn" style="color:${color}; border-bottom-color:${color}" onclick="selectAction('${t.id}')">${t.label}</button>`;
-  }).join('') + `</div>`;
+  // Dropdown + Submit, rather than a separate button per action -
+  // selecting and submitting still leads into the exact same
+  // selectAction()/submitAction() flow (details form, then the native
+  // confirmation popup) as before, just changing how the action
+  // itself gets chosen.
+  el.innerHTML = `
+    <label>Action</label>
+    <select id="actionSelect">
+      <option value="">-- Select an action --</option>
+      ${availableTransitions.map((t) => `<option value="${t.id}">${t.label}</option>`).join('')}
+    </select>
+    <button onclick="submitActionSelection()">Submit</button>
+  `;
+}
+
+function submitActionSelection() {
+  const selectedId = document.getElementById('actionSelect').value;
+  if (!selectedId) { alert('Select an action first.'); return; }
+  selectAction(selectedId);
 }
 
 function selectAction(transitionId) {
@@ -1291,11 +1300,28 @@ async function submitAction(transitionId, twoScan) {
   if (!confirm(`Confirm: ${t.label}?`)) return;
 
   const endpoint = twoScan ? 'initiate' : 'execute';
-  const res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', cache: 'no-store',
-    body: JSON.stringify({ transitionId, details }),
-  });
+  let res;
+  try {
+    res = await fetch(`/api/v2/kegs/${kegId}/${endpoint}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', cache: 'no-store',
+      body: JSON.stringify({ transitionId, details }),
+    });
+  } catch (networkErr) {
+    // Genuinely offline (fetch itself threw, not just a non-2xx
+    // response) - queue rather than lose the work, and sync
+    // automatically once connectivity returns (see the 'online'
+    // listener near init()).
+    if (!OfflineQueueV2.canQueueFor(kegId)) {
+      msg.className = 'error';
+      msg.textContent = 'A different action is already queued for this keg - sync that one first.';
+      return;
+    }
+    OfflineQueueV2.enqueue({ kegId, transitionId, twoScan, endpoint, details });
+    msg.className = 'success';
+    msg.textContent = 'No connection - queued. Will sync automatically once you\'re back online.';
+    return;
+  }
   const data = await res.json();
   if (!res.ok) {
     msg.className = 'error';
@@ -1309,10 +1335,23 @@ async function submitAction(transitionId, twoScan) {
 
 async function submitConfirm() {
   const msg = document.getElementById('confirmMsg');
-  const res = await fetch(`/api/v2/kegs/${kegId}/confirm`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    credentials: 'include', cache: 'no-store',
-  });
+  let res;
+  try {
+    res = await fetch(`/api/v2/kegs/${kegId}/confirm`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', cache: 'no-store',
+    });
+  } catch (networkErr) {
+    if (!OfflineQueueV2.canQueueFor(kegId)) {
+      msg.className = 'error';
+      msg.textContent = 'A different action is already queued for this keg - sync that one first.';
+      return;
+    }
+    OfflineQueueV2.enqueue({ kegId, endpoint: 'confirm' });
+    msg.className = 'success';
+    msg.textContent = 'No connection - queued. Will sync automatically once you\'re back online.';
+    return;
+  }
   const data = await res.json();
   if (!res.ok) {
     msg.className = 'error';
@@ -1323,6 +1362,13 @@ async function submitConfirm() {
   msg.textContent = 'Receipt confirmed.';
   setTimeout(loadKeg, 800);
 }
+
+// Auto-sync queued offline actions the moment connectivity returns -
+// no manual "retry" step needed. Also attempted once on initial load,
+// in case items were queued in a previous session and the page is
+// only now being reopened while already online.
+window.addEventListener('online', () => { OfflineQueueV2.syncAll(); });
+OfflineQueueV2.syncAll();
 
 init();
 </script>
