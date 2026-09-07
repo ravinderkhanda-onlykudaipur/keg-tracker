@@ -407,7 +407,14 @@
     <button class="secondary" onclick="goHome()">&larr; Home</button>
     <h3 id="kegIdHeading"></h3>
 
-    <div class="card custody-card">
+    <!-- The action details form takes this exact position when active
+         (see selectAction()/renderAvailableActions()) - the Current
+         Custody card below it gets hidden while a form is showing, per
+         explicit direction: the form replaces Custody's spot, not
+         Filled Detail's. -->
+    <div id="actionFormSection"></div>
+
+    <div class="card custody-card" id="custodyCard">
       <div class="muted">Current custody</div>
       <div class="custody-icon-wrap" id="custodyIconWrap"></div>
       <div class="custody-location" id="custodyLocation"></div>
@@ -449,7 +456,6 @@
     </div>
 
     <div id="actionsSection"></div>
-    <div id="actionFormSection"></div>
     <div id="revertSection"></div>
 
     <div class="card" id="historyCard" style="display:none">
@@ -1098,6 +1104,11 @@ async function submitRevert() {
 function renderAvailableActions() {
   const el = document.getElementById('actionsSection');
   document.getElementById('actionFormSection').innerHTML = '';
+  // Restored here (rather than only in selectAction()) since this runs
+  // on every fresh renderKeg() - covers first load, navigating to a
+  // different keg, and reloading after a successful submission, all of
+  // which should show Custody normally with no form active.
+  document.getElementById('custodyCard').style.display = 'block';
   if (currentKeg.pending_handover_to) {
     el.innerHTML = '';
     return;
@@ -1190,6 +1201,14 @@ function selectAction(transitionId) {
       <div id="actionMsg"></div>
     </div>
   `;
+  // Custody card hidden while this form is showing - per explicit
+  // direction, the action form takes Custody's position at the top,
+  // not Filled Detail's further down. Restored on the next renderKeg()
+  // (via renderAvailableActions() clearing actionFormSection at its
+  // start), which happens naturally whenever the keg reloads - after a
+  // successful submission, after navigating to a different keg, or
+  // simply re-rendering with no action currently selected.
+  document.getElementById('custodyCard').style.display = 'none';
 
   if (t.requiresCustomer) populateCustomerSelect();
   if (t.requiresProductDetails) populateProductSelect();
