@@ -83,6 +83,16 @@
   .filled-columns { display: flex; justify-content: space-around; text-align: center; }
   .filled-column img { width: 40px; height: 40px; margin-bottom: 6px; }
   .filled-column { flex: 1; }
+
+  /* Customer card - 3:1 row split (Name/Address take the larger 3
+     portion, Phone the remaining 1), replicated from v1. */
+  .customer-row { display: flex; align-items: center; }
+  .customer-main { flex: 3; }
+  .customer-phone { flex: 1; display: flex; justify-content: center; }
+  .customer-field { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+  .customer-field:last-child { margin-bottom: 0; }
+  .dest-icon { color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+  .call-icon-link { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--success-bg); color: var(--success-text); text-decoration: none; }
   .custody-icon-wrap { margin: 6px auto 4px; }
   .custody-location { font-size: 20px; font-weight: 600; }
   .custody-sublocation { font-size: 14px; color: var(--text-secondary); }
@@ -401,6 +411,15 @@
 
     <div id="pendingBannerWrap"></div>
 
+    <!-- Customer Details normally shows here - but when there's a
+         pending handover THIS user can confirm, the required action
+         (Confirm Receipt) takes this exact position instead, per
+         explicit direction: "Destination card will be replaced by
+         the required action." Once confirmed, Customer Details
+         reappears here on the next load. Positioned above Filled
+         Details per explicit direction. -->
+    <div id="customerOrActionCard"></div>
+
     <!-- Merged "Keg ID + Information Filled by Filler" card, replicated
          from v1 exactly: Keg ID centered at top, three icon columns
          (Beer/Batch/ABV) below. Replaces the two separate Keg Details
@@ -425,14 +444,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Customer Details normally shows here - but when there's a
-         pending handover THIS user can confirm, the required action
-         (Confirm Receipt) takes this exact position instead, per
-         explicit direction: "Destination card will be replaced by
-         the required action." Once confirmed, Customer Details
-         reappears here on the next load. -->
-    <div id="customerOrActionCard"></div>
 
     <div id="actionsSection"></div>
     <div id="actionFormSection"></div>
@@ -1029,11 +1040,32 @@ function renderCustomerOrActionCard() {
   if (currentKeg.current_customer_name) {
     el.innerHTML = `
       <div class="card">
-        <h3 style="margin-top:0">Customer Details</h3>
-        <div class="muted">Name</div>
-        <div style="margin-bottom:8px">${currentKeg.current_customer_name}</div>
-        ${currentKeg.current_customer_address ? `<div class="muted">Address</div><div style="margin-bottom:8px">${currentKeg.current_customer_address}</div>` : ''}
-        ${currentKeg.current_customer_phone ? `<div class="muted">Phone</div><div>${currentKeg.current_customer_phone}</div>` : ''}
+        <h3 style="text-align:center; margin-top:0">Customer</h3>
+        <div class="customer-row">
+          <div class="customer-main">
+            <div class="customer-field">
+              <svg class="dest-icon" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+              <div>
+                <div class="muted" style="font-size:12px">Name</div>
+                <div>${currentKeg.current_customer_name}</div>
+              </div>
+            </div>
+            ${currentKeg.current_customer_address ? `
+            <div class="customer-field">
+              <svg class="dest-icon" width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+              <div>
+                <div class="muted" style="font-size:12px">Address</div>
+                <div>${currentKeg.current_customer_address}</div>
+              </div>
+            </div>` : ''}
+          </div>
+          <div class="customer-phone">
+            ${currentKeg.current_customer_phone ? `
+            <a href="tel:${currentKeg.current_customer_phone}" class="call-icon-link" aria-label="Call ${currentKeg.current_customer_phone}">
+              <svg width="26" height="26" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.24.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2z"/></svg>
+            </a>` : ''}
+          </div>
+        </div>
       </div>
     `;
     return;
