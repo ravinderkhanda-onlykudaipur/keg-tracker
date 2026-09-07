@@ -350,6 +350,14 @@
         <div class="muted" id="homeActionsToday" style="margin-bottom:12px"></div>
         <button class="secondary" onclick="logout()">Log out</button>
       </div>
+
+      <!-- Dashboard/inventory moved here from the Alerts tab -
+           legitimately shows every location including zero-count ones
+           (it's "where are all the kegs", not "what's overdue"), which
+           was sitting confusingly close to Alerts' own zero-hidden
+           groups and being mistaken for part of Alerts itself. -->
+      <h3>All Kegs</h3>
+      <div id="dashboardBlock"></div>
     </div>
 
     <div class="home-tab-panel" id="homeTab-alerts" style="display:none">
@@ -359,7 +367,6 @@
       </div>
       <div id="alertSubTab-resting"></div>
       <div id="alertSubTab-pending" style="display:none"></div>
-      <div id="dashboardBlock"></div>
     </div>
 
     <div class="home-tab-panel" id="homeTab-task" style="display:none">
@@ -1175,6 +1182,23 @@ function selectAction(transitionId) {
   const t = availableTransitions.find((x) => x.id === transitionId);
   const formEl = document.getElementById('actionFormSection');
 
+  // No fields to fill in at all - go straight to the actual
+  // confirmation popup, skipping the intermediate "empty card with
+  // just a button" step, which was itself a redundant page-level
+  // confirmation on top of the popup for actions with nothing to
+  // actually fill in. Actions that DO need fields (reason/customer/
+  // product details) still show the form below first, since those
+  // genuinely need to be filled in before anything can be confirmed.
+  if (!t.requiresReason && !t.requiresCustomer && !t.requiresProductDetails) {
+    // actionMsg kept as an empty placeholder rather than removed
+    // entirely - submitAction() still needs somewhere to write an
+    // error message to (e.g. a network failure or a permissions
+    // error), even though there's no details form to show here.
+    formEl.innerHTML = '<div id="actionMsg"></div>';
+    submitAction(transitionId, t.twoScan);
+    return;
+  }
+
   let fieldsHtml = '';
   if (t.requiresReason) {
     fieldsHtml += `
@@ -1213,7 +1237,7 @@ function selectAction(transitionId) {
     <div class="card">
       <h3 style="margin-top:0">${t.label}</h3>
       ${fieldsHtml}
-      <button onclick="submitAction('${t.id}', ${t.twoScan})">Confirm</button>
+      <button onclick="submitAction('${t.id}', ${t.twoScan})">Continue</button>
       <div id="actionMsg"></div>
     </div>
   `;
