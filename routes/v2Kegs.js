@@ -242,12 +242,12 @@ router.get('/:id', requireAuth, async (req, res) => {
     keg.current_product_name = rows[0]?.name || null;
   }
 
-  // History - Admin only, per explicit direction: "No other can see
-  // the history of keg" - not even Manager or Mover. v1's own
+  // History - Admin and Manager, per explicit direction (updated from
+  // an earlier round that restricted this to Admin only). v1's own
   // GET /api/kegs/:id (routes/kegs.js) already returns this same data
   // completely ungated - this is a separate, deliberately-restricted
   // copy for v2 rather than loosening that endpoint's existing access.
-  if (req.user.role === 'admin') {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
     const { rows: events } = await pool.query(`
       SELECT e.id, e.action_type, e.phase, e.role, e.details, e.created_at, u.name AS user_name
       FROM events e JOIN users u ON u.id = e.user_id
