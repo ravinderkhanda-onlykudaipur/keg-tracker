@@ -1010,7 +1010,12 @@ function renderKeg() {
 // Basic identity info - same for every keg regardless of role.
 function renderFilledDetails() {
   const card = document.getElementById('filledDetailsCard');
-  if (!currentKeg.current_product_name) { card.style.display = 'none'; return; }
+  // Hidden whenever the Customer card is actually being shown (not the
+  // pending-action state, which takes that same card's position instead) -
+  // per explicit direction: only one of Customer / Filled Details shows
+  // at a time, not both together.
+  const customerCardShowing = !currentKeg.pending_handover_to && currentKeg.current_customer_name;
+  if (!currentKeg.current_product_name || customerCardShowing) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   document.getElementById('filledDetailsKegId').textContent = currentKeg.id;
   document.getElementById('filledDetailsBeer').textContent = currentKeg.current_product_name;
