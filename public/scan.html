@@ -38,6 +38,8 @@
     --error-border: #F3C6C2;
     --warn-bg: #FFF4E0;
     --warn-text: #8A5700;
+    --neutral-bg: #EDEBE5;
+    --neutral-text: #6B6558;
   }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; max-width: 480px; margin: 0 auto; padding: 18px 16px; color: var(--text); background: var(--bg); font-size: 14px; line-height: 1.5; }
@@ -75,7 +77,7 @@
      lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely").
      Visually modeled on the original Now/Next icon-and-label layout,
      just showing one fact instead of a now/next pair. */
-  .custody-card { text-align: center; }
+  .custody-card { text-align: left; }
 
   /* Merged "Keg ID + Information Filled by Filler" card, replicated
      from v1: Keg ID centered at top, three icon columns below. */
@@ -95,12 +97,17 @@
   .dest-icon { color: var(--primary); flex-shrink: 0; margin-top: 2px; }
   .customer-name { font-size: 16px; font-weight: 600; }
   .call-icon-link { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--success-bg); color: var(--success-text); text-decoration: none; }
-  .custody-icon-wrap { margin: 6px auto 4px; }
-  .custody-location { font-size: 20px; font-weight: 600; }
-  .custody-sublocation { font-size: 14px; color: var(--text-secondary); }
-  .custody-condition { display: inline-block; margin-top: 8px; padding: 4px 12px; border-radius: 10px; background: var(--primary-tint-bg); color: var(--primary-tint-text-dark); font-size: 13px; font-weight: 500; }
+  .custody-shell { border-radius: 12px; overflow: hidden; border: 1px solid var(--card-border); margin: 14px 0; }
+  .custody-shell .custody-card { border: none; border-radius: 0; margin: 0; }
+  .custody-top-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+  .custody-icon-wrap { flex-shrink: 0; }
+  .custody-icon-wrap img, .custody-icon-wrap svg { width: 44px; height: 44px; display: block; }
+  .custody-heading { flex: 1; min-width: 0; }
+  .custody-location { font-size: 17px; font-weight: 600; }
+  .custody-sublocation { font-size: 12.5px; color: var(--text-secondary); margin-top: 1px; }
+  .custody-condition { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 10px; background: var(--neutral-bg); color: var(--neutral-text); font-size: 12.5px; font-weight: 600; }
 
-  .pending-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 500; text-align: center; margin: 10px 0; }
+  .pending-banner { display: flex; align-items: center; justify-content: center; gap: 7px; background: var(--warn-bg); color: var(--warn-text); font-size: 13px; font-weight: 500; padding: 10px 14px; border-top: 1px solid rgba(138,87,0,0.15); }
 
 
 
@@ -432,15 +439,21 @@
          Filled Detail's. -->
     <div id="actionFormSection"></div>
 
-    <div class="card custody-card" id="custodyCard">
-      <div class="muted">Current custody</div>
-      <div class="custody-icon-wrap" id="custodyIconWrap"></div>
-      <div class="custody-location" id="custodyLocation"></div>
-      <div class="custody-sublocation" id="custodySublocation"></div>
-      <div class="custody-condition" id="custodyCondition"></div>
-    </div>
+    <div class="custody-shell">
+      <div class="card custody-card" id="custodyCard">
+        <div class="muted">Current custody</div>
+        <div class="custody-top-row">
+          <div class="custody-icon-wrap" id="custodyIconWrap"></div>
+          <div class="custody-heading">
+            <div class="custody-location" id="custodyLocation"></div>
+            <div class="custody-sublocation" id="custodySublocation"></div>
+          </div>
+          <div class="custody-condition" id="custodyCondition"></div>
+        </div>
+      </div>
 
-    <div id="pendingBannerWrap"></div>
+      <div id="pendingBannerWrap"></div>
+    </div>
 
     <!-- Customer Details normally shows here - but when there's a
          pending handover THIS user can confirm, the required action
@@ -1004,7 +1017,8 @@ function renderKeg() {
 
   const pendingWrap = document.getElementById('pendingBannerWrap');
   if (currentKeg.pending_handover_to) {
-    pendingWrap.innerHTML = `<div class="pending-banner">Awaiting receipt by ${LOCATION_LABELS[currentKeg.pending_handover_to] || currentKeg.pending_handover_to}</div>`;
+    const clockIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    pendingWrap.innerHTML = `<div class="pending-banner">${clockIcon}<span>Awaiting receipt by ${LOCATION_LABELS[currentKeg.pending_handover_to] || currentKeg.pending_handover_to}</span></div>`;
   } else {
     pendingWrap.innerHTML = '';
   }
@@ -1142,6 +1156,7 @@ function renderAvailableActions() {
   // different keg, and reloading after a successful submission, all of
   // which should show Custody normally with no form active.
   document.getElementById('custodyCard').style.display = 'block';
+  document.getElementById('pendingBannerWrap').style.display = 'block';
   if (currentKeg.pending_handover_to) {
     el.innerHTML = '';
     return;
@@ -1242,6 +1257,7 @@ function selectAction(transitionId) {
   // successful submission, after navigating to a different keg, or
   // simply re-rendering with no action currently selected.
   document.getElementById('custodyCard').style.display = 'none';
+  document.getElementById('pendingBannerWrap').style.display = 'none';
 
   if (t.requiresCustomer) populateCustomerSelect();
   if (t.requiresProductDetails) populateProductSelect();
