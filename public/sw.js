@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v9'; // bumped: fixed a critical bug in scan.html where OfflineQueueV2.syncAll() was called at the top level of the main script, but offline-queue-v2.js was loaded with `defer` - deferred scripts only execute after the ENTIRE document (including non-deferred scripts like the main one) finishes parsing, so OfflineQueueV2 was guaranteed undefined at that point, throwing a ReferenceError on every single page load and preventing init() on the very next line from ever running at all. This broke login for every non-deferred-script-independent user (Admin was unaffected since it logs in via index.html, which has no such dependency) - not a caching issue this time, but bumping anyway per the established rule of doing so alongside every substantial scan.html change, which was skipped for several rounds leading up to this one.
+const CACHE_NAME = 'keg-tracker-shell-v10'; // bumped: scan.html's own serviceWorker.register('/sw.js') call had been silently lost during the scan-v2.html consolidation, so no device could pick up a new shell version at all since - restored, along with a one-action-per-scan change (submitAction/submitConfirm now return to the scan/home screen instead of reloading the same keg) and a manual pull-to-refresh gesture for standalone/home-screen mode, which has no native pull gesture of its own.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
