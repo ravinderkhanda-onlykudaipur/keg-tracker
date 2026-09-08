@@ -231,7 +231,22 @@ router.get('/:id', requireAuth, async (req, res) => {
   // into loadKeg() itself - the other routes that share that helper
   // (initiate/confirm/execute) only ever need the IDs for their own
   // logic, not the display names.
-  if (keg.current_customer_id) {
+  // current_customer_id is never cleared once set (see DATA_MODEL.md's
+  // "never cleared" note on overview-stats) - it's stamped fresh at
+  // initiateHandover() time, specifically for mover_to_driver_dispatch,
+  // but otherwise just sits there unchanged through the keg's next
+  // wash/fill cycle until it's reassigned. Surfacing it unconditionally
+  // meant a keg back with Mover, not yet assigned to anyone new, still
+  // showed its LAST delivery's customer as if that were current -
+  // visible and confusing precisely while a Mover was mid-way through
+  // picking this cycle's actual destination. Only trust it once it's
+  // genuinely this cycle's assignment: freshly set (this keg's pending
+  // handover IS the dispatch-to-driver transition that just set it) or
+  // already dispatched/delivered.
+  const customerIsCurrent = keg.current_location === 'driver'
+    || keg.current_location === 'customer'
+    || keg.pending_handover_transition_id === 'mover_to_driver_dispatch';
+  if (keg.current_customer_id && customerIsCurrent) {
     const { rows } = await pool.query('SELECT name, address, phone FROM customers WHERE id = $1', [keg.current_customer_id]);
     keg.current_customer_name = rows[0]?.name || null;
     keg.current_customer_address = rows[0]?.address || null;
