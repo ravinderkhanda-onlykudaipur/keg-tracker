@@ -99,13 +99,14 @@
   .call-icon-link { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: var(--success-bg); color: var(--success-text); text-decoration: none; }
   .custody-shell { border-radius: 12px; overflow: hidden; border: 1px solid var(--card-border); margin: 14px 0; }
   .custody-shell .custody-card { border: none; border-radius: 0; margin: 0; }
-  .custody-top-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-  .custody-icon-wrap { flex-shrink: 0; }
-  .custody-icon-wrap img, .custody-icon-wrap svg { width: 44px; height: 44px; display: block; }
-  .custody-heading { flex: 1; min-width: 0; }
-  .custody-location { font-size: 17px; font-weight: 600; }
+  .custody-split { display: flex; align-items: stretch; gap: 14px; }
+  .custody-icon-col { flex-shrink: 0; display: flex; }
+  .custody-icon-wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+  .custody-icon-wrap img, .custody-icon-wrap svg { height: 100%; width: auto; display: block; }
+  .custody-text-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .custody-location { font-size: 17px; font-weight: 700; color: #129447; }
   .custody-sublocation { font-size: 12.5px; color: var(--text-secondary); margin-top: 1px; }
-  .custody-condition { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 10px; background: var(--neutral-bg); color: var(--neutral-text); font-size: 12.5px; font-weight: 600; }
+  .custody-condition { font-size: 14px; font-weight: 600; color: var(--primary); margin-top: 2px; }
 
   .pending-banner { display: flex; align-items: center; justify-content: center; gap: 7px; background: var(--warn-bg); color: var(--warn-text); font-size: 13px; font-weight: 500; padding: 10px 14px; border-top: 1px solid rgba(138,87,0,0.15); }
 
@@ -441,14 +442,15 @@
 
     <div class="custody-shell">
       <div class="card custody-card" id="custodyCard">
-        <div class="muted">Current custody</div>
-        <div class="custody-top-row">
-          <div class="custody-icon-wrap" id="custodyIconWrap"></div>
-          <div class="custody-heading">
+        <div class="custody-split">
+          <div class="custody-icon-col">
+            <div class="custody-icon-wrap" id="custodyIconWrap"></div>
+          </div>
+          <div class="custody-text-col">
             <div class="custody-location" id="custodyLocation"></div>
             <div class="custody-sublocation" id="custodySublocation"></div>
+            <div class="custody-condition" id="custodyCondition"></div>
           </div>
-          <div class="custody-condition" id="custodyCondition"></div>
         </div>
       </div>
 
