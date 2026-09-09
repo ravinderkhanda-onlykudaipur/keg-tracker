@@ -463,13 +463,6 @@
     <button class="secondary" onclick="goHome()">&larr; Home</button>
     <h3 id="kegIdHeading"></h3>
 
-    <!-- The action details form takes this exact position when active
-         (see selectAction()/renderAvailableActions()) - the Current
-         Custody card below it gets hidden while a form is showing, per
-         explicit direction: the form replaces Custody's spot, not
-         Filled Detail's. -->
-    <div id="actionFormSection"></div>
-
     <div class="card custody-card" id="custodyCard">
       <div class="muted" style="text-align:center">Holding</div>
       <div class="custody-split">
@@ -517,6 +510,11 @@
       </div>
     </div>
 
+    <!-- Action form opens here, below Custody/Customer/Filled Detail -
+         per explicit direction, it does NOT swap with or hide any of
+         those cards anymore; all three stay visible throughout. -->
+    <div id="actionFormSection"></div>
+
     <div id="actionsSection"></div>
     <div id="revertSection"></div>
 
@@ -545,6 +543,15 @@
 let currentUser = null;
 let currentKeg = null;
 let availableTransitions = [];
+// Set right after any successful action on this page view - reloads
+// the keg so the user can see the result of what they just did (e.g.
+// the newly-filled Beer/Batch/ABV), but suppresses the actions
+// dropdown from offering a NEXT action on the same page load. A fresh
+// scan (leaving and re-scanning) is still required before taking
+// another action, preserving the one-scan-per-action guarantee while
+// no longer hiding the just-completed action's own result from the
+// person who just performed it.
+let actionJustCompletedThisView = false;
 const kegId = new URLSearchParams(location.search).get('keg');
 
 // Uses the app's uploaded SVG icon files (public/icons/) - has both
@@ -1185,19 +1192,29 @@ async function submitRevert() {
   }
   msg.className = 'success';
   msg.textContent = 'Reverted.';
-  setTimeout(goHome, 800);
+  actionJustCompletedThisView = true;
+  setTimeout(loadKeg, 800);
 }
 
 function renderAvailableActions() {
   const el = document.getElementById('actionsSection');
   document.getElementById('actionFormSection').innerHTML = '';
-  // Restored here (rather than only in selectAction()) since this runs
-  // on every fresh renderKeg() - covers first load, navigating to a
-  // different keg, and reloading after a successful submission, all of
-  // which should show Custody normally with no form active.
+  // Custody is never actually hidden anymore (selectAction() no
+  // longer touches it - see that function's own comment) - this line
+  // just guarantees it stays visible, a harmless safety net rather
+  // than something load-bearing at this point.
   document.getElementById('custodyCard').style.display = 'block';
   if (currentKeg.pending_handover_to) {
     el.innerHTML = '';
+    return;
+  }
+  // An action was just completed on this exact page view - show the
+  // result (Custody/Filled/Customer cards above already reflect it),
+  // but don't immediately offer a next action. Genuinely leaving and
+  // re-scanning is still required to act again, even though the data
+  // now technically qualifies for a new transition.
+  if (actionJustCompletedThisView) {
+    el.innerHTML = '<p class="muted">Action completed. Scan again to continue.</p>';
     return;
   }
   if (!availableTransitions.length) {
@@ -1288,14 +1305,11 @@ function selectAction(transitionId) {
       <div id="actionMsg"></div>
     </div>
   `;
-  // Custody card hidden while this form is showing - per explicit
-  // direction, the action form takes Custody's position at the top,
-  // not Filled Detail's further down. Restored on the next renderKeg()
-  // (via renderAvailableActions() clearing actionFormSection at its
-  // start), which happens naturally whenever the keg reloads - after a
-  // successful submission, after navigating to a different keg, or
-  // simply re-rendering with no action currently selected.
-  document.getElementById('custodyCard').style.display = 'none';
+  // Custody card no longer hidden here - per explicit follow-up
+  // direction, the action form doesn't swap with anything at all
+  // anymore. It simply opens below Custody/Customer/Filled Detail in
+  // its existing position (actionFormSection already sits below all
+  // three in the HTML), with all three staying visible throughout.
 
   if (t.requiresCustomer) populateCustomerSelect();
   if (t.requiresProductDetails) populateProductSelect();
@@ -1424,13 +1438,16 @@ async function submitAction(transitionId, twoScan) {
   }
   msg.className = 'success';
   msg.textContent = 'Done.';
-  // Redirects Home rather than reloading this same keg's page - per
-  // explicit direction, every action needs its own fresh scan, not
-  // just the first one in a chain. Staying on this page after success
-  // would let the next action be taken immediately with no re-scan at
-  // all, defeating the same physical-verification purpose the earlier
-  // keg-ID-link removal addressed.
-  setTimeout(goHome, 800);
+  // Reloads this same keg's page (rather than redirecting Home
+  // immediately) so the person can actually see the result of what
+  // they just did - e.g. the newly-filled Beer/Batch/ABV - which the
+  // earlier "always redirect Home" version hid from them entirely.
+  // The one-scan-per-action guarantee is preserved differently now:
+  // actionJustCompletedThisView suppresses the actions dropdown from
+  // offering a NEXT action on this same load, so seeing the result
+  // doesn't also mean being able to act again without a fresh scan.
+  actionJustCompletedThisView = true;
+  setTimeout(loadKeg, 800);
 }
 
 async function submitConfirm() {
@@ -1460,7 +1477,8 @@ async function submitConfirm() {
   }
   msg.className = 'success';
   msg.textContent = 'Receipt confirmed.';
-  setTimeout(goHome, 800);
+  actionJustCompletedThisView = true;
+  setTimeout(loadKeg, 800);
 }
 
 // Auto-sync queued offline actions the moment connectivity returns -
