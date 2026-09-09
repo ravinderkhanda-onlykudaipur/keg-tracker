@@ -1108,26 +1108,11 @@ function renderFilledDetails() {
 function renderCustomerOrActionCard() {
   const el = document.getElementById('customerOrActionCard');
 
-  if (currentKeg.pending_handover_to && dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
-    el.innerHTML = `
-      <div class="card">
-        <h3 style="margin-top:0">Action Required</h3>
-        <p class="muted" style="margin-top:0">Awaiting your confirmation of receipt.</p>
-        <button onclick="submitConfirm()">Confirm receipt</button>
-        <div id="confirmMsg"></div>
-      </div>
-    `;
-    return;
-  }
-
-  // Washer and Filler never receive a keg with an active customer by
-  // the business logic itself (customer assignment only happens at
-  // dispatch, after both of these stages) - the fix that clears
-  // current_customer_id when a keg is picked up empty already handles
-  // this in the normal case, but this role check is an explicit,
-  // defensive guarantee on top of that: even genuinely stale data
-  // (e.g. from before that fix was deployed) can never show Customer
-  // Details to these two roles specifically.
+  // Confirm Receipt moved down to join the other actions (position 4,
+  // in actionsSection) per explicit direction - this card no longer
+  // has a separate "Action Required" case of its own. Customer/
+  // Destination now shows normally regardless of pending state,
+  // whenever the data itself is actually present.
   const customerHiddenForThisRole = currentUser.role === 'washer' || currentUser.role === 'filler';
   if (currentKeg.current_customer_name && !customerHiddenForThisRole) {
     el.innerHTML = `
@@ -1220,8 +1205,25 @@ function renderAvailableActions() {
   // just guarantees it stays visible, a harmless safety net rather
   // than something load-bearing at this point.
   document.getElementById('custodyCard').style.display = 'block';
+  // Confirm Receipt now lives here (position 4, alongside the other
+  // actions) rather than replacing Customer/Destination further up -
+  // per explicit direction, this is a genuine action like any other,
+  // not a separate special case elsewhere on the page.
   if (currentKeg.pending_handover_to) {
-    el.innerHTML = '';
+    if (dbRoleCanActAsEntity(currentUser.role, currentKeg.pending_handover_to)) {
+      el.innerHTML = `
+        <div class="card">
+          <h3 style="margin-top:0">Action Required</h3>
+          <p class="muted" style="margin-top:0">Awaiting your confirmation of receipt.</p>
+          <button onclick="submitConfirm()">Confirm receipt</button>
+          <div id="confirmMsg"></div>
+        </div>
+      `;
+    } else {
+      // Not this user's role to confirm - pendingBannerWrap above
+      // already says who it's awaiting, nothing more to show here.
+      el.innerHTML = '';
+    }
     return;
   }
   // An action was just completed on this exact page view - show the

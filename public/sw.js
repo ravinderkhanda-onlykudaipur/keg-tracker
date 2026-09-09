@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v12'; // bumped: swapped actionFormSection/actionsSection's HTML order - the action form now appears AFTER the dropdown a person just used, not before it, fixing a form popping up above where the user was interacting instead of naturally following it.
+const CACHE_NAME = 'keg-tracker-shell-v13'; // bumped: Confirm Receipt moved from replacing Customer/Destination (position 2) down into the actions section alongside every other action (position 4) - Customer/Destination now shows normally regardless of pending state, and Confirm Receipt is just one more action in the same list as filling details, moving the keg, etc.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
