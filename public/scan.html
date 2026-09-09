@@ -1083,8 +1083,13 @@ function renderFilledDetails() {
   // Hidden whenever the Customer card is actually being shown (not the
   // pending-action state, which takes that same card's position instead) -
   // per explicit direction: only one of Customer / Filled Details shows
-  // at a time, not both together.
-  const customerCardShowing = !currentKeg.pending_handover_to && currentKeg.current_customer_name;
+  // at a time, not both together. Same role exception as
+  // renderCustomerOrActionCard()'s own check - Washer/Filler never see
+  // Customer Details at all, so this can't hide Filled Details for
+  // them on that basis either, kept consistent with that function
+  // rather than a second, separately-drifting copy of the same rule.
+  const customerHiddenForThisRole = currentUser.role === 'washer' || currentUser.role === 'filler';
+  const customerCardShowing = !currentKeg.pending_handover_to && currentKeg.current_customer_name && !customerHiddenForThisRole;
   if (!currentKeg.current_product_name || customerCardShowing) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   document.getElementById('filledDetailsKegId').textContent = currentKeg.id;
@@ -1113,7 +1118,16 @@ function renderCustomerOrActionCard() {
     return;
   }
 
-  if (currentKeg.current_customer_name) {
+  // Washer and Filler never receive a keg with an active customer by
+  // the business logic itself (customer assignment only happens at
+  // dispatch, after both of these stages) - the fix that clears
+  // current_customer_id when a keg is picked up empty already handles
+  // this in the normal case, but this role check is an explicit,
+  // defensive guarantee on top of that: even genuinely stale data
+  // (e.g. from before that fix was deployed) can never show Customer
+  // Details to these two roles specifically.
+  const customerHiddenForThisRole = currentUser.role === 'washer' || currentUser.role === 'filler';
+  if (currentKeg.current_customer_name && !customerHiddenForThisRole) {
     el.innerHTML = `
       <div class="card">
         <h3 style="text-align:center; margin-top:0">Customer</h3>
