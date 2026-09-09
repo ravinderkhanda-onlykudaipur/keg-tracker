@@ -10,7 +10,7 @@ const { pool, withTransaction } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { getAvailableTransitions, initiateHandover, confirmHandover, executeSingleActor } = require('../lib/v2/transitionEngine');
 const { getOverdueKegsV2 } = require('../lib/v2/alerts');
-const { dbRoleCanActAsEntity } = require('../lib/v2/entityRoleMapping');
+const { dbRoleCanActAsEntity, ENTITY_TO_DB_ROLE } = require('../lib/v2/entityRoleMapping');
 const { csvEscape, formatForExcel } = require('../lib/csvHelpers');
 
 const router = express.Router();
@@ -231,22 +231,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   // into loadKeg() itself - the other routes that share that helper
   // (initiate/confirm/execute) only ever need the IDs for their own
   // logic, not the display names.
-  // current_customer_id is never cleared once set (see DATA_MODEL.md's
-  // "never cleared" note on overview-stats) - it's stamped fresh at
-  // initiateHandover() time, specifically for mover_to_driver_dispatch,
-  // but otherwise just sits there unchanged through the keg's next
-  // wash/fill cycle until it's reassigned. Surfacing it unconditionally
-  // meant a keg back with Mover, not yet assigned to anyone new, still
-  // showed its LAST delivery's customer as if that were current -
-  // visible and confusing precisely while a Mover was mid-way through
-  // picking this cycle's actual destination. Only trust it once it's
-  // genuinely this cycle's assignment: freshly set (this keg's pending
-  // handover IS the dispatch-to-driver transition that just set it) or
-  // already dispatched/delivered.
-  const customerIsCurrent = keg.current_location === 'driver'
-    || keg.current_location === 'customer'
-    || keg.pending_handover_transition_id === 'mover_to_driver_dispatch';
-  if (keg.current_customer_id && customerIsCurrent) {
+  if (keg.current_customer_id) {
     const { rows } = await pool.query('SELECT name, address, phone FROM customers WHERE id = $1', [keg.current_customer_id]);
     keg.current_customer_name = rows[0]?.name || null;
     keg.current_customer_address = rows[0]?.address || null;
@@ -255,6 +240,20 @@ router.get('/:id', requireAuth, async (req, res) => {
   if (keg.current_product_id) {
     const { rows } = await pool.query('SELECT name FROM products WHERE id = $1', [keg.current_product_id]);
     keg.current_product_name = rows[0]?.name || null;
+  }
+
+  // Name of whoever currently holds the role matching the keg's
+  // location - "one person per role" is already an established
+  // assumption elsewhere in the app (e.g. alerts.js's
+  // receivingUserName lookup), reused here rather than a new notion.
+  // Skipped for 'customer' - the customer isn't an app user, so
+  // there's genuinely no one to show here.
+  if (keg.current_location && keg.current_location !== 'customer') {
+    const dbRole = ENTITY_TO_DB_ROLE[keg.current_location];
+    if (dbRole) {
+      const { rows } = await pool.query('SELECT name FROM users WHERE role = $1 AND active = true LIMIT 1', [dbRole]);
+      keg.holding_user_name = rows[0]?.name || null;
+    }
   }
 
   // History - Admin and Manager, per explicit direction (updated from

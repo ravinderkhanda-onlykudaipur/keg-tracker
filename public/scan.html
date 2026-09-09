@@ -77,6 +77,14 @@
      just showing one fact instead of a now/next pair. */
   .custody-card { text-align: center; }
 
+  /* Custody card split into two vertical halves - icon on the left,
+     the name of whoever currently holds this role on the right, both
+     vertically centered within their own half. */
+  .custody-split { display: flex; align-items: center; margin-top: 8px; }
+  .custody-half { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .custody-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 12px; }
+  .custody-holding-user { font-size: 18px; font-weight: 600; margin-top: 2px; }
+
   /* Merged "Keg ID + Information Filled by Filler" card, replicated
      from v1: Keg ID centered at top, three icon columns below. */
   .filled-keg-id { text-align: center; font-size: 20px; font-weight: 600; margin-bottom: 14px; }
@@ -463,11 +471,19 @@
     <div id="actionFormSection"></div>
 
     <div class="card custody-card" id="custodyCard">
-      <div class="muted">Current custody</div>
-      <div class="custody-icon-wrap" id="custodyIconWrap"></div>
-      <div class="custody-location" id="custodyLocation"></div>
-      <div class="custody-sublocation" id="custodySublocation"></div>
-      <div class="custody-condition" id="custodyCondition"></div>
+      <div class="muted" style="text-align:center">Current custody</div>
+      <div class="custody-split">
+        <div class="custody-half custody-half-left">
+          <div class="custody-icon-wrap" id="custodyIconWrap"></div>
+          <div class="custody-location" id="custodyLocation"></div>
+          <div class="custody-sublocation" id="custodySublocation"></div>
+        </div>
+        <div class="custody-divider"></div>
+        <div class="custody-half custody-half-right">
+          <div class="muted" style="font-size:12px">Holding</div>
+          <div class="custody-holding-user" id="custodyHoldingUser"></div>
+        </div>
+      </div>
     </div>
 
     <div id="pendingBannerWrap"></div>
@@ -540,7 +556,7 @@ const kegId = new URLSearchParams(location.search).get('keg');
 // matching entityRoleMapping.js's own reasoning: Mover is the person
 // who physically operates on Warehouse's behalf, so the same icon
 // representing that person fits both location values.
-const LOCATION_ICON_FILE = { washer: 'washer', filler: 'filler', driver: 'driver', mover: 'mover', warehouse: 'mover' };
+const LOCATION_ICON_FILE = { washer: 'washer', filler: 'filler', driver: 'driver', mover: 'mover' };
 
 function locationIcon(location) {
   if (location === 'customer') {
@@ -549,6 +565,13 @@ function locationIcon(location) {
     // elsewhere in the app, so "with the customer" reads as a place,
     // not a person.
     return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="#C7EDC7"/><g transform="translate(14,14)" stroke="#1B5E20" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></g></svg>`;
+  }
+  if (location === 'warehouse') {
+    // No uploaded icon file for this one either (was previously
+    // reusing Mover's icon, which made the two indistinguishable at a
+    // glance) - a simple storage-building shape drawn inline instead,
+    // same circle-background pattern as the customer pin above.
+    return `<svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg"><circle cx="28" cy="28" r="28" fill="#C7EDC7"/><g transform="translate(14,16)" stroke="#1B5E20" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0 8 14 0l14 8"/><rect x="1" y="8" width="26" height="16"/><path d="M8 24v-9h5v9"/><path d="M17 24v-9h5v9"/></g></svg>`;
   }
   const file = LOCATION_ICON_FILE[location];
   if (!file) return '';
@@ -1028,11 +1051,13 @@ function renderKeg() {
 
   // Current custody - a plain fact, never a prediction. See
   // lib/v2/DATA_MODEL.md's "Why this replaces Now/Next entirely".
+  // Condition text removed from this card per explicit direction -
+  // just location + holding person now, not the keg's condition too.
   document.getElementById('custodyIconWrap').innerHTML = locationIcon(currentKeg.current_location);
   document.getElementById('custodyLocation').textContent = LOCATION_LABELS[currentKeg.current_location] || currentKeg.current_location;
   document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
     ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
-  document.getElementById('custodyCondition').textContent = CONDITION_LABELS[currentKeg.current_condition] || currentKeg.current_condition;
+  document.getElementById('custodyHoldingUser').textContent = currentKeg.holding_user_name || '\u2013';
 
   const pendingWrap = document.getElementById('pendingBannerWrap');
   if (currentKeg.pending_handover_to) {
@@ -1163,7 +1188,7 @@ async function submitRevert() {
   }
   msg.className = 'success';
   msg.textContent = 'Reverted.';
-  setTimeout(loadKeg, 800);
+  setTimeout(goHome, 800);
 }
 
 function renderAvailableActions() {
@@ -1402,7 +1427,13 @@ async function submitAction(transitionId, twoScan) {
   }
   msg.className = 'success';
   msg.textContent = 'Done.';
-  setTimeout(loadKeg, 800);
+  // Redirects Home rather than reloading this same keg's page - per
+  // explicit direction, every action needs its own fresh scan, not
+  // just the first one in a chain. Staying on this page after success
+  // would let the next action be taken immediately with no re-scan at
+  // all, defeating the same physical-verification purpose the earlier
+  // keg-ID-link removal addressed.
+  setTimeout(goHome, 800);
 }
 
 async function submitConfirm() {
@@ -1432,7 +1463,7 @@ async function submitConfirm() {
   }
   msg.className = 'success';
   msg.textContent = 'Receipt confirmed.';
-  setTimeout(loadKeg, 800);
+  setTimeout(goHome, 800);
 }
 
 // Auto-sync queued offline actions the moment connectivity returns -
