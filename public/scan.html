@@ -471,11 +471,9 @@
     <div id="actionFormSection"></div>
 
     <div class="card custody-card" id="custodyCard">
-      <div class="muted" style="text-align:center">Current custody</div>
       <div class="custody-split">
         <div class="custody-half custody-half-left">
           <div class="custody-icon-wrap" id="custodyIconWrap"></div>
-          <div class="custody-location" id="custodyLocation"></div>
           <div class="custody-sublocation" id="custodySublocation"></div>
         </div>
         <div class="custody-divider"></div>
@@ -1054,7 +1052,6 @@ function renderKeg() {
   // Condition text removed from this card per explicit direction -
   // just location + holding person now, not the keg's condition too.
   document.getElementById('custodyIconWrap').innerHTML = locationIcon(currentKeg.current_location);
-  document.getElementById('custodyLocation').textContent = LOCATION_LABELS[currentKeg.current_location] || currentKeg.current_location;
   document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
     ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
   document.getElementById('custodyHoldingUser').textContent = currentKeg.holding_user_name || '\u2013';
