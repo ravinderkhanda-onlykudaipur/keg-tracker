@@ -545,16 +545,25 @@
 let currentUser = null;
 let currentKeg = null;
 let availableTransitions = [];
-// Set right after any successful action on this page view - reloads
-// the keg so the user can see the result of what they just did (e.g.
-// the newly-filled Beer/Batch/ABV), but suppresses the actions
-// dropdown from offering a NEXT action on the same page load. A fresh
-// scan (leaving and re-scanning) is still required before taking
-// another action, preserving the one-scan-per-action guarantee while
-// no longer hiding the just-completed action's own result from the
-// person who just performed it.
-let actionJustCompletedThisView = false;
 const kegId = new URLSearchParams(location.search).get('keg');
+
+// Persisted in sessionStorage rather than a plain JS variable -
+// a plain variable resets on ANY page reload, including a browser
+// refresh on the exact same ?keg= URL, which isn't a genuine new
+// scan at all. Without this, a person could complete an action, hit
+// refresh, and the dropdown would reappear ready for another action
+// with no physical re-scan involved - defeating the whole point of
+// this guarantee. Keyed per-keg so unrelated kegs never interfere
+// with each other's state. Cleared specifically at the moment a
+// GENUINE scan happens (see handleScannedUrl()), not on every reload,
+// which is what correctly distinguishes "refreshed the same page"
+// from "actually scanned again."
+function markActionCompleted() {
+  sessionStorage.setItem('actionCompletedFor_' + kegId, 'true');
+}
+function wasActionJustCompleted() {
+  return sessionStorage.getItem('actionCompletedFor_' + kegId) === 'true';
+}
 
 // Uses the app's uploaded SVG icon files (public/icons/) - has both
 // 'mover' and 'warehouse' as distinct location values (unlike the
@@ -764,6 +773,13 @@ function handleScannedUrl(scanned) {
   }
 
   stopScan();
+  // Clears any "action just completed" flag for the keg being scanned
+  // - this IS the genuine physical re-scan that should unlock acting
+  // on it again, as opposed to just refreshing the browser on the
+  // same URL (see markActionCompleted()'s own comment for why that
+  // distinction matters). Cleared here specifically, at the moment of
+  // an actual scan, not on every page load.
+  sessionStorage.removeItem('actionCompletedFor_' + extractedKegId);
   location.href = `/scan.html?keg=${encodeURIComponent(extractedKegId)}`;
 }
 
@@ -1193,7 +1209,7 @@ async function submitRevert() {
   }
   msg.className = 'success';
   msg.textContent = 'Reverted.';
-  actionJustCompletedThisView = true;
+  markActionCompleted();
   setTimeout(loadKeg, 800);
 }
 
@@ -1231,7 +1247,7 @@ function renderAvailableActions() {
   // but don't immediately offer a next action. Genuinely leaving and
   // re-scanning is still required to act again, even though the data
   // now technically qualifies for a new transition.
-  if (actionJustCompletedThisView) {
+  if (wasActionJustCompleted()) {
     el.innerHTML = '<p class="muted">Action completed. Scan again to continue.</p>';
     return;
   }
@@ -1461,10 +1477,10 @@ async function submitAction(transitionId, twoScan) {
   // they just did - e.g. the newly-filled Beer/Batch/ABV - which the
   // earlier "always redirect Home" version hid from them entirely.
   // The one-scan-per-action guarantee is preserved differently now:
-  // actionJustCompletedThisView suppresses the actions dropdown from
+  // markActionCompleted() suppresses the actions dropdown from
   // offering a NEXT action on this same load, so seeing the result
   // doesn't also mean being able to act again without a fresh scan.
-  actionJustCompletedThisView = true;
+  markActionCompleted();
   setTimeout(loadKeg, 800);
 }
 
@@ -1495,7 +1511,7 @@ async function submitConfirm() {
   }
   msg.className = 'success';
   msg.textContent = 'Receipt confirmed.';
-  actionJustCompletedThisView = true;
+  markActionCompleted();
   setTimeout(loadKeg, 800);
 }
 

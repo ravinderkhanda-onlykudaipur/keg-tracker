@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v13'; // bumped: Confirm Receipt moved from replacing Customer/Destination (position 2) down into the actions section alongside every other action (position 4) - Customer/Destination now shows normally regardless of pending state, and Confirm Receipt is just one more action in the same list as filling details, moving the keg, etc.
+const CACHE_NAME = 'keg-tracker-shell-v14'; // bumped: fixed a real bypass of one-scan-per-action - the earlier fix used a plain JS variable that reset on any page reload, including a browser refresh on the same ?keg= URL with no actual re-scan involved. Replaced with sessionStorage keyed per-keg, cleared only at the moment of a genuine scan (handleScannedUrl()), so a refresh alone can no longer unlock acting on a keg again.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
