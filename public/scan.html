@@ -510,12 +510,14 @@
       </div>
     </div>
 
-    <!-- Action form opens here, below Custody/Customer/Filled Detail -
-         per explicit direction, it does NOT swap with or hide any of
-         those cards anymore; all three stay visible throughout. -->
-    <div id="actionFormSection"></div>
-
+    <!-- Dropdown (select + Submit) comes first; the action form for
+         whatever was selected appears right after it, not before -
+         per explicit direction: the next step should pop up AFTER
+         the dropdown the person just used, not above it (which
+         looked wrong, requiring a scroll up to reach a form that
+         should naturally follow what was just clicked). -->
     <div id="actionsSection"></div>
+    <div id="actionFormSection"></div>
     <div id="revertSection"></div>
 
     <div class="card" id="historyCard" style="display:none">

@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v11'; // bumped: another substantial scan.html round (Washer/Filler explicit role guard against ever seeing Customer Details, action form no longer swaps with Custody) - applying the v10 comment's own lesson directly this time, in the same round the change actually landed, rather than letting it lapse again.
+const CACHE_NAME = 'keg-tracker-shell-v12'; // bumped: swapped actionFormSection/actionsSection's HTML order - the action form now appears AFTER the dropdown a person just used, not before it, fixing a form popping up above where the user was interacting instead of naturally following it.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
