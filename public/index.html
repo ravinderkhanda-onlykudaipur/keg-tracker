@@ -261,7 +261,6 @@
       <button class="tab-btn" id="tabBtn-reports" onclick="showTab('reports')" style="display:none">Reports</button>
       <button class="tab-btn" id="tabBtn-users" onclick="showTab('users')" style="display:none">Users</button>
       <button class="tab-btn" id="tabBtn-devices" onclick="showTab('devices')" style="display:none">Devices</button>
-      <button class="tab-btn" id="tabBtn-feedback" onclick="showTab('feedback')" style="display:none">Feedback</button>
     </div>
 
     <div class="tab-panel" id="tab-overview">
@@ -325,6 +324,7 @@
         </select>
         <a href="/api/kegs/export.csv" id="exportCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export CSV</button></a>
         <a href="/api/kegs/export-history.csv" id="exportHistoryCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export full history CSV</button></a>
+        <a href="/api/v2/kegs/export-events.csv" id="exportV2EventsCsvLink" style="display:none"><button type="button" style="width:auto">&#8595; Export v2 Events CSV</button></a>
         <table id="kegTable">
           <thead><tr><th>ID</th><th id="mfgHeaderCell">Mfg #</th><th>Location</th><th>Situation</th><th></th></tr></thead>
           <tbody></tbody>
@@ -401,14 +401,6 @@
         <h3>Devices</h3>
         <p class="muted">Controls which devices can log in as Filler, Washer, Driver, or Warehouse. The first device to log in for a role is trusted automatically; every device after that needs approval here.</p>
         <div id="devicesContent"><p class="muted">Loading...</p></div>
-      </div>
-    </div>
-
-    <div class="tab-panel" id="tab-feedback">
-      <div class="card">
-        <h3>Feedback</h3>
-        <p class="muted">Submitted anonymously from the Feedback tab in the scan app - there's no way to tell who sent any of these, by design.</p>
-        <div id="feedbackContent"><p class="muted">Loading...</p></div>
       </div>
     </div>
   </div>
@@ -603,12 +595,9 @@ function showMain(user) {
     document.getElementById('tabBtn-users').style.display = '';
     if (isAdmin) document.getElementById('addUserCard').style.display = 'block';
     loadUsers();
-    if (isAdmin) {
-      document.getElementById('tabBtn-feedback').style.display = '';
-      loadFeedback();
-    }
     document.getElementById('exportCsvLink').style.display = 'inline-block';
     document.getElementById('exportHistoryCsvLink').style.display = 'inline-block';
+    document.getElementById('exportV2EventsCsvLink').style.display = 'inline-block';
   }
 
   loadKegs();
@@ -935,21 +924,6 @@ async function loadReports() {
     : '<p class="muted">No completed customer holds yet.</p>';
 
   el.innerHTML = html;
-}
-
-async function loadFeedback() {
-  const res = await fetch('/api/feedback', { credentials: 'include' });
-  const el = document.getElementById('feedbackContent');
-  if (!res.ok) { el.innerHTML = '<p class="muted">Could not load feedback.</p>'; return; }
-  const items = await res.json();
-  el.innerHTML = items.length
-    ? items.map((f) => `
-      <div class="alert-item">
-        <div>${f.text.replace(/</g, '&lt;')}</div>
-        <div class="muted" style="margin-top:4px">${new Date(f.created_at).toLocaleString()}</div>
-      </div>
-    `).join('')
-    : '<p class="muted">No feedback submitted yet.</p>';
 }
 
 async function loadCustomers() {
