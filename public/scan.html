@@ -478,19 +478,13 @@
 
     <div id="pendingBannerWrap"></div>
 
-    <!-- Customer Details normally shows here - but when there's a
-         pending handover THIS user can confirm, the required action
-         (Confirm Receipt) takes this exact position instead, per
-         explicit direction: "Destination card will be replaced by
-         the required action." Once confirmed, Customer Details
-         reappears here on the next load. Positioned above Filled
-         Details per explicit direction. -->
-    <div id="customerOrActionCard"></div>
-
     <!-- Merged "Keg ID + Information Filled by Filler" card, replicated
          from v1 exactly: Keg ID centered at top, three icon columns
-         (Beer/Batch/ABV) below. Replaces the two separate Keg Details
-         and Filled Detail cards this page previously had. -->
+         (Beer/Batch/ABV) below. Positioned ABOVE Customer/Destination
+         per explicit direction - filling happens chronologically
+         before a customer is ever assigned (Wash -> Fill ->
+         Dispatch/assign customer -> Deliver), and both cards now show
+         together rather than one hiding the other. -->
     <div class="card" id="filledDetailsCard" style="display:none">
       <div class="filled-keg-id" id="filledDetailsKegId"></div>
       <div class="filled-columns">
@@ -508,6 +502,14 @@
         </div>
       </div>
     </div>
+
+    <!-- Customer Details normally shows here - but when there's a
+         pending handover THIS user can confirm, the required action
+         (Confirm Receipt) takes this exact position instead, per
+         explicit direction: "Destination card will be replaced by
+         the required action." Once confirmed, Customer Details
+         reappears here on the next load. -->
+    <div id="customerOrActionCard"></div>
 
     <!-- Dropdown (select + Submit) comes first; the action form for
          whatever was selected appears right after it, not before -
@@ -1120,17 +1122,13 @@ function renderKeg() {
 // Basic identity info - same for every keg regardless of role.
 function renderFilledDetails() {
   const card = document.getElementById('filledDetailsCard');
-  // Hidden whenever the Customer card is actually being shown (not the
-  // pending-action state, which takes that same card's position instead) -
-  // per explicit direction: only one of Customer / Filled Details shows
-  // at a time, not both together. Same role exception as
-  // renderCustomerOrActionCard()'s own check - Washer/Filler never see
-  // Customer Details at all, so this can't hide Filled Details for
-  // them on that basis either, kept consistent with that function
-  // rather than a second, separately-drifting copy of the same rule.
-  const customerHiddenForThisRole = currentUser.role === 'washer' || currentUser.role === 'filler';
-  const customerCardShowing = !currentKeg.pending_handover_to && currentKeg.current_customer_name && !customerHiddenForThisRole;
-  if (!currentKeg.current_product_name || customerCardShowing) { card.style.display = 'none'; return; }
+  // Shows purely based on its own data now - the earlier rule that
+  // hid this whenever Customer Details was showing (only one of the
+  // two at a time) was explicitly reversed: both now show together,
+  // with Filled Details positioned above Customer/Destination in the
+  // page order, reflecting that filling happens chronologically
+  // before a customer is ever assigned.
+  if (!currentKeg.current_product_name) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   document.getElementById('filledDetailsKegId').textContent = currentKeg.id;
   document.getElementById('filledDetailsBeer').textContent = currentKeg.current_product_name;

@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v18'; // bumped: pendingBannerWrap now shows something for EVERY keg state, not just pending ones - resting kegs show current_location + current_condition (e.g. "washer \u00b7 empty") since the previous "last completed action" idea genuinely isn't available without a new backend lookup (pending_handover_transition_id is explicitly cleared to null on confirmation).
+const CACHE_NAME = 'keg-tracker-shell-v19'; // bumped: reversed the Customer/Filled Detail mutual-exclusivity rule - Filled Details now moved ABOVE Customer/Destination in the card order (filling happens chronologically before a customer is ever assigned) and both now show together whenever their own data exists, rather than one hiding the other.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
