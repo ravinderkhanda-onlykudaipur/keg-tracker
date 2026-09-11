@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v15'; // bumped: Holding card now shows the role (Washer/Mover/Filler/Driver/Customer/Warehouse) instead of the holding person's name, and pendingBannerWrap now uses the same 38-phase situation labels already built for the Admin Kegs table / Excel export, ported into scan.html for the first time.
+const CACHE_NAME = 'keg-tracker-shell-v18'; // bumped: pendingBannerWrap now shows something for EVERY keg state, not just pending ones - resting kegs show current_location + current_condition (e.g. "washer \u00b7 empty") since the previous "last completed action" idea genuinely isn't available without a new backend lookup (pending_handover_transition_id is explicitly cleared to null on confirmation).
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',

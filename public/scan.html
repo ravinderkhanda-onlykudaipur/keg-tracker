@@ -83,7 +83,7 @@
   .custody-split { display: flex; align-items: center; margin-top: 8px; }
   .custody-half { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .custody-divider { width: 1px; align-self: stretch; background: var(--card-border); margin: 0 12px; }
-  .custody-holding-user { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .custody-holding-user { font-size: 18px; font-weight: 600; margin-top: 2px; color: #2E7D32; }
 
   /* Merged "Keg ID + Information Filled by Filler" card, replicated
      from v1: Keg ID centered at top, three icon columns below. */
@@ -464,7 +464,6 @@
     <h3 id="kegIdHeading"></h3>
 
     <div class="card custody-card" id="custodyCard">
-      <div class="muted" style="text-align:center">Holding</div>
       <div class="custody-split">
         <div class="custody-half custody-half-left">
           <div class="custody-icon-wrap" id="custodyIconWrap"></div>
@@ -1066,55 +1065,6 @@ async function loadKeg() {
 
 const LOCATION_LABELS = { customer: 'Customer', driver: 'Driver', mover: 'Mover', washer: 'Washer', filler: 'Filler', warehouse: 'Warehouse' };
 
-// Same 38-phase "situation" naming system already built for the Admin
-// Kegs table / Excel export (index.html) - ported here so
-// pendingBannerWrap can use identical labels rather than its own,
-// separately-drifting generic "Awaiting receipt by X" text. Kept as
-// an exact copy rather than a shared module, matching how this app's
-// two standalone HTML files already duplicate other constants
-// (LOCATION_LABELS itself, CONDITION_LABELS) rather than sharing code
-// between them.
-const RESTING_PHASE_NAMES = {
-  'driver|empty|': 'Driver Holding Empty',
-  'customer|delivered|': 'With Customer',
-  'mover|empty|': 'Mover Holding Empty',
-  'mover|delivery_failed|': 'Delivery Failed At Mover',
-  'driver|to_be_delivered|': 'Out For Delivery',
-  'mover|damaged|': 'Damaged At Mover',
-  'washer|empty|': 'At Washer Awaiting Wash',
-  'washer|washing|': 'Washing In Progress',
-  'washer|cleaned|': 'Washed At Washer',
-  'mover|cleaned|': 'Mover Holding Cleaned',
-  'filler|cleaned|': 'At Filler Awaiting Fill',
-  'warehouse|empty|uncleaned': 'Uncleaned Storage',
-  'filler|filling|': 'Filling In Progress',
-  'filler|filled|': 'Filled At Filler',
-  'mover|filled|': 'Mover Holding Filled',
-  'warehouse|cleaned|cleaned': 'Cleaned Storage',
-  'warehouse|filled|filled': 'Filled Storage',
-  'warehouse|damaged|damaged': 'Damaged Storage',
-};
-const PENDING_PHASE_NAMES = {
-  driver_to_mover_empty: 'Awaiting Mover Receipt Of Empty Return',
-  driver_to_mover_delivery_failed: 'Awaiting Mover Receipt Of Failed Delivery',
-  mover_retry_dispatch_after_failed_delivery: 'Awaiting Driver Receipt Of Redispatch',
-  mover_to_washer: 'Awaiting Washer Receipt',
-  washer_to_mover_cleaned: 'Awaiting Mover Receipt Of Cleaned',
-  washer_to_filler_direct: 'Awaiting Filler Receipt Direct',
-  mover_to_filler: 'Awaiting Filler Receipt',
-  filler_to_mover: 'Awaiting Mover Receipt Of Filled',
-  mover_to_driver_dispatch: 'Awaiting Driver Receipt Of Dispatch',
-  driver_to_mover_damaged: 'Awaiting Mover Receipt Of Driver Damage Report',
-  washer_to_mover_damaged: 'Awaiting Mover Receipt Of Washer Damage Report',
-  filler_to_mover_damaged: 'Awaiting Mover Receipt Of Filler Damage Report',
-};
-function situationLabel(keg) {
-  if (keg.pending_handover_to) {
-    return PENDING_PHASE_NAMES[keg.pending_handover_transition_id] || `Awaiting ${roleLabel(keg.pending_handover_to)} Receipt`;
-  }
-  const key = `${keg.current_location}|${keg.current_condition}|${keg.warehouse_sublocation || ''}`;
-  return RESTING_PHASE_NAMES[key] || `${roleLabel(keg.current_location)} - ${keg.current_condition}`;
-}
 const SUBLOCATION_LABELS = { uncleaned: 'Uncleaned Storage', cleaned: 'Cleaned Storage', filled: 'Filled Storage', damaged: 'Damaged Storage' };
 const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned', filling: 'Filling', filled: 'Filled', to_be_delivered: 'To Be Delivered', delivered: 'Delivered', delivery_failed: 'Delivery Failed', damaged: 'Damaged' };
 const REASON_LABELS = { forgot_to_deliver: 'Forgot to Deliver', damaged: 'Damaged Item/Keg', customer_refused: 'Customer Refused to Accept', customer_unavailable: 'Customer Unavailable', shop_closed: 'Shop Closed', other: 'Other' };
@@ -1137,9 +1087,27 @@ function renderKeg() {
 
   const pendingWrap = document.getElementById('pendingBannerWrap');
   if (currentKeg.pending_handover_to) {
-    pendingWrap.innerHTML = `<div class="pending-banner">${situationLabel(currentKeg)}</div>`;
+    // Only transition_id + phase - the human-readable situationLabel()
+    // text was dropped entirely, not just supplemented. Phase is
+    // always "initiated" here specifically because this banner only
+    // ever shows while pending_handover_to is set, which is only ever
+    // true during the initiated half of a two-scan transition - once
+    // confirmed, pending_handover_to clears and this line switches to
+    // the resting case below, so "confirmed" is never a real state
+    // this specific line could show.
+    pendingWrap.innerHTML = `<div class="pending-banner">${currentKeg.pending_handover_transition_id || '\u2013'} \u00b7 initiated</div>`;
   } else {
-    pendingWrap.innerHTML = '';
+    // Resting (nothing pending) - shows current_location + condition
+    // instead of a last-completed-action transition_id, since that
+    // data is deliberately cleared to null on confirmation
+    // (confirmHandover() in transitionEngine.js) and only genuinely
+    // exists in the events table's history, which isn't available
+    // outside Admin/Manager - explicitly chosen over adding a new
+    // backend lookup just for this. This still guarantees the banner
+    // shows SOMETHING for every keg state, resting or pending, per
+    // explicit direction, just using data already on hand rather than
+    // reconstructing the last action itself.
+    pendingWrap.innerHTML = `<div class="pending-banner">${currentKeg.current_location || '\u2013'} \u00b7 ${currentKeg.current_condition || '\u2013'}</div>`;
   }
 
   renderCustomerOrActionCard();
