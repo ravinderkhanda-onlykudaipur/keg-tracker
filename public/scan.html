@@ -1065,6 +1065,56 @@ async function loadKeg() {
 }
 
 const LOCATION_LABELS = { customer: 'Customer', driver: 'Driver', mover: 'Mover', washer: 'Washer', filler: 'Filler', warehouse: 'Warehouse' };
+
+// Same 38-phase "situation" naming system already built for the Admin
+// Kegs table / Excel export (index.html) - ported here so
+// pendingBannerWrap can use identical labels rather than its own,
+// separately-drifting generic "Awaiting receipt by X" text. Kept as
+// an exact copy rather than a shared module, matching how this app's
+// two standalone HTML files already duplicate other constants
+// (LOCATION_LABELS itself, CONDITION_LABELS) rather than sharing code
+// between them.
+const RESTING_PHASE_NAMES = {
+  'driver|empty|': 'Driver Holding Empty',
+  'customer|delivered|': 'With Customer',
+  'mover|empty|': 'Mover Holding Empty',
+  'mover|delivery_failed|': 'Delivery Failed At Mover',
+  'driver|to_be_delivered|': 'Out For Delivery',
+  'mover|damaged|': 'Damaged At Mover',
+  'washer|empty|': 'At Washer Awaiting Wash',
+  'washer|washing|': 'Washing In Progress',
+  'washer|cleaned|': 'Washed At Washer',
+  'mover|cleaned|': 'Mover Holding Cleaned',
+  'filler|cleaned|': 'At Filler Awaiting Fill',
+  'warehouse|empty|uncleaned': 'Uncleaned Storage',
+  'filler|filling|': 'Filling In Progress',
+  'filler|filled|': 'Filled At Filler',
+  'mover|filled|': 'Mover Holding Filled',
+  'warehouse|cleaned|cleaned': 'Cleaned Storage',
+  'warehouse|filled|filled': 'Filled Storage',
+  'warehouse|damaged|damaged': 'Damaged Storage',
+};
+const PENDING_PHASE_NAMES = {
+  driver_to_mover_empty: 'Awaiting Mover Receipt Of Empty Return',
+  driver_to_mover_delivery_failed: 'Awaiting Mover Receipt Of Failed Delivery',
+  mover_retry_dispatch_after_failed_delivery: 'Awaiting Driver Receipt Of Redispatch',
+  mover_to_washer: 'Awaiting Washer Receipt',
+  washer_to_mover_cleaned: 'Awaiting Mover Receipt Of Cleaned',
+  washer_to_filler_direct: 'Awaiting Filler Receipt Direct',
+  mover_to_filler: 'Awaiting Filler Receipt',
+  filler_to_mover: 'Awaiting Mover Receipt Of Filled',
+  mover_to_driver_dispatch: 'Awaiting Driver Receipt Of Dispatch',
+  driver_to_mover_damaged: 'Awaiting Mover Receipt Of Driver Damage Report',
+  washer_to_mover_damaged: 'Awaiting Mover Receipt Of Washer Damage Report',
+  filler_to_mover_damaged: 'Awaiting Mover Receipt Of Filler Damage Report',
+};
+function situationLabel(keg) {
+  if (keg.pending_handover_to) {
+    return PENDING_PHASE_NAMES[keg.pending_handover_transition_id] || `Awaiting ${roleLabel(keg.pending_handover_to)} Receipt`;
+  }
+  const key = `${keg.current_location}|${keg.current_condition}|${keg.warehouse_sublocation || ''}`;
+  return RESTING_PHASE_NAMES[key] || `${roleLabel(keg.current_location)} - ${keg.current_condition}`;
+}
 const SUBLOCATION_LABELS = { uncleaned: 'Uncleaned Storage', cleaned: 'Cleaned Storage', filled: 'Filled Storage', damaged: 'Damaged Storage' };
 const CONDITION_LABELS = { empty: 'Empty', washing: 'Washing', cleaned: 'Cleaned', filling: 'Filling', filled: 'Filled', to_be_delivered: 'To Be Delivered', delivered: 'Delivered', delivery_failed: 'Delivery Failed', damaged: 'Damaged' };
 const REASON_LABELS = { forgot_to_deliver: 'Forgot to Deliver', damaged: 'Damaged Item/Keg', customer_refused: 'Customer Refused to Accept', customer_unavailable: 'Customer Unavailable', shop_closed: 'Shop Closed', other: 'Other' };
@@ -1079,11 +1129,15 @@ function renderKeg() {
   document.getElementById('custodyIconWrap').innerHTML = locationIcon(currentKeg.current_location);
   document.getElementById('custodySublocation').textContent = currentKeg.warehouse_sublocation
     ? SUBLOCATION_LABELS[currentKeg.warehouse_sublocation] || currentKeg.warehouse_sublocation : '';
-  document.getElementById('custodyHoldingUser').textContent = currentKeg.holding_user_name || '\u2013';
+  // Shows the ROLE/entity type (e.g. "Washer", "Mover") per explicit
+  // direction, not the holding person's name - element id kept as
+  // custodyHoldingUser to minimize unrelated changes, even though it
+  // no longer shows a user's name specifically.
+  document.getElementById('custodyHoldingUser').textContent = LOCATION_LABELS[currentKeg.current_location] || currentKeg.current_location;
 
   const pendingWrap = document.getElementById('pendingBannerWrap');
   if (currentKeg.pending_handover_to) {
-    pendingWrap.innerHTML = `<div class="pending-banner">Awaiting receipt by ${LOCATION_LABELS[currentKeg.pending_handover_to] || currentKeg.pending_handover_to}</div>`;
+    pendingWrap.innerHTML = `<div class="pending-banner">${situationLabel(currentKeg)}</div>`;
   } else {
     pendingWrap.innerHTML = '';
   }
