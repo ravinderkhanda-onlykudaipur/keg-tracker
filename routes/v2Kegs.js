@@ -217,6 +217,7 @@ router.get('/export-events.csv', requireRole('admin', 'manager'), async (req, re
       csvEscape(row.details),
     ].join(','));
   }
+  res.setHeader('Content-Disposition', 'attachment; filename="keg-events-export.csv"');
   res.type('text/csv').send(lines.join('\n'));
 });
 
