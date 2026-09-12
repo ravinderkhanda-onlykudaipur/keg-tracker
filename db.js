@@ -130,7 +130,14 @@ async function init() {
       -- no code ever sent. delivery_otp_attempts is still used too,
       -- as our own independent rate limit on top of whatever MSG91
       -- enforces on their end.
-      delivery_otp_sent_at TIMESTAMPTZ
+      delivery_otp_sent_at TIMESTAMPTZ,
+      -- delivery_otp_req_id: added when the MSG91 integration switched
+      -- to the OTP Widget API (see lib/msg91.js's own comment for
+      -- why) - unlike the earlier SendOTP REST API approach, the
+      -- Widget's verify call is keyed by a request ID returned from
+      -- send, not by the phone number alone, so this must be
+      -- persisted between the two calls.
+      delivery_otp_req_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS events (
@@ -268,6 +275,7 @@ async function init() {
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_expires_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_attempts INTEGER NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_sent_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_req_id TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS sender TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS receiver TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS from_location TEXT;`);

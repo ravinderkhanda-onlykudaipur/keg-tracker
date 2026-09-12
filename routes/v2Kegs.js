@@ -348,20 +348,23 @@ router.post('/:id/send-delivery-otp', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'This customer has no phone number on file - cannot send an SMS code' });
   }
 
+  let sendResult;
   try {
-    await sendDeliveryOtpMsg91(phone);
+    sendResult = await sendDeliveryOtpMsg91(phone);
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }
 
   // No code stored locally at all - MSG91 tracks it entirely on
-  // their own side. sent_at just records that a send happened (so
-  // verify-delivery-otp can give a clear error if called with none
-  // pending), attempts resets so a fresh send always gets a full set
-  // of guesses.
+  // their own side. reqId is required to verify later (the Widget
+  // API's verify call is keyed by this, not by phone number alone -
+  // see lib/msg91.js's own comment). sent_at just records that a
+  // send happened (so verify-delivery-otp can give a clear error if
+  // called with none pending), attempts resets so a fresh send
+  // always gets a full set of guesses.
   await pool.query(
-    'UPDATE kegs SET delivery_otp_sent_at = NOW(), delivery_otp_attempts = 0 WHERE id = $1',
-    [keg.id]
+    'UPDATE kegs SET delivery_otp_sent_at = NOW(), delivery_otp_req_id = $1, delivery_otp_attempts = 0 WHERE id = $2',
+    [sendResult.reqId, keg.id]
   );
   res.status(200).json({ ok: true, sentTo: phone });
 });
@@ -378,23 +381,15 @@ router.post('/:id/verify-delivery-otp', requireAuth, async (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'code is required' });
 
-  if (!keg.delivery_otp_sent_at) {
+  if (!keg.delivery_otp_sent_at || !keg.delivery_otp_req_id) {
     return res.status(409).json({ error: 'No confirmation code has been sent for this keg yet' });
   }
   const MAX_ATTEMPTS = 5;
   if (keg.delivery_otp_attempts >= MAX_ATTEMPTS) {
     return res.status(409).json({ error: 'Too many incorrect attempts - send a new code' });
   }
-  if (!keg.current_customer_id) {
-    return res.status(409).json({ error: 'This keg has no customer assigned to deliver to' });
-  }
-  const { rows } = await pool.query('SELECT phone FROM customers WHERE id = $1', [keg.current_customer_id]);
-  const phone = rows[0]?.phone;
-  if (!phone) {
-    return res.status(409).json({ error: 'This customer has no phone number on file' });
-  }
 
-  const verified = await verifyDeliveryOtpMsg91(phone, code);
+  const verified = await verifyDeliveryOtpMsg91(keg.delivery_otp_req_id, code);
   if (!verified) {
     await pool.query('UPDATE kegs SET delivery_otp_attempts = delivery_otp_attempts + 1 WHERE id = $1', [keg.id]);
     return res.status(409).json({ error: 'Incorrect or expired code' });
@@ -408,6 +403,7 @@ router.post('/:id/verify-delivery-otp', requireAuth, async (req, res) => {
   // never linger "pending" once the delivery it gated has actually
   // completed.
   result.kegUpdates.delivery_otp_sent_at = null;
+  result.kegUpdates.delivery_otp_req_id = null;
   result.kegUpdates.delivery_otp_attempts = 0;
 
   await persist(keg.id, req.user.id, req.user.role, result);

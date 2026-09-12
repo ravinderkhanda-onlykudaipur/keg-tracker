@@ -265,23 +265,42 @@ regardless of phrasing, and Authentication templates require 2,000+
 business-initiated conversations/month before Meta even allows
 creating one — a bar a small-scale delivery operation can't meet yet.
 
-**Delegates entirely to MSG91's own OTP API** (Option A, chosen
-explicitly over generating our own code): MSG91 generates the code,
-sends it via their already-approved, DLT-compliant authentication
-template, and verifies it when the driver submits it — this app never
-sees or stores the actual code, only whether a send has happened
-(`delivery_otp_sent_at`) and how many incorrect attempts have been
-made (`delivery_otp_attempts`, our own rate limit independent of
-whatever MSG91 enforces on their end). The old
-`delivery_otp_code`/`delivery_otp_expires_at` columns from the
-WhatsApp version are no longer written to — left in place, unused,
-rather than dropped from a live production table.
+**Delegates entirely to MSG91's own OTP WIDGET API** (Option A, chosen
+explicitly over generating our own code) — specifically the Widget
+API (`api.msg91.com/api/v5/widget/...`), NOT the separate "SendOTP"
+REST API (`control.msg91.com/api/v5/otp`) this was originally built
+against. Switched after a real, reproduced failure: the SendOTP REST
+API requires the caller's OWN DLT-registered template — genuine
+registration through a telecom operator, a multi-day regulatory
+process. The Widget API instead uses MSG91's own pre-approved default
+template ("A default SMS template is being provided by MSG91 to use
+till your template is not approved on DLT" — MSG91's own docs),
+avoiding that requirement entirely.
+
+MSG91 generates the code, sends it, and verifies it when the driver
+submits it — this app never sees or stores the actual code. Unlike a
+phone-number-keyed verify, the Widget API's verify call is keyed by a
+`reqId` returned from the send call, which must be persisted between
+the two (`delivery_otp_req_id`). This app also tracks whether a send
+has happened (`delivery_otp_sent_at`) and how many incorrect attempts
+have been made (`delivery_otp_attempts`, our own rate limit
+independent of whatever MSG91 enforces on their end). Columns from
+earlier integration attempts (`delivery_otp_code`,
+`delivery_otp_expires_at`) are no longer written to — left in place,
+unused, rather than dropped from a live production table.
 
 **Environment variables** (both required; without them, sending fails
 loudly with a clear error rather than silently no-op'ing):
-- `MSG91_AUTH_KEY` → from MSG91 Dashboard → API.
-- `MSG91_TEMPLATE_ID` → the ID of your approved OTP/authentication
-  template in the MSG91 panel.
+- `MSG91_WIDGET_TOKEN` → from OTP Widget/SDK → Tokens in the MSG91
+  dashboard. This is genuinely different from the general
+  account-level Auth Key under Settings → Authkey — confirmed directly
+  from the widget's own "Get Code" embed snippet, which pairs a
+  `widgetId` with a separate `tokenAuth` value, not the account
+  authkey. Using the wrong one here will not throw an error, just
+  silently fail to actually authenticate the widget-scoped calls.
+- `MSG91_WIDGET_ID` → from OTP Widget/SDK → Widgets (the widget's ID
+  is shown in its own "Get Code"/embed snippet, not directly in the
+  widget list view).
 
 **Security note:** this transition cannot be completed through the
 normal action dropdown/`POST /execute` path even if selected there —
