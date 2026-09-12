@@ -6,7 +6,7 @@
 // offline-queue.js handles) - this worker never caches or fakes API data,
 // since keg status must reflect reality, not a stale cached snapshot.
 
-const CACHE_NAME = 'keg-tracker-shell-v19'; // bumped: reversed the Customer/Filled Detail mutual-exclusivity rule - Filled Details now moved ABOVE Customer/Destination in the card order (filling happens chronologically before a customer is ever assigned) and both now show together whenever their own data exists, rather than one hiding the other.
+const CACHE_NAME = 'keg-tracker-shell-v21'; // bumped: switched delivery-confirmation OTP from WhatsApp to MSG91 SMS - WhatsApp's Utility classifier kept flagging any OTP-shaped wording as Authentication content regardless of phrasing, and Authentication needs 2,000+ conversations/month to even be creatable. Delegates fully to MSG91's own OTP API (generate/send/verify all on their end) rather than our own code storage. The security gate itself (executeSingleActor's otpVerified check) is unchanged - only the channel underneath it changed.
 const SHELL_FILES = [
   '/scan.html', '/index.html', '/offline-queue.js', '/device-id.js',
   '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',

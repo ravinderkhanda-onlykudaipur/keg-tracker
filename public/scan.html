@@ -1300,6 +1300,24 @@ function selectAction(transitionId) {
   const t = availableTransitions.find((x) => x.id === transitionId);
   const formEl = document.getElementById('actionFormSection');
 
+  // Gated by an SMS OTP sent to the customer (via MSG91) - shows a "Send Code"
+  // button first, then (once sent) a code-entry field + "Verify &
+  // Complete Delivery" button. This is checked before the generic
+  // "no fields at all" shortcut below, since this transition has none
+  // of the OTHER field flags but still needs its own multi-step flow,
+  // not the skip-straight-to-popup path that would otherwise apply.
+  if (t.requiresOtpVerification) {
+    formEl.innerHTML = `
+      <div class="card">
+        <h3 style="margin-top:0">${t.label}</h3>
+        <p class="muted" style="margin-top:0">Send a confirmation code to the customer's phone via SMS before completing delivery.</p>
+        <button onclick="sendDeliveryOtp('${t.id}')">Send Code via SMS</button>
+        <div id="actionMsg"></div>
+      </div>
+    `;
+    return;
+  }
+
   // No fields to fill in at all - go straight to the actual
   // confirmation popup, skipping the intermediate "empty card with
   // just a button" step, which was itself a redundant page-level
@@ -1423,6 +1441,78 @@ async function populateCustomerSelect() {
   document.getElementById('f_customerId').innerHTML =
     '<option value="">-- select customer --</option>' +
     customers.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+// Sends the SMS delivery-confirmation code, then swaps the
+// "Send Code" button for a code-entry field + verify button - the
+// actual delivery transition doesn't run yet, only once the code
+// entered matches what verify-delivery-otp expects.
+async function sendDeliveryOtp(transitionId) {
+  const formEl = document.getElementById('actionFormSection');
+  const msg = document.getElementById('actionMsg');
+  let res;
+  try {
+    res = await fetch(`/api/v2/kegs/${kegId}/send-delivery-otp`, {
+      method: 'POST', credentials: 'include', cache: 'no-store',
+    });
+  } catch (networkErr) {
+    msg.className = 'error';
+    msg.textContent = 'No connection - could not send the code. Try again once back online.';
+    return;
+  }
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  formEl.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">Enter Confirmation Code</h3>
+      <p class="muted" style="margin-top:0">A code was sent via SMS to ${data.sentTo}.</p>
+      <label>Code</label>
+      <input type="text" id="deliveryOtpInput" inputmode="numeric" maxlength="6" placeholder="6-digit code">
+      <button onclick="verifyDeliveryOtp()">Verify &amp; Complete Delivery</button>
+      <button class="secondary" onclick="sendDeliveryOtp('${transitionId}')">Resend Code</button>
+      <div id="deliveryOtpMsg"></div>
+    </div>
+  `;
+}
+
+async function verifyDeliveryOtp() {
+  const code = document.getElementById('deliveryOtpInput').value.trim();
+  const msg = document.getElementById('deliveryOtpMsg');
+  if (!code) { msg.className = 'error'; msg.textContent = 'Enter the code first.'; return; }
+  if (!confirm('Confirm: Complete delivery to customer?')) return;
+
+  let res;
+  try {
+    res = await fetch(`/api/v2/kegs/${kegId}/verify-delivery-otp`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', cache: 'no-store',
+      body: JSON.stringify({ code }),
+    });
+  } catch (networkErr) {
+    // Deliberately not queued via OfflineQueueV2 here, unlike the
+    // regular action/confirm flows - an OTP is a one-time code with a
+    // short server-side expiry, so queuing it for a later, uncertain
+    // reconnect would very likely just fail anyway once retried,
+    // rather than genuinely deferring the work like the other queued
+    // actions do.
+    msg.className = 'error';
+    msg.textContent = 'No connection - the code may have expired by the time you\'re back online. Try again once reconnected.';
+    return;
+  }
+  const data = await res.json();
+  if (!res.ok) {
+    msg.className = 'error';
+    msg.textContent = data.error;
+    return;
+  }
+  msg.className = 'success';
+  msg.textContent = 'Delivery confirmed.';
+  markActionCompleted();
+  setTimeout(loadKeg, 800);
 }
 
 function collectDetails(t) {

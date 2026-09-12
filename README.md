@@ -218,6 +218,8 @@ Render deployment, not on plain `http://localhost`).
      (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
      — without this, everyone gets logged out on every redeploy (see the
      note below on why this alone isn't the full picture, though).
+   - See "Delivery OTP (MSG91 SMS)" below for two more, optional unless
+     you're using that feature.
 5. Push to `main` → Render auto-deploys.
 
 **On schema changes now that the database persists:** since data no
@@ -251,6 +253,49 @@ and sleep-wake cycles - not just keg/event/customer data.
 
 Also: the free web service sleeps after 15 minutes of no traffic (first
 visit after that takes ~1 minute to wake up).
+
+## Delivery OTP (MSG91 SMS)
+
+Gates `driver_to_customer_delivery` specifically: Driver sends a code
+to the customer's phone via SMS before the delivery itself is allowed
+to complete. Was originally built on Meta's WhatsApp Cloud API, but
+switched to MSG91 SMS after WhatsApp's Utility-category classifier
+kept flagging any OTP-shaped wording as Authentication content
+regardless of phrasing, and Authentication templates require 2,000+
+business-initiated conversations/month before Meta even allows
+creating one — a bar a small-scale delivery operation can't meet yet.
+
+**Delegates entirely to MSG91's own OTP API** (Option A, chosen
+explicitly over generating our own code): MSG91 generates the code,
+sends it via their already-approved, DLT-compliant authentication
+template, and verifies it when the driver submits it — this app never
+sees or stores the actual code, only whether a send has happened
+(`delivery_otp_sent_at`) and how many incorrect attempts have been
+made (`delivery_otp_attempts`, our own rate limit independent of
+whatever MSG91 enforces on their end). The old
+`delivery_otp_code`/`delivery_otp_expires_at` columns from the
+WhatsApp version are no longer written to — left in place, unused,
+rather than dropped from a live production table.
+
+**Environment variables** (both required; without them, sending fails
+loudly with a clear error rather than silently no-op'ing):
+- `MSG91_AUTH_KEY` → from MSG91 Dashboard → API.
+- `MSG91_TEMPLATE_ID` → the ID of your approved OTP/authentication
+  template in the MSG91 panel.
+
+**Security note:** this transition cannot be completed through the
+normal action dropdown/`POST /execute` path even if selected there —
+`executeSingleActor()` in `lib/v2/transitionEngine.js` refuses to run
+any `requiresOtpVerification` transition unless explicitly called with
+`otpVerified=true`, which only `POST /:id/verify-delivery-otp` ever
+passes, and only after MSG91 itself confirms the submitted code
+matches. The transition still appears in the normal transitions list
+(needed for the frontend dropdown/UI to offer it at all and route into
+the OTP flow), but that visibility is a UX convenience, not the actual
+security boundary — the real gate is enforced server-side, in the
+engine itself, regardless of which route calls it. This gate, and its
+test coverage, is unchanged from the WhatsApp version — only the
+sending/verification mechanism underneath it changed.
 
 ## Known gaps (by design — this is the MVP, not the finished system)
 

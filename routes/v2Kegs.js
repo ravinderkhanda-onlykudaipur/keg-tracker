@@ -11,6 +11,7 @@ const { requireAuth, requireRole } = require('../middleware/requireAuth');
 const { getAvailableTransitions, initiateHandover, confirmHandover, executeSingleActor } = require('../lib/v2/transitionEngine');
 const { getOverdueKegsV2 } = require('../lib/v2/alerts');
 const { dbRoleCanActAsEntity, ENTITY_TO_DB_ROLE } = require('../lib/v2/entityRoleMapping');
+const { sendDeliveryOtpMsg91, verifyDeliveryOtpMsg91 } = require('../lib/msg91');
 const { csvEscape, formatForExcel } = require('../lib/csvHelpers');
 
 const router = express.Router();
@@ -318,6 +319,100 @@ router.post('/:id/execute', requireAuth, async (req, res) => {
   await persist(keg.id, req.user.id, req.user.role, result);
   const updated = await loadKeg(keg.id);
   res.status(201).json(updated);
+});
+
+// POST /api/v2/kegs/:id/send-delivery-otp - triggers MSG91's own OTP
+// API to generate and send a code to the customer's phone (Option A:
+// generation, sending, AND verification all delegated to MSG91's
+// already-approved authentication template - see lib/msg91.js's own
+// comment for why, vs. generating our own code). Gates
+// driver_to_customer_delivery specifically - the delivery itself
+// doesn't complete here, only the code is sent.
+router.post('/:id/send-delivery-otp', requireAuth, async (req, res) => {
+  const keg = await loadKeg(req.params.id);
+  if (!keg) return res.status(404).json({ error: 'Keg not found' });
+
+  if (!dbRoleCanActAsEntity(req.user.role, 'driver')) {
+    return res.status(403).json({ error: 'Only the Driver can send a delivery confirmation code' });
+  }
+  if (keg.current_location !== 'driver' || keg.current_condition !== 'to_be_delivered') {
+    return res.status(409).json({ error: 'This keg is not currently out for delivery' });
+  }
+  if (!keg.current_customer_id) {
+    return res.status(409).json({ error: 'This keg has no customer assigned to deliver to' });
+  }
+
+  const { rows } = await pool.query('SELECT phone FROM customers WHERE id = $1', [keg.current_customer_id]);
+  const phone = rows[0]?.phone;
+  if (!phone) {
+    return res.status(409).json({ error: 'This customer has no phone number on file - cannot send an SMS code' });
+  }
+
+  try {
+    await sendDeliveryOtpMsg91(phone);
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
+
+  // No code stored locally at all - MSG91 tracks it entirely on
+  // their own side. sent_at just records that a send happened (so
+  // verify-delivery-otp can give a clear error if called with none
+  // pending), attempts resets so a fresh send always gets a full set
+  // of guesses.
+  await pool.query(
+    'UPDATE kegs SET delivery_otp_sent_at = NOW(), delivery_otp_attempts = 0 WHERE id = $1',
+    [keg.id]
+  );
+  res.status(200).json({ ok: true, sentTo: phone });
+});
+
+// POST /api/v2/kegs/:id/verify-delivery-otp - forwards the entered
+// code to MSG91's own verify endpoint and, only if MSG91 confirms it,
+// actually runs the driver_to_customer_delivery transition. The
+// delivery genuinely does not complete until this succeeds - the OTP
+// is a real gate, not a notification on the side.
+router.post('/:id/verify-delivery-otp', requireAuth, async (req, res) => {
+  const keg = await loadKeg(req.params.id);
+  if (!keg) return res.status(404).json({ error: 'Keg not found' });
+
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'code is required' });
+
+  if (!keg.delivery_otp_sent_at) {
+    return res.status(409).json({ error: 'No confirmation code has been sent for this keg yet' });
+  }
+  const MAX_ATTEMPTS = 5;
+  if (keg.delivery_otp_attempts >= MAX_ATTEMPTS) {
+    return res.status(409).json({ error: 'Too many incorrect attempts - send a new code' });
+  }
+  if (!keg.current_customer_id) {
+    return res.status(409).json({ error: 'This keg has no customer assigned to deliver to' });
+  }
+  const { rows } = await pool.query('SELECT phone FROM customers WHERE id = $1', [keg.current_customer_id]);
+  const phone = rows[0]?.phone;
+  if (!phone) {
+    return res.status(409).json({ error: 'This customer has no phone number on file' });
+  }
+
+  const verified = await verifyDeliveryOtpMsg91(phone, code);
+  if (!verified) {
+    await pool.query('UPDATE kegs SET delivery_otp_attempts = delivery_otp_attempts + 1 WHERE id = $1', [keg.id]);
+    return res.status(409).json({ error: 'Incorrect or expired code' });
+  }
+
+  const result = executeSingleActor(keg, 'driver_to_customer_delivery', req.user.role, {}, true);
+  if (!result.ok) return res.status(409).json({ error: result.error });
+
+  // Delivery transition's own fields plus clearing the local OTP
+  // tracking together, in the same update - a verified code should
+  // never linger "pending" once the delivery it gated has actually
+  // completed.
+  result.kegUpdates.delivery_otp_sent_at = null;
+  result.kegUpdates.delivery_otp_attempts = 0;
+
+  await persist(keg.id, req.user.id, req.user.role, result);
+  const updated = await loadKeg(keg.id);
+  res.status(200).json(updated);
 });
 
 // POST /api/v2/kegs/:id/revert - undo the single most recent v2 event

@@ -106,7 +106,31 @@ async function init() {
       -- built correctly the first time.
       current_product_id TEXT REFERENCES products(id),
       current_batch_number TEXT,
-      current_abv NUMERIC
+      current_abv NUMERIC,
+
+      -- Delivery OTP (MSG91 SMS) - gates the driver_to_customer_delivery
+      -- transition specifically. As of the MSG91 switch, the code
+      -- itself is generated, sent, and verified entirely by MSG91's
+      -- own OTP API (see lib/msg91.js) using their already-approved,
+      -- DLT-compliant authentication template - this app only tracks
+      -- delivery_otp_sent_at (has a send happened yet) and
+      -- delivery_otp_attempts (our own rate limit) locally.
+      delivery_otp_code TEXT,
+      delivery_otp_expires_at TIMESTAMPTZ,
+      delivery_otp_attempts INTEGER NOT NULL DEFAULT 0,
+      -- delivery_otp_code/delivery_otp_expires_at are no longer
+      -- written to as of the MSG91 switch (Option A: MSG91's own OTP
+      -- API generates, sends, and verifies the code entirely on
+      -- their side - see lib/msg91.js) - left in place, unused,
+      -- rather than dropped from a live production table.
+      -- delivery_otp_sent_at replaces them for the one thing this
+      -- app still needs to track locally: whether a send has
+      -- actually happened for this keg, so verify-delivery-otp can
+      -- give a clear error instead of just forwarding to MSG91 with
+      -- no code ever sent. delivery_otp_attempts is still used too,
+      -- as our own independent rate limit on top of whatever MSG91
+      -- enforces on their end.
+      delivery_otp_sent_at TIMESTAMPTZ
     );
 
     CREATE TABLE IF NOT EXISTS events (
@@ -240,6 +264,10 @@ async function init() {
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_product_id TEXT REFERENCES products(id);`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_batch_number TEXT;`);
   await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS current_abv NUMERIC;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_code TEXT;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_expires_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_attempts INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE kegs ADD COLUMN IF NOT EXISTS delivery_otp_sent_at TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS sender TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS receiver TEXT;`);
   await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS from_location TEXT;`);
