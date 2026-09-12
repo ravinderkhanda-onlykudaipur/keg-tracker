@@ -289,15 +289,21 @@ earlier integration attempts (`delivery_otp_code`,
 `delivery_otp_expires_at`) are no longer written to — left in place,
 unused, rather than dropped from a live production table.
 
-**Environment variables** (both required; without them, sending fails
-loudly with a clear error rather than silently no-op'ing):
-- `MSG91_WIDGET_TOKEN` → from OTP Widget/SDK → Tokens in the MSG91
-  dashboard. This is genuinely different from the general
-  account-level Auth Key under Settings → Authkey — confirmed directly
-  from the widget's own "Get Code" embed snippet, which pairs a
-  `widgetId` with a separate `tokenAuth` value, not the account
-  authkey. Using the wrong one here will not throw an error, just
-  silently fail to actually authenticate the widget-scoped calls.
+**Environment variables** (`MSG91_AUTH_KEY`/`MSG91_WIDGET_ID` required;
+without them, sending fails loudly with a clear error rather than
+silently no-op'ing):
+- `MSG91_AUTH_KEY` → from Settings → Authkey in the MSG91 dashboard
+  (the general, account-level key). Used first if set.
+- `MSG91_WIDGET_TOKEN` → from OTP Widget/SDK → Tokens instead, used
+  only as a fallback if `MSG91_AUTH_KEY` isn't set. A real
+  "Authentication failure" error was hit using the widget-specific
+  token (from the widget's own "Get Code" embed snippet, which pairs
+  `widgetId` with a separate `tokenAuth` distinct from the account
+  key) with confirmed-correct values — despite MSG91's own docs
+  labeling this header only generically as "authkey" — so the
+  account-level key is now tried first, this kept as a fallback in
+  case a different MSG91 account/setup genuinely needs the
+  widget-specific token instead.
 - `MSG91_WIDGET_ID` → from OTP Widget/SDK → Widgets (the widget's ID
   is shown in its own "Get Code"/embed snippet, not directly in the
   widget list view).
