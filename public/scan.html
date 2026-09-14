@@ -180,6 +180,22 @@
   .alert-group[open] > .alert-group-summary::before { transform: rotate(90deg); }
   .alert-group-content { padding: 8px 16px 4px; }
   .alert-group-count { background: var(--primary-tint-bg); color: var(--primary); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+
+  /* Swipe-to-submit button - replaces every "Submit"-type button
+     app-wide per explicit direction (not pure navigation/secondary
+     controls like Log out, Cancel, Delete, tab switches, which stay
+     as plain buttons). Keeps any existing confirm() popup flow
+     completely intact where it already exists - this only changes
+     HOW an action gets initiated (drag instead of a single tap),
+     never removes a confirmation step that was already there. */
+  .swipe-btn { position: relative; height: 52px; border-radius: 26px; background: var(--card-border); overflow: hidden; user-select: none; touch-action: none; margin: 8px 0; }
+  .swipe-btn.disabled { opacity: 0.5; pointer-events: none; }
+  .swipe-btn-fill { position: absolute; top: 0; left: 0; height: 100%; width: 52px; background: var(--primary-tint-bg); border-radius: 26px; transition: width 0.05s linear; }
+  .swipe-btn-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: var(--text-secondary); pointer-events: none; }
+  .swipe-btn-thumb { position: absolute; top: 3px; left: 3px; width: 46px; height: 46px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .swipe-btn.secondary .swipe-btn-thumb { background: var(--text-secondary); }
+  .swipe-btn.secondary .swipe-btn-fill { background: var(--card-bg); }
+  .swipe-btn.completed .swipe-btn-thumb { background: var(--success-text, #1a7f37); }
 </style>
 </head>
 <body>
@@ -426,7 +442,7 @@
         <h3 style="margin-top:0">My Notes</h3>
         <label>New note</label>
         <input type="text" id="newTaskText" placeholder="e.g. Refill washing detergent">
-        <button onclick="addTask()">Add note</button>
+        <div id="addTaskSwipe"></div>
         <div id="taskList"></div>
       </div>
     </div>
@@ -439,7 +455,7 @@
         </p>
         <label>Your feedback</label>
         <textarea id="feedbackText" rows="4" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:16px;padding:12px;border:1px solid var(--input-border);border-radius:8px"></textarea>
-        <button onclick="submitFeedback()">Send anonymously</button>
+        <div id="submitFeedbackSwipe"></div>
         <div id="feedbackMsg"></div>
       </div>
     </div>
@@ -789,6 +805,106 @@ function handleScannedUrl(scanned) {
 // param, rather than history.back(), since the person may have
 // arrived here via a direct QR scan with no prior page in this tab's
 // history to go back to.
+// Renders a swipe-to-confirm button into the element with the given
+// id, replacing every plain "Submit"-type button app-wide per
+// explicit direction - this ONLY changes how the action gets
+// initiated (drag instead of tap); it never removes an existing
+// confirm() popup step downstream. `onConfirm` is called exactly
+// once, only after a genuine full swipe (>= 85% of the track width),
+// matching how a single button click would have fired exactly once.
+// A partial drag that's released early snaps back to the start
+// rather than firing anything - this is the actual "confirm via
+// deliberate gesture" property a swipe button is meant to add over a
+// plain tap.
+function renderSwipeButton(elementId, label, onConfirm, opts) {
+  const secondary = opts && opts.secondary;
+  const el = document.getElementById(elementId);
+  el.innerHTML = `
+    <div class="swipe-btn${secondary ? ' secondary' : ''}" id="${elementId}_track">
+      <div class="swipe-btn-fill" id="${elementId}_fill"></div>
+      <div class="swipe-btn-label" id="${elementId}_label">${label}</div>
+      <div class="swipe-btn-thumb" id="${elementId}_thumb">&rarr;</div>
+    </div>
+  `;
+  const track = document.getElementById(`${elementId}_track`);
+  const fill = document.getElementById(`${elementId}_fill`);
+  const thumb = document.getElementById(`${elementId}_thumb`);
+  const labelEl = document.getElementById(`${elementId}_label`);
+  let dragging = false;
+  let startX = 0;
+  let thumbStartX = 0;
+  let maxX = 0;
+  let fired = false;
+
+  function clientX(e) {
+    return e.touches ? e.touches[0].clientX : e.clientX;
+  }
+  function setX(x) {
+    const clamped = Math.max(0, Math.min(maxX, x));
+    thumb.style.left = `${3 + clamped}px`;
+    fill.style.width = `${52 + clamped}px`;
+  }
+  function onStart(e) {
+    if (fired) return;
+    dragging = true;
+    startX = clientX(e);
+    thumbStartX = parseFloat(thumb.style.left || '3') - 3;
+    maxX = track.offsetWidth - 52;
+    thumb.style.cursor = 'grabbing';
+    attachDragListeners();
+  }
+  function onMove(e) {
+    if (!dragging || fired) return;
+    const dx = clientX(e) - startX;
+    setX(thumbStartX + dx);
+    const progress = maxX > 0 ? (thumbStartX + dx) / maxX : 0;
+    labelEl.style.opacity = String(Math.max(0, 1 - progress * 1.5));
+  }
+  function onEnd() {
+    if (!dragging || fired) return;
+    dragging = false;
+    thumb.style.cursor = 'grab';
+    const currentX = parseFloat(thumb.style.left || '3') - 3;
+    if (maxX > 0 && currentX / maxX >= 0.85) {
+      fired = true;
+      setX(maxX);
+      track.classList.add('completed');
+      labelEl.style.opacity = '0';
+      onConfirm();
+    } else {
+      setX(0);
+      labelEl.style.opacity = '1';
+    }
+  }
+
+  thumb.addEventListener('mousedown', onStart);
+  thumb.addEventListener('touchstart', onStart, { passive: true });
+  // Listeners attached ONLY while actively dragging, removed on
+  // release - not left permanently on window. Re-rendering this same
+  // swipe button (e.g. the actions dropdown refreshing) replaces the
+  // DOM via innerHTML each time; permanent window-level listeners
+  // would keep accumulating across every re-render, each one holding
+  // a closure over an increasingly stale, already-detached set of
+  // elements - a genuine, growing memory leak rather than just dead
+  // code, since window itself never goes away to clean them up.
+  function attachDragListeners() {
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('mouseup', onRelease);
+    window.addEventListener('touchend', onRelease);
+  }
+  function detachDragListeners() {
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('mouseup', onRelease);
+    window.removeEventListener('touchend', onRelease);
+  }
+  function onRelease() {
+    onEnd();
+    detachDragListeners();
+  }
+}
+
 function goHome() {
   location.href = '/scan.html';
 }
@@ -807,7 +923,19 @@ function showHomeTab(tab) {
     document.getElementById(`homeTab-${t}`).style.display = t === tab ? 'block' : 'none';
     document.getElementById(`homeTabBtn-${t}`).classList.toggle('active', t === tab);
   });
-  if (tab === 'task') { loadTasks(); loadMyTasks(); }
+  if (tab === 'task') {
+    loadTasks();
+    loadMyTasks();
+    // Re-rendered every time this tab is shown (not just once) since
+    // the swipe track's width measurement (offsetWidth) needs the
+    // element actually visible - calling this while the tab was still
+    // display:none would measure a width of 0 and break the swipe
+    // threshold math entirely.
+    renderSwipeButton('addTaskSwipe', 'Swipe to add note', addTask);
+  }
+  if (tab === 'feedback') {
+    renderSwipeButton('submitFeedbackSwipe', 'Swipe to send anonymously', submitFeedback);
+  }
   if (tab === 'home') loadHomeTab();
 }
 
@@ -1213,7 +1341,8 @@ function renderRevertSection() {
   const el = document.getElementById('revertSection');
   const canRevert = ['admin', 'warehouse', 'manager'].includes(currentUser.role);
   if (!canRevert) { el.innerHTML = ''; return; }
-  el.innerHTML = `<button class="secondary" onclick="submitRevert()">Undo last action</button><div id="revertMsg"></div>`;
+  el.innerHTML = `<div id="submitRevertSwipe"></div><div id="revertMsg"></div>`;
+  renderSwipeButton('submitRevertSwipe', 'Swipe to undo last action', submitRevert, { secondary: true });
 }
 
 async function submitRevert() {
@@ -1251,10 +1380,11 @@ function renderAvailableActions() {
         <div class="card">
           <h3 style="margin-top:0">Action Required</h3>
           <p class="muted" style="margin-top:0">Awaiting your confirmation of receipt.</p>
-          <button onclick="submitConfirm()">Confirm receipt</button>
+          <div id="submitConfirmSwipe"></div>
           <div id="confirmMsg"></div>
         </div>
       `;
+      renderSwipeButton('submitConfirmSwipe', 'Swipe to confirm receipt', submitConfirm);
     } else {
       // Not this user's role to confirm - pendingBannerWrap above
       // already says who it's awaiting, nothing more to show here.
@@ -1286,8 +1416,9 @@ function renderAvailableActions() {
       <option value="">-- Select an action --</option>
       ${availableTransitions.map((t) => `<option value="${t.id}">${t.label}</option>`).join('')}
     </select>
-    <button onclick="submitActionSelection()">Submit</button>
+    <div id="submitActionSwipe"></div>
   `;
+  renderSwipeButton('submitActionSwipe', 'Swipe to submit', submitActionSelection);
 }
 
 function submitActionSelection() {
@@ -1311,10 +1442,11 @@ function selectAction(transitionId) {
       <div class="card">
         <h3 style="margin-top:0">${t.label}</h3>
         <p class="muted" style="margin-top:0">Send a confirmation code to the customer's phone via SMS before completing delivery.</p>
-        <button onclick="sendDeliveryOtp('${t.id}')">Send Code via SMS</button>
+        <div id="sendDeliveryOtpSwipe"></div>
         <div id="actionMsg"></div>
       </div>
     `;
+    renderSwipeButton('sendDeliveryOtpSwipe', 'Swipe to send code', () => sendDeliveryOtp(t.id));
     return;
   }
 
@@ -1373,10 +1505,11 @@ function selectAction(transitionId) {
     <div class="card">
       <h3 style="margin-top:0">${t.label}</h3>
       ${fieldsHtml}
-      <button onclick="submitAction('${t.id}', ${t.twoScan})">Continue</button>
+      <div id="submitActionContinueSwipe"></div>
       <div id="actionMsg"></div>
     </div>
   `;
+  renderSwipeButton('submitActionContinueSwipe', 'Swipe to continue', () => submitAction(t.id, t.twoScan));
   // Custody card no longer hidden here - per explicit follow-up
   // direction, the action form doesn't swap with anything at all
   // anymore. It simply opens below Custody/Customer/Filled Detail in
@@ -1472,11 +1605,13 @@ async function sendDeliveryOtp(transitionId) {
       <p class="muted" style="margin-top:0">A code was sent via SMS to ${data.sentTo}.</p>
       <label>Code</label>
       <input type="text" id="deliveryOtpInput" inputmode="numeric" maxlength="6" placeholder="6-digit code">
-      <button onclick="verifyDeliveryOtp()">Verify &amp; Complete Delivery</button>
-      <button class="secondary" onclick="sendDeliveryOtp('${transitionId}')">Resend Code</button>
+      <div id="verifyDeliveryOtpSwipe"></div>
+      <div id="resendDeliveryOtpSwipe"></div>
       <div id="deliveryOtpMsg"></div>
     </div>
   `;
+  renderSwipeButton('verifyDeliveryOtpSwipe', 'Swipe to verify & complete', verifyDeliveryOtp);
+  renderSwipeButton('resendDeliveryOtpSwipe', 'Swipe to resend code', () => sendDeliveryOtp(transitionId), { secondary: true });
 }
 
 async function verifyDeliveryOtp() {
